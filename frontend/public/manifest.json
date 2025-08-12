@@ -1,0 +1,163 @@
+{
+  "name": "Cardiac Delights - Restaurant Management",
+  "short_name": "CardiacDelights",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "background_color": "#000000",
+  "theme_color": "#fbbf24",
+  "description": "A modern, responsive dashboard and management PWA for Cardiac Delights with offline capabilities, inventory management, menu planning, and comprehensive reporting.",
+  "lang": "en",
+  "orientation": "portrait-primary",
+  "dir": "ltr",
+  "categories": ["food", "productivity", "business", "utilities", "finance"],
+  "prefer_related_applications": false,
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View business overview and analytics",
+      "url": "/dashboard",
+      "icons": [
+        {
+          "src": "/Dashboard.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "short_name": "Inventory", 
+      "description": "Manage inventory and stock levels",
+      "url": "/inventory",
+      "icons": [
+        {
+          "src": "/Inventory.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Menu",
+      "short_name": "Menu",
+      "description": "Update menu items and pricing",
+      "url": "/menu", 
+      "icons": [
+        {
+          "src": "/Menu.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "short_name": "Reports",
+      "description": "View sales and business reports",
+      "url": "/report",
+      "icons": [
+        {
+          "src": "/Report.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+cardiacdelights",
+      "url": "/?protocol=%s"
+    }
+  ],
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
+  "icons": [
+    {
+      "src": "/logo2.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo2.png",
+      "sizes": "96x96", 
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo2.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo2.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo2.png",
+      "sizes": "152x152",
+      "type": "image/png", 
+      "purpose": "any"
+    },
+    {
+      "src": "/logo2.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo2.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/Dashboard.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Dashboard Overview - Business analytics and key metrics"
+    },
+    {
+      "src": "/Inventory.png", 
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Inventory Management - Track stock levels and supplies"
+    },
+    {
+      "src": "/Menu.png",
+      "sizes": "1280x720", 
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Menu Management - Update items and pricing"
+    },
+    {
+      "src": "/Report.png",
+      "sizes": "1280x720",
+      "type": "image/png", 
+      "form_factor": "wide",
+      "label": "Reports & Analytics - Sales and business insights"
+    }
+  ]
+}
