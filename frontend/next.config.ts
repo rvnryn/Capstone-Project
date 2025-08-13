@@ -5,13 +5,21 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*', // backend URL
+        source: "/api/:path*",
+        destination: "http://localhost:8000/api/:path*", // backend URL
       },
     ];
   },
   images: {
-    domains: ["pfxxnqvaniyadzlizgqf.supabase.co"],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "pfxxnqvaniyadzlizgqf.supabase.co", // replace with your actual domain
+        port: "",
+        pathname: "/**",
+      },
+      // Add more patterns as needed
+    ],
   },
 };
 

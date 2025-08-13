@@ -461,7 +461,7 @@ export default function Dashboard() {
                     </div>
                     <div>
                       <h2 className="text-lg sm:text-xl font-bold text-red-400">
-                        Expiring Ingredients
+                        Expiring Soon
                       </h2>
                       <p className="text-gray-400 text-xs sm:text-sm">
                         Items requiring immediate attention
@@ -473,7 +473,10 @@ export default function Dashboard() {
                       <thead>
                         <tr className="bg-red-500/10 border-b border-red-500/30">
                           <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300">
-                            Ingredient
+                            Id
+                          </th>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300">
+                            Name
                           </th>
                           <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300 hidden sm:table-cell">
                             Category
@@ -513,6 +516,11 @@ export default function Dashboard() {
                               }
                               className="border-b border-gray-700 hover:bg-red-500/5 transition-colors duration-200"
                             >
+                              <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
+                                <div className="truncate max-w-[120px] sm:max-w-none">
+                                  {item.item_id}
+                                </div>
+                              </td>
                               <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
                                 <div className="truncate max-w-[120px] sm:max-w-none">
                                   {item.item_name}
@@ -600,7 +608,14 @@ export default function Dashboard() {
                           <div className="flex justify-between items-center">
                             <div className="min-w-0 flex-1">
                               <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                {item.item_name}
+                                <span className="text-orange-300 font-semibold">
+                                  ID:
+                                </span>{" "}
+                                {item.item_id}
+                                <span className="mx-1 text-gray-400">|</span>
+                                <span className="font-semibold">
+                                  {item.item_name}
+                                </span>
                               </p>
                               <p className="text-orange-300 text-xs">
                                 Stock: {item.stock_quantity}
@@ -657,9 +672,11 @@ export default function Dashboard() {
                         >
                           <div className="flex justify-between items-center">
                             <div className="min-w-0 flex-1">
-                              <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                {item.item_name}
-                              </p>
+                                <p className="font-medium text-white text-xs sm:text-sm truncate">
+                                <span className="text-yellow-300 font-semibold">ID:</span> {item.item_id}
+                                <span className="mx-1 text-gray-400">|</span>
+                                <span className="font-semibold">{item.item_name}</span>
+                                </p>
                               <p className="text-yellow-300 text-xs">
                                 Stock: {item.stock_quantity}
                               </p>

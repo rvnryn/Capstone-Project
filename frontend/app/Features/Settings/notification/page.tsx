@@ -26,7 +26,7 @@ export default function NotificationSettings() {
   // New states for toggle confirmation
   const [showToggleModal, setShowToggleModal] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{
-    type: "lowStock" | "expiration" | "restock";
+    type: "lowStock" | "expiration";
     value: boolean;
   } | null>(null);
 
@@ -40,9 +40,7 @@ export default function NotificationSettings() {
       settings.expiration_enabled !== expirationEnabled ||
       settings.expiration_days !== expirationDays ||
       JSON.stringify(settings.expiration_method) !==
-        JSON.stringify(expirationMethod) ||
-      settings.restock_enabled !== restockEnabled ||
-      JSON.stringify(settings.restock_method) !== JSON.stringify(restockMethod)
+        JSON.stringify(expirationMethod)
     );
   };
   // Intercept navigation to settings (side nav or cancel)
@@ -73,7 +71,7 @@ export default function NotificationSettings() {
   };
 
   const handleToggleRequest = (
-    type: "lowStock" | "expiration" | "restock",
+    type: "lowStock" | "expiration",
     value: boolean
   ) => {
     setPendingToggle({ type, value });
@@ -96,9 +94,8 @@ export default function NotificationSettings() {
       expiration_enabled: expirationEnabled,
       expiration_days: expirationDays,
       expiration_method: expirationMethod,
-      restock_enabled: restockEnabled,
-      restock_method: restockMethod,
     };
+
     const ok = await updateSettings(newSettings);
     setSaving(false);
     if (ok) {
@@ -195,8 +192,6 @@ export default function NotificationSettings() {
       setExpirationEnabled(settings.expiration_enabled);
       setExpirationDays(settings.expiration_days);
       setExpirationMethod(settings.expiration_method);
-      setRestockEnabled(settings.restock_enabled);
-      setRestockMethod(settings.restock_method);
     }
   }, [settings]);
 
@@ -206,8 +201,7 @@ export default function NotificationSettings() {
   const [expirationEnabled, setExpirationEnabled] = useState(true);
   const [expirationDays, setExpirationDays] = useState(3);
   const [expirationMethod, setExpirationMethod] = useState<string[]>(["inapp"]);
-  const [restockEnabled, setRestockEnabled] = useState(true);
-  const [restockMethod, setRestockMethod] = useState<string[]>(["inapp"]);
+
 
   const handleConfirmToggle = () => {
     if (!pendingToggle) return;
@@ -215,8 +209,6 @@ export default function NotificationSettings() {
       setLowStockEnabled(pendingToggle.value);
     if (pendingToggle.type === "expiration")
       setExpirationEnabled(pendingToggle.value);
-    if (pendingToggle.type === "restock")
-      setRestockEnabled(pendingToggle.value);
     setShowToggleModal(false);
     setPendingToggle(null);
   };
@@ -430,120 +422,6 @@ export default function NotificationSettings() {
                     <span className="text-gray-400 text-sm">
                       (Set how many days in advance you want to be notified)
                     </span>
-                  </div>
-                  <div className="mt-2">
-                    <span className="text-yellow-400 text-sm">
-                      Tip: Enable both Email and In-App notifications for
-                      maximum awareness.
-                    </span>
-                  </div>
-                </section>
-
-                {/* Restocking Alert */}
-                <section
-                  className={`bg-[#151a23] rounded-xl xs:rounded-2xl p-4 xs:p-6 sm:p-8 flex flex-col gap-6 shadow-lg w-full ${
-                    !restockEnabled ? "opacity-50" : ""
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xl font-bold text-yellow-400 flex items-center gap-2">
-                      <span>Restocking Alert</span>
-                      <span className="bg-yellow-400 text-black text-xs px-2 py-1 rounded-full font-semibold">
-                        NEW
-                      </span>
-                    </h3>
-                    <label className="inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={restockEnabled}
-                        onChange={() =>
-                          handleToggleRequest("restock", !restockEnabled)
-                        }
-                        className="sr-only"
-                      />
-                      <span
-                        className={`w-12 h-6 flex items-center rounded-full p-1 transition ${
-                          restockEnabled ? "bg-yellow-400" : "bg-gray-700"
-                        }`}
-                      >
-                        <span
-                          className={`bg-white w-5 h-5 rounded-full shadow-md transform transition ${
-                            restockEnabled ? "translate-x-6" : ""
-                          }`}
-                        />
-                      </span>
-                      <span className="ml-2 text-base font-semibold text-yellow-400">
-                        {restockEnabled ? "Enabled" : "Disabled"}
-                      </span>
-                    </label>
-                  </div>
-                  <p className="text-gray-300 text-base mb-2">
-                    Schedule reminders to restock popular ingredients and
-                    supplies so your kitchen never runs out.
-                  </p>
-                  <div className="flex flex-col sm:flex-row gap-6 items-center mb-2">
-                    <span className="text-gray-200 text-base flex items-center">
-                      Reminder Frequency
-                      <span
-                        className="ml-2 cursor-pointer"
-                        title="Choose how often you want to be reminded to restock. Daily, Weekly, Monthly, or set your own interval."
-                      >
-                        <FaInfoCircle className="text-yellow-400" />
-                      </span>
-                    </span>
-                    <select
-                      value={restockFrequency}
-                      onChange={(e) => {
-                        setRestockFrequency(e.target.value);
-                        setCustomDaysError("");
-                      }}
-                      className="bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 text-base"
-                      disabled={!restockEnabled}
-                    >
-                      <option value="Daily">Daily</option>
-                      <option value="Weekly">Weekly</option>
-                      <option value="Monthly">Monthly</option>
-                      <option value="Custom">Custom</option>
-                    </select>
-                    {restockFrequency === "Custom" && (
-                      <div className="flex flex-col">
-                        <label
-                          htmlFor="customDays"
-                          className="text-gray-400 text-sm mb-1"
-                        >
-                          Enter number of days between reminders
-                        </label>
-                        <input
-                          id="customDays"
-                          type="number"
-                          min={1}
-                          max={365}
-                          value={customRestockDays}
-                          onChange={(e) => {
-                            const val =
-                              e.target.value === ""
-                                ? ""
-                                : Number(e.target.value);
-                            setCustomRestockDays(val);
-                            if (val === "" || val < 1 || val > 365) {
-                              setCustomDaysError(
-                                "Please enter a value between 1 and 365."
-                              );
-                            } else {
-                              setCustomDaysError("");
-                            }
-                          }}
-                          placeholder="Days"
-                          className="w-20 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 text-base"
-                          disabled={!restockEnabled}
-                        />
-                        {customDaysError && (
-                          <span className="text-red-400 text-xs mt-1">
-                            {customDaysError}
-                          </span>
-                        )}
-                      </div>
-                    )}
                   </div>
                   <div className="mt-2">
                     <span className="text-yellow-400 text-sm">

@@ -1,0 +1,12 @@
+{
+     "recommendations": [
+          "aaron-bond.better-comments",
+          "meteorstudio.cursorcode",
+          "visualstudioexptteam.vscodeintellicode",
+          "visualstudioexptteam.intellicode-api-usage-examples",
+          "loczek.next-js-ts-snippets",
+          "hoovercj.vscode-power-mode",
+          "johnpapa.pwa-tools",
+          "bradlc.vscode-tailwindcss"
+     ]
+}

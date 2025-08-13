@@ -39,6 +39,7 @@ type Notification = {
   message: string;
   status: string;
   created_at: string;
+  type?: string; // Add 'type' property, optional for compatibility
 };
 
 // Enhanced sidebar items with PWA-specific features
@@ -391,8 +392,17 @@ const NavigationBar = ({
     }
   };
 
+  function parseDetails(details: string | undefined) {
+    if (!details) return [];
+    try {
+      return JSON.parse(details);
+    } catch {
+      return [];
+    }
+  }
+
   function handleNotificationClick(n: Notification): void {
-    setNotificationModal(n);
+    setNotificationModal(n); // This sets notificationModalState
     setBellOpen(false);
     const userId = user?.user_id || user?.id;
     if (userId && typeof userId === "number") {
@@ -989,7 +999,7 @@ const NavigationBar = ({
                           className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl
                             ${
                               n.status === "unread"
-                                ? "bg-gradient-to-r from-yellow-400/8 via-yellow-300/5 to-transparent border-l-2 border-l-yellow-400/40"
+                                ? "bg-gradient-to-r from-red-800/18 via-red-700/15 to-transparent border-l-2 border-l-white"
                                 : "hover:bg-yellow-400/5"
                             }`}
                           onClick={() => handleNotificationClick(n)}
@@ -999,7 +1009,14 @@ const NavigationBar = ({
                           </div>
                           <div className="text-xs text-yellow-400/70 mt-2 flex items-center gap-1">
                             <div className="w-1 h-1 bg-yellow-400 rounded-full"></div>
-                            {new Date(n.created_at).toLocaleString()}
+                            {new Date(n.created_at).toLocaleString("en-GB", {
+                              year: "numeric",
+                              month: "short",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}
                           </div>
                         </div>
                       ))
@@ -1061,34 +1078,128 @@ const NavigationBar = ({
         )}
       </header>
 
-      {notificationModal && (
+      {notificationModalState && (
         <div className="fixed inset-0 flex justify-center items-center bg-black/80 backdrop-blur-sm z-[101] px-4">
           <section
-            className={`bg-black/95 backdrop-blur-sm rounded-2xl w-full p-6 text-center shadow-2xl border border-yellow-900/50
-              ${isMobile ? "max-w-sm" : "max-w-md"}`}
+            className={`bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl w-full p-6 text-left shadow-2xl border border-gray-700/50
+        ${isMobile ? "max-w-sm" : "max-w-md"}`}
             onClick={(e) => e.stopPropagation()}
             style={{
               animation: reducedMotion ? "none" : "fadeIn 0.3s ease-out",
             }}
           >
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-yellow-900/40 flex items-center justify-center">
-              <FaBell size={24} className="text-yellow-400" />
+            <div className="flex items-center gap-3 mb-4 justify-center">
+              <div className="w-10 h-10 rounded-full bg-yellow-900/40 flex items-center justify-center">
+                <FaBell size={24} className="text-yellow-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-yellow-400">
+                Notification Details
+              </h3>
             </div>
-            <h3 className="text-xl font-semibold text-yellow-400 mb-2">
-              Notification
-            </h3>
-            <p className="text-yellow-100 mb-4 text-sm leading-relaxed">
-              {notificationModal.message}
-            </p>
-            <div className="text-xs text-yellow-400 mb-6">
-              {new Date(notificationModal.created_at).toLocaleString()}
+            {/* Elegant Divider */}
+            <div className="relative mb-6 xs:mb-7 sm:mb-8">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gradient-to-r from-transparent via-gray-600 to-transparent"></div>
+              </div>
+              <div className="relative flex justify-center">
+                <div className="bg-gradient-to-r from-yellow-400/20 to-yellow-500/20 px-3 xs:px-4 py-0.5 xs:py-1 rounded-full">
+                  <div className="w-1.5 xs:w-2 h-1.5 xs:h-2 bg-yellow-400 rounded-full"></div>
+                </div>
+              </div>
             </div>
-            <button
-              onClick={() => setNotificationModal(null)}
-              className="bg-yellow-900/70 text-yellow-100 font-semibold py-2.5 px-6 rounded-lg hover:bg-yellow-800 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400/50"
-            >
-              Close
-            </button>
+            <div className="space-y-2">
+              <div>
+                <span className="font-semibold text-gray-300">Message:</span>{" "}
+                <span className="text-white">
+                  {notificationModalState.message}
+                </span>
+              </div>
+              {/* Show details for affected items */}
+              {parseDetails((notificationModalState as any).details).length >
+                0 && (
+                <div>
+                  <span className="font-semibold text-gray-300">
+                    Affected Items:
+                  </span>
+                  <ul className="mt-2 space-y-2">
+                    {parseDetails((notificationModalState as any).details).map(
+                      (item: any, idx: number) => (
+                        <li
+                          key={idx}
+                          className="bg-gradient-to-r from-yellow-400/10 via-yellow-300/8 to-yellow-200/5 rounded-lg px-4 py-2 flex flex-col shadow-sm border border-yellow-400/10 hover:border-yellow-400/30 transition-all"
+                        >
+                          <div className="flex items-center gap-2 font-semibold text-yellow-200">
+                            {item.name}:
+                            {item.item_id && (
+                              <span className="ml-2 px-2 py-0.5 bg-yellow-900/40 text-yellow-300 text-xs rounded-full border border-yellow-400/20">
+                                ID: {item.item_id}
+                              </span>
+                            )}
+                            {item.batch_date && (
+                              <span className="ml-2 px-2 py-0.5 bg-yellow-900/30 text-yellow-200 text-xs rounded-full border border-yellow-400/15">
+                                Batch {item.batch_date}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-1 text-xs text-yellow-100">
+                            {typeof item.quantity !== "undefined" && (
+                              <span className="px-2 py-0.5 bg-yellow-800/30 rounded-full border border-yellow-400/10">
+                                Qty: {item.quantity}
+                              </span>
+                            )}
+                            {item.expiration_date && (
+                              <span className="px-2 py-0.5 bg-yellow-800/30 rounded-full border border-yellow-400/10">
+                                Exp: {item.expiration_date}
+                              </span>
+                            )}
+                          </div>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </div>
+              )}
+              <div>
+                <span className="font-semibold text-gray-300">Status:</span>{" "}
+                <span
+                  className={
+                    notificationModalState.status === "unread"
+                      ? "text-yellow-400"
+                      : "text-green-400"
+                  }
+                >
+                  {notificationModalState.status === "unread"
+                    ? "Unread"
+                    : "Read"}
+                </span>
+              </div>
+              <div>
+                <span className="font-semibold text-gray-300">
+                  Date & Time:
+                </span>{" "}
+                <span className="text-gray-400">
+                  {new Date(notificationModalState.created_at).toLocaleString(
+                    "en-GB",
+                    {
+                      year: "numeric",
+                      month: "short",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: true,
+                    }
+                  )}
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setNotificationModal(null)}
+                className="px-6 py-2 rounded-lg border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black font-semibold transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </section>
         </div>
       )}

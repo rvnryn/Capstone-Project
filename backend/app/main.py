@@ -2,8 +2,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from apscheduler.schedulers.background import BackgroundScheduler
 from .routes import sales_prediction
-from .routes import auth_routes  # Import the auth routes
+from .routes import auth_routes
 from .routes import dashboard
 from .routes import inventory
 from .routes import report
@@ -11,12 +12,16 @@ from .routes import resetpass
 from .routes import menu
 from .routes import supplier
 from .routes import notification
+from app.routes.notification import check_inventory_alerts
 from .routes import users
 from .routes import inventory_settings
 from .routes import backup_restore
 from .routes import inventory_log
 
-
+scheduler = BackgroundScheduler()
+scheduler.add_job(check_inventory_alerts, "interval", seconds=1)
+scheduler.start()
+print("Scheduler started and job added")
 
 app = FastAPI()
 
