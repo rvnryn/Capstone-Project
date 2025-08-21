@@ -30,7 +30,7 @@ export default function ViewUsers() {
   const { getUser } = useUsersAPI();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
+  const [showEditModal, setShowEditModal] = useState(false);
   const userId = searchParams.get("id");
 
   useEffect(() => {
@@ -224,11 +224,7 @@ export default function ViewUsers() {
                 <div className="flex flex-col xs:flex-row justify-end gap-2 xs:gap-3 sm:gap-4 pt-4 xs:pt-5 sm:pt-6 md:pt-8 border-t border-gray-700/50">
                   <button
                     onClick={() => {
-                      if (user.user_id !== undefined) {
-                        router.push(
-                          routes.UpdateUsers(user.user_id.toString())
-                        );
-                      }
+                      setShowEditModal(true);
                     }}
                     className="group flex items-center justify-center gap-1.5 xs:gap-2 px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl border-2 border-yellow-400/50 text-yellow-400 hover:border-yellow-400 hover:bg-yellow-400/10 hover:text-yellow-300 font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto order-2 xs:order-1"
                   >
@@ -249,6 +245,39 @@ export default function ViewUsers() {
             </div>
           </div>
         </main>
+
+        {/* Edit Modal */}
+        {showEditModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-400/50">
+              <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
+                Edit Item
+              </h2>
+              <p className="text-gray-300">
+                Are you sure you want to edit this item?
+              </p>
+              <div className="flex flex-col sm:flex-row justify-center gap-4">
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    if (user.user_id !== undefined) {
+                      router.push(routes.UpdateUsers(user.user_id.toString()));
+                    }
+                  }}
+                  className="px-8 py-3 rounded-lg border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
+                >
+                  Yes, Edit
+                </button>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="px-8 py-3 rounded-lg border border-gray-500 text-gray-500 hover:bg-gray-500 hover:text-white font-semibold transition-all order-1 sm:order-2 cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </ResponsiveMain>
     </section>
   );

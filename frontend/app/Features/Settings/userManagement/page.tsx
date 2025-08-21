@@ -316,21 +316,6 @@ export default function UserManagement() {
                                 >
                                   <FaTrashAlt className="text-xs xs:text-sm" />
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPasswordAuthId(user.auth_id ?? null);
-                                    setShowPasswordModal(true);
-                                    setNewPassword("");
-                                    setPasswordError("");
-                                  }}
-                                  className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-all duration-200 cursor-pointer border border-blue-500/20 hover:border-blue-500/40"
-                                  title="Change Password"
-                                  aria-label="Change password"
-                                >
-                                  Change Password
-                                </button>
                               </div>
                             </td>
                           </tr>
@@ -405,95 +390,6 @@ export default function UserManagement() {
                   type="button"
                   onClick={() => setShowDeleteModal(false)}
                   className="group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold transition-all duration-300 order-1 sm:order-2 cursor-pointer text-xs xs:text-sm sm:text-base"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-        {/* Change Password Modal */}
-        {showPasswordModal && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="password-dialog-title"
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          >
-            <form
-              method="dialog"
-              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-blue-400/50 text-center space-y-4 sm:space-y-6 max-w-sm sm:max-w-md w-full"
-              onSubmit={(e) => e.preventDefault()}
-            >
-              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-blue-400/20 to-blue-500/20 rounded-full flex items-center justify-center">
-                <span className="text-blue-400 text-3xl">🔒</span>
-              </div>
-              <h3
-                id="password-dialog-title"
-                className="text-xl sm:text-2xl font-bold text-white mb-2"
-              >
-                Change User Password
-              </h3>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-800 text-white mb-2"
-                placeholder="Enter new password"
-              />
-              <input
-                type="password"
-                value={reEnterPassword}
-                onChange={(e) => setReEnterPassword(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-800 text-white mb-2"
-                placeholder="Re-enter new password"
-              />
-              {passwordError && (
-                <p className="text-red-400 text-sm">{passwordError}</p>
-              )}
-              <div className="flex flex-col sm:flex-row justify-center gap-4">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!newPassword || newPassword.length < 6) {
-                      setPasswordError(
-                        "Password must be at least 6 characters."
-                      );
-                      return;
-                    }
-                    if (newPassword !== reEnterPassword) {
-                      setPasswordError("Passwords do not match.");
-                      return;
-                    }
-                    try {
-                      await changeUserPassword(
-                        String(passwordAuthId),
-                        newPassword
-                      );
-                      setShowPasswordModal(false);
-                      setNewPassword("");
-                      setReEnterPassword("");
-                      setPasswordError("");
-                    } catch (err: any) {
-                      setPasswordError(
-                        err?.response?.data?.detail ||
-                          "Failed to change password."
-                      );
-                    }
-                  }}
-                  className="px-8 py-3 rounded-lg border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black font-semibold transition-all cursor-pointer"
-                >
-                  Change
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPasswordModal(false);
-                    setNewPassword("");
-                    setReEnterPassword("");
-                    setPasswordError("");
-                  }}
-                  className="px-8 py-3 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:text-white font-semibold transition-all cursor-pointer"
                 >
                   Cancel
                 </button>

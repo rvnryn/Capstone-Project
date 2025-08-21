@@ -1,30 +1,38 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { supabase } from "@/app/utils/Server/supabaseClient";  // Import supabase client
+"use client";
+import axios from "@/app/lib/axios";
 
-export const loginUser = async (email: string, password: string) => {
+export async function loginUser(email: string, password: string) {
   try {
-    console.log("Attempting to login with:", { email, password });
-
-    // Use Supabase's auth API to login with email and password
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const response = await axios.post("/api/auth/login", {
       email,
       password,
     });
-
-    if (error) throw error; // Throw an error if login fails
-
-    // Store the access token for axios
-    if (data?.session?.access_token) {
-      localStorage.setItem('token', data.session.access_token);
+    if (response.data?.access_token) {
+      localStorage.setItem("token", response.data.access_token);
     }
-
-    // Accessing the user from the `data` object
-    const user = data?.user;  // Access user inside data
-    console.log("Login successful:", user);  // Log the user object after successful login
-    return user;  // Return user data if login is successful
+    return response.data;
   } catch (error: any) {
-    // Detailed error handling
-    console.error("Login error:", error.message);
-    throw new Error(`Login failed: ${error.message || 'Unknown error'}`);  // Throw a custom error
+    throw new Error(error.response?.data?.detail || "Login failed");
   }
-};
+}
+
+export async function logoutUser() {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+  try {
+    await axios.post(
+      "/api/auth/logout",
+      {},
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    localStorage.removeItem("token");
+  } catch (error: any) {
+    // Optionally handle error
+    console.error(
+      "Logout failed:",
+      error.response?.data?.detail || error.message
+    );
+  }
+}

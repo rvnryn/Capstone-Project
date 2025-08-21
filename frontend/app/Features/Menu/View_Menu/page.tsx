@@ -41,9 +41,9 @@ export default function ViewMenu() {
         router.push(routes.menu);
         return;
       }
-
       try {
         const data = await fetchMenuById(Number(menuId));
+        console.log("Fetched menu in view page:", data);
         setMenu(data);
       } catch (error) {
         console.error("Error fetching menu:", error);
@@ -153,26 +153,48 @@ export default function ViewMenu() {
     );
   }
 
-  // Stock status logic
-  const isAvailable =
-    menu.stock_status !== "Low" && menu.stock_status !== "Out of Stock";
-  const stockStatusLabel = isAvailable
-    ? "Available"
-    : menu.stock_status === "Low"
-    ? "Low Stock"
-    : "Out of Stock";
-  const stockStatusColor = isAvailable
-    ? "bg-green-500/20 text-green-400 border-green-400/40"
-    : menu.stock_status === "Low"
-    ? "bg-yellow-400/20 text-yellow-400 border-yellow-400/40"
-    : "bg-red-500/20 text-red-400 border-red-400/40";
-  const stockStatusIcon = isAvailable ? (
-    <FaCheckCircle className="inline mr-1 text-green-400" />
-  ) : menu.stock_status === "Low" ? (
-    <FaSortDown className="inline mr-1 text-yellow-400" />
-  ) : (
-    <FaTimesCircle className="inline mr-1 text-red-400" />
-  );
+  function getStockStatusProps(stock_status?: string) {
+    if (!stock_status || stock_status === "Available") {
+      return {
+        label: "Available",
+        color: "bg-green-500/20 text-green-400 border-green-400/40",
+        icon: <FaCheckCircle className="inline mr-1 text-green-400" />,
+      };
+    }
+    if (stock_status === "Out of Stock") {
+      return {
+        label: "Out of Stock",
+        color: "bg-red-500/20 text-red-400 border-red-400/40",
+        icon: <FaTimesCircle className="inline mr-1 text-red-400" />,
+      };
+    }
+    if (stock_status === "Critical") {
+      return {
+        label: "Critical Stock",
+        color: "bg-orange-500/20 text-orange-400 border-orange-400/40",
+        icon: <FiAlertCircle className="inline mr-1 text-orange-400" />,
+      };
+    }
+    if (stock_status === "Low") {
+      return {
+        label: "Low Stock",
+        color: "bg-yellow-400/20 text-yellow-400 border-yellow-400/40",
+        icon: <FaSortDown className="inline mr-1 text-yellow-400" />,
+      };
+    }
+    // Add more statuses if needed
+    return {
+      label: stock_status,
+      color: "bg-gray-500/20 text-gray-400 border-gray-400/40",
+      icon: <FiTrendingUp className="inline mr-1 text-gray-400" />,
+    };
+  }
+
+  const {
+    label: stockStatusLabel,
+    color: stockStatusColor,
+    icon: stockStatusIcon,
+  } = getStockStatusProps(menu.stock_status);
 
   return (
     <section className="text-white font-poppins">

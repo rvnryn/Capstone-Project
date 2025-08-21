@@ -13,6 +13,7 @@ import {
 import { routes } from "@/app/routes/routes";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { MdCancel, MdSave, MdWarning } from "react-icons/md";
+import { FiAlertTriangle, FiSave } from "react-icons/fi";
 
 const CATEGORIES = [
   "Meats",
@@ -25,14 +26,20 @@ const CATEGORIES = [
 ];
 
 export default function InventorySettings() {
-  const { isMenuOpen, isMobile } = useNavigation();
   const { fetchSettings, createSetting, updateSetting, deleteSetting } =
     useInventorySettingsAPI();
   const router = useRouter();
 
   const [ingredients, setIngredients] = useState<InventorySetting[]>([]);
-  const [saving] = useState(false);
+  const [pendingIngredients, setPendingIngredients] = useState<
+    InventorySetting[]
+  >([]);
+  const [initialSettings, setInitialSettings] = useState<InventorySetting[]>(
+    []
+  );
   const [saveMessage, setSaveMessage] = useState("");
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [newIngredient, setNewIngredient] = useState<InventorySettingInput>({
     name: "",
     default_unit: "",
@@ -40,9 +47,6 @@ export default function InventorySettings() {
     category: "",
   });
   const [addError, setAddError] = useState("");
-  const [showSaveModal, setShowSaveModal] = useState(false);
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [initialSettings, setInitialSettings] = useState<any>(null);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,55 +58,31 @@ export default function InventorySettings() {
     setLoading(true);
     fetchSettings().then((data) => {
       setIngredients(data);
-      setInitialSettings(data); // <-- Track initial settings
+      setPendingIngredients(data);
+      setInitialSettings(data);
       setLoading(false); // <-- Set loading to false after fetch
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const getMainContentStyles = () =>
-    `transition-all duration-300 pb-8 md:pb-12 pt-28 px-4 sm:px-6 md:px-8 lg:px-10 ${
-      isMobile ? "ml-0" : isMenuOpen ? "ml-64" : "ml-20"
-    }`;
-
-  const handleUnitChange = async (id: number, value: string) => {
-    const ing = ingredients.find((i) => i.id === id);
-    if (!ing) return;
-    const updated = await updateSetting(id, { ...ing, default_unit: value });
-    if (updated) {
-      setIngredients((prev) => prev.map((i) => (i.id === id ? updated : i)));
-    }
+  const handleUnitChange = (id: number, value: string) => {
+    setPendingIngredients((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, default_unit: value } : i))
+    );
   };
-
-  const handleThresholdChange = async (id: number, value: number) => {
-    const ing = ingredients.find((i) => i.id === id);
-    if (!ing) return;
-    const updated = await updateSetting(id, {
-      ...ing,
-      low_stock_threshold: value,
-    });
-    if (updated) {
-      setIngredients((prev) => prev.map((i) => (i.id === id ? updated : i)));
-    }
+  const handleThresholdChange = (id: number, value: number) => {
+    setPendingIngredients((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, low_stock_threshold: value } : i))
+    );
   };
-
-  const handleCategoryChange = async (id: number, value: string) => {
-    const ing = ingredients.find((i) => i.id === id);
-    if (!ing) return;
-    const updated = await updateSetting(id, { ...ing, category: value });
-    if (updated) {
-      setIngredients((prev) => prev.map((i) => (i.id === id ? updated : i)));
-    }
+  const handleCategoryChange = (id: number, value: string) => {
+    setPendingIngredients((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, category: value } : i))
+    );
   };
-
-  const handleDeleteIngredient = async (id: number) => {
-    const success = await deleteSetting(id);
-    if (success) {
-      setIngredients((prev) => prev.filter((ing) => ing.id !== id));
-    }
+  const handleDeleteIngredient = (id: number) => {
+    setPendingIngredients((prev) => prev.filter((i) => i.id !== id));
   };
-
-  const handleAddIngredient = async (e: React.FormEvent) => {
+  const handleAddIngredient = (e: React.FormEvent) => {
     e.preventDefault();
     setAddError("");
     const name = newIngredient.name.trim();
@@ -119,36 +99,51 @@ export default function InventorySettings() {
       setAddError("Ingredient already exists.");
       return;
     }
-    const created = await createSetting({
-      name,
-      default_unit,
-      low_stock_threshold,
-      category,
+    const newId = Math.max(0, ...pendingIngredients.map((i) => i.id)) + 1;
+    setPendingIngredients((prev) => [...prev, { id: newId, ...newIngredient }]);
+    setNewIngredient({
+      name: "",
+      default_unit: "",
+      low_stock_threshold: 1,
+      category: "",
     });
-    if (created) {
-      setIngredients((prev) => [...prev, created]);
-      setNewIngredient({
-        name: "",
-        default_unit: "",
-        low_stock_threshold: 1,
-        category: "",
-      });
-    } else {
-      setAddError("Failed to add ingredient.");
-    }
   };
 
-  // No global save needed, all changes are instant
-  const handleSave = () => setShowSaveModal(true);
-  const handleCancel = () => setShowCancelModal(true);
-
-  const handleConfirmSave = () => {
+  // Save all changes to Supabase
+  const handleConfirmSave = async () => {
     setShowSaveModal(false);
+    // Find added, updated, deleted
+    const added = pendingIngredients.filter(
+      (i) => !initialSettings.some((orig) => orig.id === i.id)
+    );
+    const updated = pendingIngredients.filter((i) =>
+      initialSettings.some(
+        (orig) =>
+          orig.id === i.id &&
+          (orig.name !== i.name ||
+            orig.default_unit !== i.default_unit ||
+            orig.low_stock_threshold !== i.low_stock_threshold ||
+            orig.category !== i.category)
+      )
+    );
+    const deleted = initialSettings.filter(
+      (orig) => !pendingIngredients.some((i) => i.id === orig.id)
+    );
+
+    // Batch API calls
+    for (const item of added) await createSetting(item);
+    for (const item of updated) await updateSetting(item.id, item);
+    for (const item of deleted) await deleteSetting(item.id);
+
     setSaveMessage("Settings saved successfully!");
     setTimeout(() => setSaveMessage(""), 2000);
+    setInitialSettings(pendingIngredients);
+    setIngredients(pendingIngredients);
     router.push(routes.settings);
   };
 
+  const handleCancel = () => setShowCancelModal(true);
+  const handleSave = () => setShowSaveModal(true);
   const handleConfirmCancel = () => {
     setShowCancelModal(false);
     setNewIngredient({
@@ -158,12 +153,15 @@ export default function InventorySettings() {
       category: "",
     });
     setAddError("");
+    router.push(routes.settings);
   };
 
   const isSettingsChanged = () => {
     if (!initialSettings) return false;
     // Deep compare the ingredients array
-    return JSON.stringify(initialSettings) !== JSON.stringify(ingredients);
+    return (
+      JSON.stringify(initialSettings) !== JSON.stringify(pendingIngredients)
+    );
   };
 
   const handleSidebarNavigate = (path: string) => {
@@ -376,7 +374,7 @@ export default function InventorySettings() {
                       </tr>
                     </thead>
                     <tbody>
-                      {ingredients.length === 0 ? (
+                      {pendingIngredients.length === 0 ? (
                         <tr>
                           <td
                             colSpan={5}
@@ -387,7 +385,7 @@ export default function InventorySettings() {
                           </td>
                         </tr>
                       ) : (
-                        ingredients.map((ing, idx) => (
+                        pendingIngredients.map((ing, idx) => (
                           <tr
                             key={ing.id}
                             tabIndex={0}
@@ -492,6 +490,9 @@ export default function InventorySettings() {
         {showSaveModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-700/50">
+              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 rounded-full flex items-center justify-center">
+                <FiSave className="w-8 h-8 text-yellow-400" />
+              </div>
               <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
                 Save Confirmation
               </h2>
@@ -501,13 +502,13 @@ export default function InventorySettings() {
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                 <button
                   onClick={handleConfirmSave}
-                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
+                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
                   Yes
                 </button>
                 <button
                   onClick={() => setShowSaveModal(false)}
-                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all order-1 sm:order-2 cursor-pointer"
+                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
                   No
                 </button>
@@ -520,6 +521,9 @@ export default function InventorySettings() {
         {showCancelModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-700/50">
+              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-red-400/20 to-red-500/20 rounded-full flex items-center justify-center">
+                <MdCancel className="w-8 h-8 text-red-400" />
+              </div>
               <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
                 Cancel Confirmation
               </h2>
@@ -527,13 +531,13 @@ export default function InventorySettings() {
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                 <button
                   onClick={handleConfirmCancel}
-                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
+                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
                   Yes, Cancel
                 </button>
                 <button
                   onClick={() => setShowCancelModal(false)}
-                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all order-1 sm:order-2 cursor-pointer"
+                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
                   No, Go Back
                 </button>
@@ -546,6 +550,9 @@ export default function InventorySettings() {
         {showUnsavedModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-700/50">
+              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-orange-400/20 to-orange-500/20 rounded-full flex items-center justify-center">
+                <FiAlertTriangle className="w-8 h-8 text-orange-400" />
+              </div>
               <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
                 Unsaved Changes
               </h2>
@@ -556,13 +563,13 @@ export default function InventorySettings() {
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                 <button
                   onClick={handleConfirmUnsaved}
-                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
+                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
                   Leave Without Saving
                 </button>
                 <button
                   onClick={handleCancelUnsaved}
-                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all order-1 sm:order-2 cursor-pointer"
+                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
                   Stay
                 </button>
@@ -570,9 +577,10 @@ export default function InventorySettings() {
             </div>
           </div>
         )}
+
         {showDeleteModal && ingredientToDelete && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border-2 border-red-400">
+            <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border-2 border-gray-700/50">
               <div className="flex justify-center mb-2 xs:mb-3 sm:mb-4">
                 <div className="relative">
                   <div className="absolute inset-0 bg-red-500/20 rounded-full blur-lg xs:blur-xl"></div>
@@ -598,7 +606,7 @@ export default function InventorySettings() {
                     setShowDeleteModal(false);
                     setIngredientToDelete(null);
                   }}
-                  className="flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl border-2 border-red-500/70 text-red-400 hover:bg-red-500 hover:text-white font-semibold transition-all duration-300 order-2 sm:order-1 cursor-pointer text-xs xs:text-sm sm:text-base"
+                  className="flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl border-2 border-red-500/70 text-red-400 hover:bg-red-500 hover:text-white font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base"
                 >
                   <FaTrash className="group-hover:scale-110 transition-transform duration-300" />
                   Yes, Delete
@@ -608,7 +616,7 @@ export default function InventorySettings() {
                     setShowDeleteModal(false);
                     setIngredientToDelete(null);
                   }}
-                  className="flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold transition-all duration-300 order-1 sm:order-2 cursor-pointer text-xs xs:text-sm sm:text-base"
+                  className="flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base"
                 >
                   Cancel
                 </button>

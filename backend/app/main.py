@@ -17,9 +17,10 @@ from .routes import users
 from .routes import inventory_settings
 from .routes import backup_restore
 from .routes import inventory_log
+from .routes import userActivity
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(check_inventory_alerts, "interval", seconds=1)
+scheduler.add_job(check_inventory_alerts, "interval", hours=1)
 scheduler.start()
 print("Scheduler started and job added")
 
@@ -37,7 +38,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # CORS middleware setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=["http://localhost:3000"],  # Allow all origins for development
     allow_credentials=True,
     allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers
@@ -57,6 +58,7 @@ app.include_router(users.router, prefix="/api")
 app.include_router(inventory_settings.router, prefix="/api")
 app.include_router(backup_restore.router, prefix="/api")
 app.include_router(inventory_log.router, prefix="/api")
+app.include_router(userActivity.router, prefix="/api")
 
 # Optional: A simple health check route (you can remove or modify this)
 @app.get("/health")

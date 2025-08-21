@@ -10,7 +10,7 @@ import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { supabase } from "@/app/utils/Server/supabaseClient";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { MdCancel, MdSave } from "react-icons/md";
-import { FiAlertTriangle, FiArrowRight, FiX } from "react-icons/fi";
+import { FiAlertTriangle, FiArrowRight, FiCheck, FiX } from "react-icons/fi";
 
 const ROLE_OPTIONS = [
   "Owner",
@@ -27,6 +27,7 @@ export default function AddUsers() {
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -236,6 +237,7 @@ export default function AddUsers() {
       });
 
       setIsDirty(false);
+      setShowSuccessMessage(true);
       setTimeout(() => {
         router.push(routes.user_management_settings);
       }, 2000);
@@ -687,20 +689,20 @@ export default function AddUsers() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={() => setShowCancelModal(false)}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
-                >
-                  <span className="hidden sm:inline">No, Go Back</span>
-                  <span className="sm:hidden">Keep</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => handleConfirmCancel(true)}
                   className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-400 to-red-500 hover:from-red-300 hover:to-red-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-red-400/25 order-1 sm:order-2 cursor-pointer"
                 >
                   <FiX className="w-4 h-4" />
                   <span className="hidden sm:inline">Yes, Cancel</span>
                   <span className="sm:hidden">Cancel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
+                >
+                  <span className="hidden sm:inline">No, Go Back</span>
+                  <span className="sm:hidden">Keep</span>
                 </button>
               </div>
             </form>
@@ -736,13 +738,6 @@ export default function AddUsers() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={handleCancelUnsaved}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
-                >
-                  Stay
-                </button>
-                <button
-                  type="button"
                   onClick={handleConfirmUnsaved}
                   className="flex-2 flex items-center justify-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-300 hover:to-orange-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-orange-400/25 order-1 sm:order-2 cursor-pointer"
                 >
@@ -750,8 +745,29 @@ export default function AddUsers() {
                   <span className="hidden sm:inline">Leave Without Saving</span>
                   <span className="sm:hidden">Leave</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={handleCancelUnsaved}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
+                >
+                  Stay
+                </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* Success Message */}
+        {showSuccessMessage && (
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+            <div className="flex items-center gap-2 xs:gap-3">
+              <div className="w-5 xs:w-6 h-5 xs:h-6 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <FiCheck className="w-3 xs:w-4 h-3 xs:h-4 text-white" />
+              </div>
+              <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
+                User added successfully!
+              </span>
+            </div>
           </div>
         )}
       </ResponsiveMain>

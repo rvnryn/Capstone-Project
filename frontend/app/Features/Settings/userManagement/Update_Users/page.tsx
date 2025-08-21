@@ -9,8 +9,9 @@ import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { useUsersAPI } from "../hook/use-user";
 import { FaUsers } from "react-icons/fa";
 import type { User } from "../hook/use-user";
-import { FiAlertTriangle, FiArrowRight } from "react-icons/fi";
+import { FiAlertTriangle, FiArrowRight, FiCheck, FiSave } from "react-icons/fi";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
+import { MdCancel } from "react-icons/md";
 
 const ROLE_OPTIONS = [
   "Owner",
@@ -54,6 +55,7 @@ export default function EditUser() {
   const [initialSettings, setInitialSettings] = useState<any>(null);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -183,7 +185,7 @@ export default function EditUser() {
       };
 
       await updateUser(userId, payload);
-
+      setShowSuccessMessage(true);
       router.push(routes.user_management_settings);
     } catch {
       setErrorMessage("Failed to update the user. Please try again.");
@@ -303,6 +305,7 @@ export default function EditUser() {
         showUnsavedModal={showUnsavedModal}
         showCancelModal={showCancelModal}
         showSaveModal={showSaveModal}
+        showPasswordModal={showPasswordModal}
       />
       <ResponsiveMain>
         <main
@@ -583,7 +586,7 @@ export default function EditUser() {
               onSubmit={(e) => e.preventDefault()}
             >
               <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 rounded-full flex items-center justify-center">
-                <span className="text-yellow-400 text-3xl">!</span>
+                <FiSave className="w-8 h-8 text-yellow-400" />
               </div>
               <h3
                 id="save-dialog-title"
@@ -597,17 +600,9 @@ export default function EditUser() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={() => setShowSaveModal(false)}
-                  disabled={isSubmitting}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
                   onClick={handleConfirmSave}
                   disabled={isSubmitting}
-                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 py-3 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base shadow-lg hover:shadow-yellow-400/25 order-1 sm:order-2 cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 py-3 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base shadow-lg hover:shadow-yellow-400/25 cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>
@@ -622,6 +617,14 @@ export default function EditUser() {
                       <span className="sm:hidden">Save</span>
                     </>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSaveModal(false)}
+                  disabled={isSubmitting}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base cursor-pointer"
+                >
+                  Cancel
                 </button>
               </div>
             </form>
@@ -642,7 +645,7 @@ export default function EditUser() {
               onSubmit={(e) => e.preventDefault()}
             >
               <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-red-400/20 to-red-500/20 rounded-full flex items-center justify-center">
-                <span className="text-red-400 text-3xl">×</span>
+                <MdCancel className="w-8 h-8 text-red-400" />
               </div>
               <h3
                 id="cancel-dialog-title"
@@ -657,19 +660,19 @@ export default function EditUser() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={() => setShowCancelModal(false)}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
-                >
-                  <span className="hidden sm:inline">No, Go Back</span>
-                  <span className="sm:hidden">Keep</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => handleConfirmCancel(true)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-400 to-red-500 hover:from-red-300 hover:to-red-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-red-400/25 order-1 sm:order-2 cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-400 to-red-500 hover:from-red-300 hover:to-red-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-red-400/25 cursor-pointer"
                 >
                   <span className="hidden sm:inline">Yes, Cancel</span>
                   <span className="sm:hidden">Cancel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base cursor-pointer"
+                >
+                  <span className="hidden sm:inline">No, Go Back</span>
+                  <span className="sm:hidden">Keep</span>
                 </button>
               </div>
             </form>
@@ -705,19 +708,19 @@ export default function EditUser() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={handleCancelUnsaved}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
-                >
-                  Stay
-                </button>
-                <button
-                  type="button"
                   onClick={handleConfirmUnsaved}
                   className="flex-2 flex items-center justify-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-300 hover:to-orange-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-orange-400/25 order-1 sm:order-2 cursor-pointer"
                 >
                   <FiArrowRight className="w-5 h-5" />
                   <span className="hidden sm:inline">Leave Without Saving</span>
                   <span className="sm:hidden">Leave</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelUnsaved}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
+                >
+                  Stay
                 </button>
               </div>
             </form>
@@ -811,6 +814,19 @@ export default function EditUser() {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+        {/* Success Message */}
+        {showSuccessMessage && (
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+            <div className="flex items-center gap-2 xs:gap-3">
+              <div className="w-5 xs:w-6 h-5 xs:h-6 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <FiCheck className="w-3 xs:w-4 h-3 xs:h-4 text-white" />
+              </div>
+              <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
+                User Updated successfully!
+              </span>
+            </div>
           </div>
         )}
       </ResponsiveMain>

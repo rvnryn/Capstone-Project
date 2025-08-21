@@ -40,7 +40,7 @@ const Settings = () => {
         shadow: "hover:shadow-yellow-400/30",
       },
       badge: "Accounts",
-      role: "Owner",
+      role: "",
     },
     {
       title: "Notification Settings",
@@ -83,7 +83,7 @@ const Settings = () => {
         shadow: "hover:shadow-orange-400/30",
       },
       badge: "Maintenance",
-      role: "Owner",
+      role: "",
     },
   ];
 

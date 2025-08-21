@@ -50,21 +50,6 @@ export default function RootLayout({
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="robots" content="index,follow" />
         <meta name="googlebot" content="index,follow" />
-        <style>{`
-          .ms-appx-web-install-banner,
-          .browser-install-prompt,
-          [style*="background-color: rgb(66, 133, 244)"],
-          [style*="background-color: #4285f4"],
-          [style*="background: rgb(66, 133, 244)"],
-          [style*="background: #4285f4"] {
-            display: none !important;
-            visibility: hidden !important;
-          }
-          .custom-pwa-banner {
-            display: block !important;
-            visibility: visible !important;
-          }
-        `}</style>
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <AppShell>{children}</AppShell>

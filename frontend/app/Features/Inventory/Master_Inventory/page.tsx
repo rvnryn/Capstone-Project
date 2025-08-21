@@ -77,6 +77,7 @@ export default function InventoryPage() {
     null
   );
   const [transferQuantity, setTransferQuantity] = useState<number | "">("");
+  const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   const router = useRouter();
@@ -144,12 +145,11 @@ export default function InventoryPage() {
         return [];
       }
     },
-    staleTime: 30000, // Cache for 30 seconds to prevent unnecessary refetches
   });
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: deleteItem,
+    mutationFn: (id: string | number) => deleteItem(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
     },
@@ -163,7 +163,7 @@ export default function InventoryPage() {
   // Transfer mutation (use hook, not axios)
   const transferMutation = useMutation({
     mutationFn: async ({ id, quantity }: { id: number; quantity: number }) => {
-      await transferToToday(id.toString(), quantity);
+      await transferToToday(id, quantity);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
@@ -263,7 +263,9 @@ export default function InventoryPage() {
 
   const sortedData = useMemo(() => {
     const data = [...filtered];
-    if (!sortConfig.key) return data;
+    if (!sortConfig.key) {
+      return data.sort((a, b) => Number(a.id) - Number(b.id));
+    }
     if (sortConfig.key === "status") {
       type StockStatus = "Out Of Stock" | "Critical" | "Low" | "Normal";
       const stockOrder: Record<StockStatus, number> = {
@@ -343,6 +345,7 @@ export default function InventoryPage() {
     setTransferQuantity("");
     queryClient.invalidateQueries({ queryKey: ["masterInventory"] }); // <-- force refetch
     queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
+    setTransferSuccess("Transfer successful! Item moved to Today's Inventory.");
   };
 
   const handleCloseTransferModal = () => {
@@ -363,6 +366,14 @@ export default function InventoryPage() {
     { key: "actions", label: "Actions" },
   ];
 
+  useEffect(() => {
+    if (transferSuccess) {
+      const timer = setTimeout(() => {
+        setTransferSuccess(null);
+      }, 2000); // 2 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [transferSuccess]);
   return (
     <section className="text-white font-poppins">
       <NavigationBar
@@ -932,7 +943,7 @@ export default function InventoryPage() {
                     Available: {itemToTransfer.stock} units
                   </p>
                 </section>
-                <form
+                <div
                   className="text-left space-y-1 xs:space-y-2"
                   onSubmit={(e) => e.preventDefault()}
                 >
@@ -959,7 +970,7 @@ export default function InventoryPage() {
                   <p className="text-xs text-gray-400">
                     This will move the specified quantity to Today's Inventory
                   </p>
-                </form>
+                </div>
                 <div className="flex flex-col sm:flex-row justify-center gap-2 xs:gap-3 sm:gap-4 pt-1 xs:pt-2">
                   <button
                     type="button"
@@ -1001,6 +1012,13 @@ export default function InventoryPage() {
                 </div>
               </div>
             </form>
+          </div>
+        )}
+
+        {transferSuccess && (
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+            <MdCheckCircle className="text-xl" />
+            <span>{transferSuccess}</span>
           </div>
         )}
       </ResponsiveMain>

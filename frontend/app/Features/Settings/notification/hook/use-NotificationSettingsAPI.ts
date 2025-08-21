@@ -15,7 +15,8 @@ export function useNotificationSettingsAPI(userId: number) {
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  const getToken = () =>
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
   // Fetch settings from backend
   const fetchSettings = useCallback(async () => {
     if (!userId) {
@@ -50,9 +51,13 @@ export function useNotificationSettingsAPI(userId: number) {
       setLoading(true);
       setError(null);
       try {
+        const token = getToken();
         const res = await fetch("/api/notification-settings", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify(newSettings),
         });
         if (!res.ok) throw new Error("Failed to update notification settings");

@@ -8,63 +8,89 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
 import time
 import asyncio
 from sqlalchemy import text
-from app.supabase import SessionLocal
+from app.supabase import SessionLocal, get_db
 from datetime import datetime, date
+from app.routes.userActivity import UserActivityLog
+from app.utils.rbac import require_role
 
 
 router = APIRouter()
 
 TABLES = [
-    "backup_history", "food_trend_ingredients", "food_trend_menu", "food_trends",
-    "ingredients", "inventory", "inventory_log", "inventory_settings",
-    "inventory_surplus", "inventory_today", "menu", "menu_ingredients",
-    "notification", "notification_settings", "order_items", "orders",
-    "past_inventory_log", "past_order_items", "past_user_activity_log",
-    "suppliers", "user_activity_log", "users"
+    "backup_history",
+    "food_trend_ingredients",
+    "food_trend_menu",
+    "food_trends",
+    "ingredients",
+    "inventory",
+    "inventory_log",
+    "inventory_settings",
+    "inventory_surplus",
+    "inventory_today",
+    "menu",
+    "menu_ingredients",
+    "notification",
+    "notification_settings",
+    "order_items",
+    "orders",
+    "past_inventory_log",
+    "past_order_items",
+    "past_user_activity_log",
+    "suppliers",
+    "user_activity_log",
+    "users",
 ]
 
 # --- Google Drive Integration ---
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
+SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+
 
 def authenticate_google_drive():
     creds = None
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
+    if os.path.exists("token.pickle"):
+        with open("token.pickle", "rb") as token:
             creds = pickle.load(token)
     if not creds or not creds.valid:
         from google.auth.transport.requests import Request
+
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             # Use the new client secret file name if present
-            client_secret_file = 'client_secret_72672884523-pmoocudj7qgtq516o96i01sfki4o5mor.apps.googleusercontent.com.json'
+            client_secret_file = "client_secret_72672884523-pmoocudj7qgtq516o96i01sfki4o5mor.apps.googleusercontent.com.json"
             if not os.path.exists(client_secret_file):
-                client_secret_file = 'credentials.json'
-            flow = InstalledAppFlow.from_client_secrets_file(
-                client_secret_file, SCOPES)
+                client_secret_file = "credentials.json"
+            flow = InstalledAppFlow.from_client_secrets_file(client_secret_file, SCOPES)
             creds = flow.run_local_server(port=0)
-        with open('token.pickle', 'wb') as token:
+        with open("token.pickle", "wb") as token:
             pickle.dump(creds, token)
-    service = build('drive', 'v3', credentials=creds)
+    service = build("drive", "v3", credentials=creds)
     return service
+
 
 def authenticate_google_drive_with_token(access_token):
     creds = Credentials(token=access_token)
-    service = build('drive', 'v3', credentials=creds)
+    service = build("drive", "v3", credentials=creds)
     return service
+
 
 def upload_to_drive(filename):
     service = authenticate_google_drive()
-    file_metadata = {'name': filename}
-    media = MediaFileUpload(filename, mimetype='application/json')
-    file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-    return file.get('id')
+    file_metadata = {"name": filename}
+    media = MediaFileUpload(filename, mimetype="application/json")
+    file = (
+        service.files()
+        .create(body=file_metadata, media_body=media, fields="id")
+        .execute()
+    )
+    return file.get("id")
+
 
 # Paginated fetch for large tables
 async def fetch_table_paginated(table, batch_size=1000):
@@ -74,7 +100,7 @@ async def fetch_table_paginated(table, batch_size=1000):
         async with SessionLocal() as session:
             result = await session.execute(
                 text(f"SELECT * FROM {table} LIMIT :limit OFFSET :offset"),
-                {"limit": batch_size, "offset": offset}
+                {"limit": batch_size, "offset": offset},
             )
             rows = result.mappings().all()
             if not rows:
@@ -83,6 +109,7 @@ async def fetch_table_paginated(table, batch_size=1000):
             offset += batch_size
     return table, all_rows
 
+
 def compress_json_gzip(data):
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="w") as gz_file:
@@ -90,12 +117,18 @@ def compress_json_gzip(data):
     buf.seek(0)
     return buf
 
+
 @router.get("/backup")
-async def backup():
+async def backup(
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
     start_time = time.time()
+
     # Use paginated fetch for each table
     async def fetch_table(table):
         return await fetch_table_paginated(table, batch_size=1000)
+
     tasks = [fetch_table(table) for table in TABLES]
     results = await asyncio.gather(*tasks)
     backup_data = {table: rows for table, rows in results}
@@ -106,18 +139,42 @@ async def backup():
         buf = future.result()
 
     elapsed = time.time() - start_time
-    print(f"[PROFILE] Backup completed in {elapsed:.2f} seconds. Size: {buf.getbuffer().nbytes/1024:.1f} KB (gzip)")
+
+    try:
+        user_row = getattr(user, "user_row", user)
+        new_activity = UserActivityLog(
+            user_id=user_row.get("user_id"),
+            action_type="local backup",
+            description=f"Performed local backup.",
+            activity_date=datetime.utcnow(),
+            report_date=datetime.utcnow(),
+            user_name=user_row.get("name"),
+            role=user_row.get("user_role"),
+        )
+        db.add(new_activity)
+        await db.flush()
+        await db.commit()
+        print("local Backup activity logged successfully.")
+    except Exception as e:
+        print("Failed to record local Backup activity:", e)
+
+    print(
+        f"[PROFILE] Backup completed in {elapsed:.2f} seconds. Size: {buf.getbuffer().nbytes/1024:.1f} KB (gzip)"
+    )
 
     return StreamingResponse(
         buf,
         media_type="application/gzip",
-        headers={
-            "Content-Disposition": "attachment; filename=backup.json.gz"
-        },
+        headers={"Content-Disposition": "attachment; filename=backup.json.gz"},
     )
 
+
 @router.post("/backup_drive")
-async def backup_drive(request: Request):
+async def backup_drive(
+    request: Request,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
     body = await request.json()
     access_token = body.get("access_token")
     if not access_token:
@@ -126,6 +183,7 @@ async def backup_drive(request: Request):
     # Use paginated fetch for each table
     async def fetch_table(table):
         return await fetch_table_paginated(table, batch_size=1000)
+
     tasks = [fetch_table(table) for table in TABLES]
     results = await asyncio.gather(*tasks)
     backup_data = {table: rows for table, rows in results}
@@ -136,17 +194,21 @@ async def backup_drive(request: Request):
         buf = future.result()
 
     # Save to local compressed file (.json.gz)
-    backup_file = 'backup_data.json.gz'
-    with open(backup_file, 'wb') as f:
+    backup_file = "backup_data.json.gz"
+    with open(backup_file, "wb") as f:
         f.write(buf.read())
     buf.seek(0)
 
     # Upload to Google Drive (set mimetype to gzip)
     service = authenticate_google_drive_with_token(access_token)
-    file_metadata = {'name': backup_file}
-    media = MediaFileUpload(backup_file, mimetype='application/gzip')
-    file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-    file_id = file.get('id')
+    file_metadata = {"name": backup_file}
+    media = MediaFileUpload(backup_file, mimetype="application/gzip")
+    file = (
+        service.files()
+        .create(body=file_metadata, media_body=media, fields="id")
+        .execute()
+    )
+    file_id = file.get("id")
 
     # Explicitly delete the media object to release the file handle
     del media
@@ -154,10 +216,33 @@ async def backup_drive(request: Request):
     # Now remove the file
     os.remove(backup_file)
 
-    return JSONResponse({'message': 'Backup successful!', 'file_id': file_id})
+    try:
+        user_row = getattr(user, "user_row", user)
+        new_activity = UserActivityLog(
+            user_id=user_row.get("user_id"),
+            action_type="Google Drive backup",
+            description=f"Performed Google Drive backup.",
+            activity_date=datetime.utcnow(),
+            report_date=datetime.utcnow(),
+            user_name=user_row.get("name"),
+            role=user_row.get("user_role"),
+        )
+        db.add(new_activity)
+        await db.flush()
+        await db.commit()
+        print("Google Drive backup activity logged successfully.")
+    except Exception as e:
+        print("Failed to record Google Drive backup activity:", e)
+
+    return JSONResponse({"message": "Backup successful!", "file_id": file_id})
+
 
 @router.post("/restore")
-async def restore(file: UploadFile = File(...)):
+async def restore(
+    file: UploadFile = File(...),
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
     try:
         contents = await file.read()
         try:
@@ -174,7 +259,12 @@ async def restore(file: UploadFile = File(...)):
         # Map of table to columns that are dates or datetimes (add more as needed)
         date_columns = {
             "inventory": ["batch_date", "expiration_date", "created_at", "updated_at"],
-            "inventory_surplus": ["batch_date", "expiration_date", "created_at", "updated_at"],
+            "inventory_surplus": [
+                "batch_date",
+                "expiration_date",
+                "created_at",
+                "updated_at",
+            ],
             "inventory_log": ["created_at", "updated_at"],
             "inventory_today": ["created_at", "updated_at"],
             "past_inventory_log": ["created_at", "updated_at"],
@@ -225,15 +315,15 @@ async def restore(file: UploadFile = File(...)):
         delete_order = [
             # Child tables first (no other table references these)
             "food_trend_ingredients",  # references food_trends, ingredients
-            "food_trend_menu",         # references food_trends, menu
-            "menu_ingredients",        # references menu, ingredients
-            "order_items",             # references orders, menu
-            "inventory_log",           # references inventory, users
-            "user_activity_log",       # references users
-            "backup_history",          # references users
-            "notification_settings",   # references users
-            "past_inventory_log",      # references inventory, users
-            "past_order_items",        # references orders, menu
+            "food_trend_menu",  # references food_trends, menu
+            "menu_ingredients",  # references menu, ingredients
+            "order_items",  # references orders, menu
+            "inventory_log",  # references inventory, users
+            "user_activity_log",  # references users
+            "backup_history",  # references users
+            "notification_settings",  # references users
+            "past_inventory_log",  # references inventory, users
+            "past_order_items",  # references orders, menu
             "past_user_activity_log",  # references users
             # Parent tables (delete after all referencing child tables)
             "food_trends",
@@ -246,16 +336,19 @@ async def restore(file: UploadFile = File(...)):
             "inventory_surplus",
             "inventory_today",
             "notification",
-            "users"
+            "users",
         ]
         async with SessionLocal() as session:
             # First, delete all tables in order
             from app.supabase import supabase
+
             for table in delete_order:
                 try:
                     if table == "users":
                         # Delete users from Supabase Auth before deleting from users table
-                        result = await session.execute(text("SELECT auth_id FROM users WHERE auth_id IS NOT NULL"))
+                        result = await session.execute(
+                            text("SELECT auth_id FROM users WHERE auth_id IS NOT NULL")
+                        )
                         auth_ids = [row[0] for row in result.fetchall() if row[0]]
                         for auth_id in auth_ids:
                             try:
@@ -265,18 +358,29 @@ async def restore(file: UploadFile = File(...)):
                                 print(f"Error deleting from Supabase Auth: {auth_err}")
                         await session.execute(text(f"DELETE FROM {table}"))
                     elif table == "menu_ingredients":
-                        result = await session.execute(text("SELECT COUNT(*) FROM menu_ingredients"))
+                        result = await session.execute(
+                            text("SELECT COUNT(*) FROM menu_ingredients")
+                        )
                         before_count = result.scalar()
-                        print(f"[DEBUG] menu_ingredients rows before delete: {before_count}")
+                        print(
+                            f"[DEBUG] menu_ingredients rows before delete: {before_count}"
+                        )
                         await session.execute(text(f"DELETE FROM {table}"))
-                        result = await session.execute(text("SELECT COUNT(*) FROM menu_ingredients"))
+                        result = await session.execute(
+                            text("SELECT COUNT(*) FROM menu_ingredients")
+                        )
                         after_count = result.scalar()
-                        print(f"[DEBUG] menu_ingredients rows after delete: {after_count}")
+                        print(
+                            f"[DEBUG] menu_ingredients rows after delete: {after_count}"
+                        )
                     else:
                         await session.execute(text(f"DELETE FROM {table}"))
                 except Exception as e:
                     print(f"Restore error in table {table} (DELETE):", e)
-                    raise HTTPException(status_code=500, detail=f"Restore failed for table {table} (DELETE): {str(e)}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Restore failed for table {table} (DELETE): {str(e)}",
+                    )
             # Commit deletes before inserts
             await session.commit()
             # Insert parent tables first, then child tables
@@ -291,7 +395,7 @@ async def restore(file: UploadFile = File(...)):
                 "inventory_surplus",
                 "inventory_today",
                 "notification",
-                "users"
+                "users",
             ]
             child_tables = [
                 "food_trend_ingredients",
@@ -304,7 +408,7 @@ async def restore(file: UploadFile = File(...)):
                 "notification_settings",
                 "past_inventory_log",
                 "past_order_items",
-                "past_user_activity_log"
+                "past_user_activity_log",
             ]
             # Insert parent tables
             created_auth_users = []
@@ -315,20 +419,24 @@ async def restore(file: UploadFile = File(...)):
                             # ...existing code for date/datetime conversion and insert...
                             if table == "inventory_log":
                                 from datetime import datetime
+
                                 for col in ["action_date", "batch_date"]:
                                     if col in row and isinstance(row[col], str):
                                         value = row[col]
                                         try:
-                                            if value.endswith('Z'):
-                                                value = value.replace('Z', '+00:00')
+                                            if value.endswith("Z"):
+                                                value = value.replace("Z", "+00:00")
                                             row[col] = datetime.fromisoformat(value)
                                         except Exception:
                                             try:
-                                                row[col] = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+                                                row[col] = datetime.strptime(
+                                                    value, "%Y-%m-%d %H:%M:%S"
+                                                )
                                             except Exception:
                                                 row[col] = None
                             elif table == "inventory_today":
                                 from datetime import date
+
                                 for col in ["batch_date", "expiration_date"]:
                                     if col in row and isinstance(row[col], str):
                                         try:
@@ -338,61 +446,108 @@ async def restore(file: UploadFile = File(...)):
                                 for col in ["created_at", "updated_at"]:
                                     if col in row and isinstance(row[col], str):
                                         from datetime import datetime
+
                                         value = row[col]
                                         try:
-                                            if value.endswith('Z'):
-                                                value = value.replace('Z', '+00:00')
+                                            if value.endswith("Z"):
+                                                value = value.replace("Z", "+00:00")
                                             row[col] = datetime.fromisoformat(value)
                                         except Exception:
                                             row[col] = None
+                            elif table == "user_activity_log":
+                                for col in ["activity_date", "report_date"]:
+                                    if col in row and isinstance(row[col], str):
+                                        value = row[col]
+                                        try:
+                                            if value.endswith("Z"):
+                                                value = value.replace("Z", "+00:00")
+                                            row[col] = datetime.fromisoformat(value)
+                                        except Exception:
+                                            try:
+                                                row[col] = datetime.strptime(
+                                                    value, "%Y-%m-%d %H:%M:%S"
+                                                )
+                                            except Exception:
+                                                row[col] = None
                             elif table in date_columns:
                                 for col in date_columns[table]:
                                     if col in row and isinstance(row[col], str):
                                         try:
                                             from datetime import datetime, date
+
                                             value = row[col]
-                                            if value.endswith('+00:00') or value.endswith('Z'):
-                                                value = value.replace('Z', '+00:00')
+                                            if value.endswith(
+                                                "+00:00"
+                                            ) or value.endswith("Z"):
+                                                value = value.replace("Z", "+00:00")
                                             try:
                                                 row[col] = datetime.fromisoformat(value)
                                             except Exception:
-                                                row[col] = date.fromisoformat(value.split(' ')[0])
+                                                row[col] = date.fromisoformat(
+                                                    value.split(" ")[0]
+                                                )
                                         except Exception:
                                             row[col] = parse_date(row[col])
-                            columns = ','.join(row.keys())
-                            values = ','.join([f":{k}" for k in row.keys()])
+                            columns = ",".join(row.keys())
+                            values = ",".join([f":{k}" for k in row.keys()])
                             if table == "users" and "user_id" in row:
                                 # Always set a default password for Supabase Auth
                                 default_password = "changeme123"
                                 # Use OVERRIDING SYSTEM VALUE for identity column
                                 await session.execute(
-                                    text(f"INSERT INTO {table} ({columns}) OVERRIDING SYSTEM VALUE VALUES ({values})"),
-                                    row
+                                    text(
+                                        f"INSERT INTO {table} ({columns}) OVERRIDING SYSTEM VALUE VALUES ({values})"
+                                    ),
+                                    row,
                                 )
                                 from app.supabase import supabase
+
                                 email = row.get("email")
                                 if email:
                                     try:
                                         # Create user in Supabase Auth with default password
-                                        result = supabase.auth.admin.create_user({"email": email, "password": default_password, "email_confirm": True})
-                                        new_auth_id = result.user.id if hasattr(result, "user") and hasattr(result.user, "id") else None
+                                        result = supabase.auth.admin.create_user(
+                                            {
+                                                "email": email,
+                                                "password": default_password,
+                                                "email_confirm": True,
+                                            }
+                                        )
+                                        new_auth_id = (
+                                            result.user.id
+                                            if hasattr(result, "user")
+                                            and hasattr(result.user, "id")
+                                            else None
+                                        )
                                         if new_auth_id:
                                             # Update the database user record with the new auth_id
                                             await session.execute(
-                                                text("UPDATE users SET auth_id = :auth_id WHERE email = :email"),
-                                                {"auth_id": new_auth_id, "email": email}
+                                                text(
+                                                    "UPDATE users SET auth_id = :auth_id WHERE email = :email"
+                                                ),
+                                                {
+                                                    "auth_id": new_auth_id,
+                                                    "email": email,
+                                                },
                                             )
                                         created_auth_users.append(email)
                                     except Exception as auth_err:
-                                        print(f"Restore: Error creating Supabase Auth user for {email}: {auth_err}")
+                                        print(
+                                            f"Restore: Error creating Supabase Auth user for {email}: {auth_err}"
+                                        )
                             else:
                                 await session.execute(
-                                    text(f"INSERT INTO {table} ({columns}) VALUES ({values})"),
-                                    row
+                                    text(
+                                        f"INSERT INTO {table} ({columns}) VALUES ({values})"
+                                    ),
+                                    row,
                                 )
                     except Exception as e:
                         print(f"Restore error in table {table} (INSERT):", e)
-                        raise HTTPException(status_code=500, detail=f"Restore failed for table {table} (INSERT): {str(e)}")
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Restore failed for table {table} (INSERT): {str(e)}",
+                        )
             # Insert child tables
             for table in child_tables:
                 if table in data and isinstance(data[table], list):
@@ -401,20 +556,24 @@ async def restore(file: UploadFile = File(...)):
                             # ...existing code for date/datetime conversion and insert...
                             if table == "inventory_log":
                                 from datetime import datetime
+
                                 for col in ["action_date", "batch_date"]:
                                     if col in row and isinstance(row[col], str):
                                         value = row[col]
                                         try:
-                                            if value.endswith('Z'):
-                                                value = value.replace('Z', '+00:00')
+                                            if value.endswith("Z"):
+                                                value = value.replace("Z", "+00:00")
                                             row[col] = datetime.fromisoformat(value)
                                         except Exception:
                                             try:
-                                                row[col] = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+                                                row[col] = datetime.strptime(
+                                                    value, "%Y-%m-%d %H:%M:%S"
+                                                )
                                             except Exception:
                                                 row[col] = None
                             elif table == "inventory_today":
                                 from datetime import date
+
                                 for col in ["batch_date", "expiration_date"]:
                                     if col in row and isinstance(row[col], str):
                                         try:
@@ -424,37 +583,82 @@ async def restore(file: UploadFile = File(...)):
                                 for col in ["created_at", "updated_at"]:
                                     if col in row and isinstance(row[col], str):
                                         from datetime import datetime
+
                                         value = row[col]
                                         try:
-                                            if value.endswith('Z'):
-                                                value = value.replace('Z', '+00:00')
+                                            if value.endswith("Z"):
+                                                value = value.replace("Z", "+00:00")
                                             row[col] = datetime.fromisoformat(value)
                                         except Exception:
                                             row[col] = None
+                            elif table == "user_activity_log":
+                                for col in ["activity_date", "report_date"]:
+                                    if col in row and isinstance(row[col], str):
+                                        value = row[col]
+                                        try:
+                                            if value.endswith("Z"):
+                                                value = value.replace("Z", "+00:00")
+                                            row[col] = datetime.fromisoformat(value)
+                                        except Exception:
+                                            try:
+                                                row[col] = datetime.strptime(
+                                                    value, "%Y-%m-%d %H:%M:%S"
+                                                )
+                                            except Exception:
+                                                row[col] = None
                             elif table in date_columns:
                                 for col in date_columns[table]:
                                     if col in row and isinstance(row[col], str):
                                         try:
                                             from datetime import datetime, date
+
                                             value = row[col]
-                                            if value.endswith('+00:00') or value.endswith('Z'):
-                                                value = value.replace('Z', '+00:00')
+                                            if value.endswith(
+                                                "+00:00"
+                                            ) or value.endswith("Z"):
+                                                value = value.replace("Z", "+00:00")
                                             try:
                                                 row[col] = datetime.fromisoformat(value)
                                             except Exception:
-                                                row[col] = date.fromisoformat(value.split(' ')[0])
+                                                row[col] = date.fromisoformat(
+                                                    value.split(" ")[0]
+                                                )
                                         except Exception:
                                             row[col] = parse_date(row[col])
-                            columns = ','.join(row.keys())
-                            values = ','.join([f":{k}" for k in row.keys()])
+                            columns = ",".join(row.keys())
+                            values = ",".join([f":{k}" for k in row.keys()])
                             await session.execute(
-                                text(f"INSERT INTO {table} ({columns}) VALUES ({values})"),
-                                row
+                                text(
+                                    f"INSERT INTO {table} ({columns}) VALUES ({values})"
+                                ),
+                                row,
                             )
                     except Exception as e:
                         print(f"Restore error in table {table} (INSERT):", e)
-                        raise HTTPException(status_code=500, detail=f"Restore failed for table {table} (INSERT): {str(e)}")
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Restore failed for table {table} (INSERT): {str(e)}",
+                        )
             await session.commit()
+
+        try:
+            user_row = getattr(user, "user_row", user)
+            new_activity = UserActivityLog(
+                user_id=user_row.get("user_id"),
+                action_type="local restore",
+                description=f"Performed local restore.",
+                activity_date=datetime.utcnow(),
+                report_date=datetime.utcnow(),
+                user_name=user_row.get("name"),
+                role=user_row.get("user_role"),
+            )
+            db.add(new_activity)
+            await db.flush()
+            await db.commit()
+            print("local restore activity logged successfully.")
+        except Exception as e:
+            print("Failed to record local restore activity:", e)
+
         return JSONResponse({"status": "success", "message": "Restore completed."})
     except HTTPException as he:
         raise he
@@ -462,14 +666,21 @@ async def restore(file: UploadFile = File(...)):
         print("Restore error: Unexpected exception.", e)
         raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
 
+
 @router.post("/restore_drive")
-async def restore_drive(request: Request):
+async def restore_drive(
+    request: Request,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
     try:
         body = await request.json()
         access_token = body.get("access_token")
         file_id = body.get("file_id")
         if not access_token or not file_id:
-            raise HTTPException(status_code=400, detail="Missing access token or file_id")
+            raise HTTPException(
+                status_code=400, detail="Missing access token or file_id"
+            )
 
         # Debug: log access token and request details
         print(f"[restore_drive] Using access token: {access_token}")
@@ -479,7 +690,10 @@ async def restore_drive(request: Request):
         print(f"[restore_drive] Google Drive response status: {response.status_code}")
         print(f"[restore_drive] Google Drive response body: {response.text}")
         if response.status_code != 200:
-            raise HTTPException(status_code=500, detail=f"Failed to download file from Google Drive: {response.text}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to download file from Google Drive: {response.text}",
+            )
 
         contents = response.content
 
@@ -496,11 +710,33 @@ async def restore_drive(request: Request):
         class DummyUploadFile:
             def __init__(self, content):
                 self.content = content
+
             async def read(self):
                 return self.content
+
         dummy_file = DummyUploadFile(contents)
         # Call the restore logic
-        return await restore(dummy_file)
+        response = await restore(dummy_file)
+
+        try:
+            user_row = getattr(user, "user_row", user)
+            new_activity = UserActivityLog(
+                user_id=user_row.get("user_id"),
+                action_type="restore Google Drive",
+                description=f"Performed restore from Google Drive.",
+                activity_date=datetime.utcnow(),
+                report_date=datetime.utcnow(),
+                user_name=user_row.get("name"),
+                role=user_row.get("user_role"),
+            )
+            db.add(new_activity)
+            await db.flush()
+            await db.commit()
+            print("restore Google Drive activity logged successfully.")
+        except Exception as e:
+            print("Failed to record restore Google Drive activity:", e)
+
+        return response
     except HTTPException as he:
         raise he
     except Exception as e:

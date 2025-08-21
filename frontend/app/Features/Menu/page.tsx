@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { routes } from "@/app/routes/routes";
 import NavigationBar from "@/app/components/navigation/navigation";
-import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { useAuth } from "@/app/context/AuthContext";
 import Image from "next/image";
 import {
@@ -109,7 +108,9 @@ const Menu: React.FC = () => {
 
   const sortedData = useMemo(() => {
     const data = [...filtered];
-    if (!sortConfig.key) return data;
+    if (!sortConfig.key) {
+      return data.sort((a, b) => Number(a.menu_id) - Number(b.menu_id));
+    }
     if (sortConfig.key === "price") {
       return data.sort((a, b) =>
         sortConfig.direction === "asc"
@@ -551,7 +552,7 @@ const Menu: React.FC = () => {
             </article>
           </div>
         </main>
-        
+
         {/* Delete Confirmation Modal */}
         {showDeleteModal && (
           <div

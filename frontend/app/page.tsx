@@ -8,25 +8,82 @@ import { routes } from "@/app/routes/routes";
 import Image from "next/image";
 import { supabase } from "./utils/Server/supabaseClient";
 import { ReactNode } from "react";
+import { useAuth } from "@/app/context/AuthContext";
 
 interface ModalProps {
   message: ReactNode;
   onClose: () => void;
 }
 
-const Modal: React.FC<ModalProps> = ({ message, onClose }) => (
-  <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50 px-4">
-    <section className="bg-gray-900 text-white p-8 border border-yellow-400 rounded-2xl shadow-2xl w-full max-w-sm text-center animate-fadeIn">
-      <h3 className="text-2xl font-semibold mb-4">{message}</h3>
-      <button
-        onClick={onClose}
-        className="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-8 py-2 rounded-full transition duration-300 mt-2"
-      >
-        Close
-      </button>
-    </section>
-  </div>
-);
+const Modal: React.FC<ModalProps> = ({ message, onClose }) => {
+  React.useEffect(() => {
+    const timer = setTimeout(onClose, 2500);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-md z-50 px-4 transition-opacity duration-300 animate-fadeIn">
+      <section className="relative g-gradient-to-br from-gray-900/95 to-black/95 text-white p-8 border-2 border-yellow-400 rounded-3xl shadow-2xl w-full max-w-sm text-center scale-100 animate-popIn">
+        <button
+          onClick={onClose}
+          aria-label="Close modal"
+          className="absolute top-3 right-3 text-yellow-400 hover:text-yellow-300 bg-black/40 rounded-full p-2 transition-colors focus:outline-none"
+        >
+          <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              d="M6 6l8 8M14 6l-8 8"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        <div className="flex flex-col items-center gap-3">
+          <div className="bg-yellow-400/80 rounded-full p-3 mb-2 shadow-lg animate-bounce">
+            <svg width="32" height="32" fill="none" viewBox="0 0 32 32">
+              <circle cx="16" cy="16" r="16" fill="#FACC15" />
+              <path
+                d="M10 17l4 4 8-8"
+                stroke="#222"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+          <h3 className="text-2xl font-bold mb-2 drop-shadow">{message}</h3>
+        </div>
+      </section>
+      <style jsx>{`
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease;
+        }
+        .animate-popIn {
+          animation: popIn 0.25s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        @keyframes popIn {
+          0% {
+            transform: scale(0.8);
+          }
+          80% {
+            transform: scale(1.05);
+          }
+          100% {
+            transform: scale(1);
+          }
+        }
+      `}</style>
+    </div>
+  );
+};
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -38,17 +95,39 @@ const Login = () => {
   const [resetEmail, setResetEmail] = useState("");
   const [resetStatus, setResetStatus] = useState<string | null>(null);
   const router = useRouter();
+  const { refreshSession } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    let loginEmail = email;
 
+    // 1. Call backend login API (handles username/email)
+    let backendResponse;
     try {
-      await loginUser(email, password);
-      setIsModalOpen(true);
-    } catch (error: any) {
-      setError(error.message || "Login failed. Please try again.");
+      backendResponse = await loginUser(email, password); // returns { access_token, email, ... }
+      loginEmail = backendResponse.email;
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unexpected error occurred.");
+      }
+      return;
     }
+
+    // 2. Supabase client login (must use email)
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password,
+    });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    // 3. Refresh context/session
+    await refreshSession();
+    setIsModalOpen(true);
   };
 
   const handleModalClose = () => {

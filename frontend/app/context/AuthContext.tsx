@@ -8,7 +8,8 @@ import React, {
   ReactNode,
   JSX,
 } from "react";
-import { supabase } from "@/app/utils/Server/supabaseClient";
+import { supabase } from "@/app/utils/Server/supabaseClient"; // Import your Supabase client
+import axios from "@/app/lib/axios";
 
 // --- Types ---
 export type UserRole =
@@ -29,32 +30,19 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   role: UserRole;
+  refreshSession: () => Promise<void>;
 }
 
 // --- Context ---
 const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
+  refreshSession: function (): Promise<void> {
+    throw new Error("Function not implemented.");
+  },
 });
 
 export const useAuth = () => useContext(AuthContext);
-
-// --- Helper to fetch user role from DB ---
-async function fetchUserRole(authId: string): Promise<UserRole> {
-  try {
-    const { data, error } = await supabase
-      .from("users")
-      .select("user_role")
-      .eq("auth_id", authId)
-      .single();
-    console.log("fetchUserRole result:", { data, error, authId });
-    if (error || !data) return null;
-    return (data.user_role as UserRole) || null;
-  } catch (e) {
-    console.error("fetchUserRole exception", e);
-    return null;
-  }
-}
 
 // --- Provider ---
 type AuthProviderProps = {
@@ -64,62 +52,67 @@ type AuthProviderProps = {
 export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [role, setRole] = useState<UserRole>(null);
+  console.log("AuthProvider mounted");
+
+  // Hybrid session refresh: get Supabase session, then backend info
+  const refreshSession = async () => {
+    const { data, error } = await supabase.auth.getSession();
+    console.log("Supabase session:", data.session, "Error:", error);
+
+    // Only proceed if session and user exist and token is not expired
+    const session = data.session;
+    if (
+      error ||
+      !session ||
+      !session.user ||
+      !session.access_token ||
+      (session.expires_at && session.expires_at * 1000 < Date.now())
+    ) {
+      setUser(null);
+      setRole(null);
+      return;
+    }
+
+    const supabaseUser = session.user;
+    setUser({
+      id: supabaseUser.id,
+      email: supabaseUser.email,
+      ...supabaseUser.user_metadata,
+    });
+
+    try {
+      const res = await axios.get("/api/auth/session", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      setRole(res.data.role);
+      setUser((prev) => ({
+        ...prev,
+        ...res.data.user,
+      }));
+    } catch (err) {
+      // If backend returns 401, clear session
+      setUser(null);
+      setRole(null);
+      await supabase.auth.signOut();
+    }
+  };
 
   useEffect(() => {
-    const updateAuthState = async (sessionUser: AuthUser | null) => {
-      if (sessionUser) {
-        // Fetch user_id and name from users table
-        const { data } = await supabase
-          .from("users")
-          .select("user_id, name")
-          .eq("auth_id", sessionUser.id)
-          .single();
-        const user_id = data?.user_id;
-        const name = data?.name || undefined;
-        const userWithDetails = { ...sessionUser, user_id, name };
-        setUser(userWithDetails);
-        console.log(
-          "[AuthContext] user_id set:",
-          user_id,
-          "user:",
-          userWithDetails
-        );
-        const fetchedRole = await fetchUserRole(sessionUser.id);
-        setRole(fetchedRole);
-      } else {
-        setUser(null);
-        setRole(null);
-      }
-    };
-
-    supabase.auth
-      .getSession()
-      .then(({ data: { session } }) => {
-        console.log("[AuthContext] getSession result:", session);
-        updateAuthState((session?.user as AuthUser) || null);
-      })
-      .catch((err) => {
-        setUser(null);
-        setRole(null);
-        console.error("[AuthContext] getSession error:", err);
-      });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        console.log("[AuthContext] onAuthStateChange:", session);
-        updateAuthState((session?.user as AuthUser) || null);
-      }
-    );
-
+    console.log("useEffect running");
+    // Listen for Supabase auth state changes
+    const { data: listener } = supabase.auth.onAuthStateChange(() => {
+      refreshSession();
+    });
+    // Initial session fetch
+    refreshSession();
     return () => {
-      authListener?.subscription.unsubscribe();
+      listener?.subscription.unsubscribe();
     };
   }, []);
 
-  // Always return valid JSX
   return (
-    <AuthContext.Provider value={{ user, role }}>
-      <>{children}</>
+    <AuthContext.Provider value={{ user, role, refreshSession }}>
+      {children}
     </AuthContext.Provider>
   );
 }

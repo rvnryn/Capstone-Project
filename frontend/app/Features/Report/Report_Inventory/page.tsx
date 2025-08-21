@@ -423,6 +423,11 @@ export default function ReportInventory() {
     return sorted;
   }, [filtered, sortConfig]);
 
+  const handleCloseSuccessPopup = () => {
+    setExportSuccess(false);
+    setShowPopup(false);
+  };
+
   return (
     <GoogleOAuthProvider clientId={CLIENT_ID}>
       <section className="min-h-screen bg-blue-600 text-white font-poppins">
@@ -1688,7 +1693,7 @@ export default function ReportInventory() {
                     </p>
 
                     <button
-                      onClick={() => setExportSuccess(false)}
+                      onClick={() => handleCloseSuccessPopup()}
                       className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-semibold px-8 py-3 rounded-xl transition-all duration-200"
                       type="button"
                     >

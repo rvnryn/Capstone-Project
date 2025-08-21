@@ -38,7 +38,7 @@ import {
 } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 import { useInventoryAPI } from "../hook/use-inventoryAPI";
 import axios from "@/app/lib/axios";
-
+import { tree } from "next/dist/build/templates/app-page";
 type InventoryItem = {
   id: number;
   name: string;
@@ -53,11 +53,11 @@ type InventoryItem = {
 };
 
 export default function SurplusInventoryPage() {
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isMobile } = useNavigation();
-  const { deleteSurplusItem } = useInventoryAPI();
+  const { deleteSurplusItem, transferSurplusToToday } = useInventoryAPI();
 
   // Fetch inventory settings (thresholds)
   const { fetchSettings } = useInventorySettingsAPI();
@@ -88,6 +88,7 @@ export default function SurplusInventoryPage() {
     null
   );
   const [transferQuantity, setTransferQuantity] = useState<number | "">("");
+  const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (isMobile) {
@@ -152,16 +153,12 @@ export default function SurplusInventoryPage() {
 
   const transferToTodayMutation = useMutation({
     mutationFn: async ({ id, quantity }: { id: number; quantity: number }) => {
-      await axios.post(`/api/inventory-surplus/${id}/transfer-to-today`, {
-        quantity: quantity,
-      });
+      await transferSurplusToToday(id, quantity);
     },
+
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
       queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
-      setShowTransferModal(false);
-      setItemToTransfer(null);
-      setTransferQuantity("");
     },
     onError: (error) => {
       console.error("Transfer failed:", error);
@@ -170,7 +167,7 @@ export default function SurplusInventoryPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      await axios.delete(`/api/inventory-surplus/${id}`);
+      await deleteSurplusItem(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
@@ -181,17 +178,23 @@ export default function SurplusInventoryPage() {
 
   const confirmDelete = async () => {
     if (itemToDelete) {
-      deleteMutation.mutate(itemToDelete);
+      await deleteMutation.mutateAsync(itemToDelete);
     }
   };
 
   const confirmTransfer = async () => {
-    if (itemToTransfer && transferQuantity && Number(transferQuantity) > 0) {
-      transferToTodayMutation.mutate({
-        id: itemToTransfer.id,
-        quantity: Number(transferQuantity),
-      });
-    }
+    if (!itemToTransfer || !transferQuantity || transferQuantity <= 0) return;
+    await transferToTodayMutation.mutateAsync({
+      id: itemToTransfer.id,
+      quantity: Number(transferQuantity),
+    });
+
+    setShowTransferModal(false);
+    setItemToTransfer(null);
+    setTransferQuantity("");
+    queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
+    queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
+    setTransferSuccess("Transfer successful! Item moved to Today's Inventory.");
   };
 
   const handleCloseTransferModal = () => {
@@ -256,8 +259,7 @@ export default function SurplusInventoryPage() {
     console.log("useMemo running with sortConfig:", sortConfig);
     const data = [...filtered];
     if (!sortConfig.key) {
-      console.log("No sort key, returning unsorted data");
-      return data;
+      return data.sort((a, b) => Number(a.id) - Number(b.id));
     }
     if (sortConfig.key === "status") {
       type StockStatus = "Out Of Stock" | "Critical" | "Low" | "Normal";
@@ -337,34 +339,6 @@ export default function SurplusInventoryPage() {
     setSortConfig({ key: "", direction: "asc" });
   }, []);
 
-  // Summary statistics
-  const summaryStats = useMemo(() => {
-    const total = filtered.length;
-    const lowStock = filtered.filter((item) => item.status === "Low").length;
-    const normalStock = filtered.filter(
-      (item) => item.status === "Normal"
-    ).length;
-    const outOfStock = filtered.filter(
-      (item) => item.status === "Out Of Stock"
-    ).length;
-    const criticalStock = filtered.filter(
-      (item) => item.status === "Critical"
-    ).length;
-    const totalStockValue = filtered.reduce(
-      (sum, item) => sum + Number(item.stock || 0),
-      0
-    );
-
-    return {
-      total,
-      lowStock,
-      normalStock,
-      outOfStock,
-      criticalStock,
-      totalStockValue,
-    };
-  }, [filtered]);
-
   const columns = [
     { key: "id", label: "ID" },
     { key: "name", label: "Name" },
@@ -376,6 +350,15 @@ export default function SurplusInventoryPage() {
     { key: "expires", label: "Expiration Date" },
     { key: "actions", label: "Actions" },
   ];
+
+  useEffect(() => {
+    if (transferSuccess) {
+      const timer = setTimeout(() => {
+        setTransferSuccess(null);
+      }, 2000); // 2 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [transferSuccess]);
 
   return (
     <section className="text-white font-poppins">
@@ -422,7 +405,7 @@ export default function SurplusInventoryPage() {
                   </span>
                 </div>
               </div>
-              
+
               <section className="mb-6 sm:mb-8" aria-label="Search and filters">
                 <form
                   className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4"
@@ -839,52 +822,34 @@ export default function SurplusInventoryPage() {
                     Available: {itemToTransfer.stock} units
                   </p>
                 </section>
-                <form
-                  className="text-left space-y-1 xs:space-y-2"
-                  onSubmit={(e) => e.preventDefault()}
-                >
+                <div className="text-left space-y-1 xs:space-y-2">
                   <label
                     className="block text-gray-300 font-medium text-xs xs:text-sm sm:text-base"
                     htmlFor="transfer-quantity"
                   >
-                    Quantity to Transfer <span className="text-red-400">*</span>
+                    Quantity to Transfer
                   </label>
                   <input
                     id="transfer-quantity"
                     type="number"
                     min={1}
-                    max={itemToTransfer.stock}
-                    value={transferQuantity}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/^0+/, "");
-                      setTransferQuantity(val === "" ? "" : Number(val));
-                    }}
-                    placeholder={`Enter quantity (1-${itemToTransfer.stock})`}
-                    className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
+                    value={itemToTransfer.stock}
+                    disabled
+                    className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-gray-400 border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
                     aria-label="Quantity to transfer"
                   />
                   <p className="text-xs text-gray-400">
-                    This will move the specified quantity to Today's Inventory
+                    All available units will be moved to Today's Inventory.
                   </p>
-                </form>
+                </div>
                 <div className="flex flex-col sm:flex-row justify-center gap-2 xs:gap-3 sm:gap-4 pt-1 xs:pt-2">
                   <button
                     type="button"
-                    onClick={confirmTransfer}
-                    disabled={
-                      !transferQuantity ||
-                      transferQuantity <= 0 ||
-                      transferQuantity > itemToTransfer.stock ||
-                      transferToTodayMutation.status === "pending"
-                    }
-                    className={`group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl font-semibold transition-all duration-300 order-2 sm:order-1 text-xs xs:text-sm sm:text-base ${
-                      !transferQuantity ||
-                      transferQuantity <= 0 ||
-                      transferQuantity > itemToTransfer.stock ||
-                      transferToTodayMutation.status === "pending"
-                        ? "bg-gray-600/50 text-gray-400 cursor-not-allowed border-2 border-gray-600/50"
-                        : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white border-2 border-blue-500/70 hover:border-blue-400/70 cursor-pointer"
-                    }`}
+                    onClick={() => {
+                      setTransferQuantity(itemToTransfer.stock);
+                      confirmTransfer();
+                    }}
+                    className="group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl border-2 border-blue-500/70 text-blue-400 hover:bg-blue-500 hover:text-white font-semibold transition-all duration-300 order-2 sm:order-1 cursor-pointer text-xs xs:text-sm sm:text-base"
                   >
                     {transferToTodayMutation.status === "pending" ? (
                       <>
@@ -894,7 +859,7 @@ export default function SurplusInventoryPage() {
                     ) : (
                       <>
                         <FaExchangeAlt className="group-hover:rotate-180 transition-transform duration-300" />
-                        Transfer
+                        Transfer All
                       </>
                     )}
                   </button>
@@ -908,6 +873,13 @@ export default function SurplusInventoryPage() {
                 </div>
               </div>
             </form>
+          </div>
+        )}
+
+        {transferSuccess && (
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+            <MdCheckCircle className="text-xl" />
+            <span>{transferSuccess}</span>
           </div>
         )}
       </ResponsiveMain>

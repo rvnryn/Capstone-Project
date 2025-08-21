@@ -1,16 +1,15 @@
-// Removed unused eslint-disable: no explicit any used in this file
 "use client";
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/app/utils/Server/supabaseClient";
 import { useNotificationSettingsAPI } from "./hook/use-NotificationSettingsAPI";
 import NavigationBar from "@/app/components/navigation/navigation";
-import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { FaBell, FaInfoCircle } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { MdCancel, MdSave } from "react-icons/md";
+import { FiAlertTriangle, FiSave } from "react-icons/fi";
 
 export default function NotificationSettings() {
   const router = useRouter();
@@ -108,12 +107,22 @@ export default function NotificationSettings() {
   };
   useEffect(() => {
     async function fetchUserId() {
+      console.log("fetchUserId called");
       setUserError(null);
+      const session = await supabase.auth.getSession();
+      console.log("Session result:", session);
+      if (!session.data.session) {
+        setUserError("No session found. Please log in.");
+        router.push(routes.login); // Redirect to login page
+        return;
+      }
       const {
         data: { user },
         error: authError,
       } = await supabase.auth.getUser();
+      console.log("Supabase getUser result:", user, authError);
       if (authError) {
+        console.error("Supabase Auth error:", authError);
         setUserError("Failed to fetch user from Supabase Auth.");
         setUserId(null);
         return;
@@ -172,11 +181,6 @@ export default function NotificationSettings() {
   const { settings, fetchSettings, updateSettings, loading } =
     useNotificationSettingsAPI(userId as number);
 
-  // Local UI state for restock frequency and custom days
-  const [restockFrequency, setRestockFrequency] = useState("Weekly");
-  const [customRestockDays, setCustomRestockDays] = useState<number | "">(7);
-  const [customDaysError, setCustomDaysError] = useState<string>("");
-
   useEffect(() => {
     window.scrollTo(0, 0);
     if (userId) {
@@ -201,7 +205,6 @@ export default function NotificationSettings() {
   const [expirationEnabled, setExpirationEnabled] = useState(true);
   const [expirationDays, setExpirationDays] = useState(3);
   const [expirationMethod, setExpirationMethod] = useState<string[]>(["inapp"]);
-
 
   const handleConfirmToggle = () => {
     if (!pendingToggle) return;
@@ -447,6 +450,9 @@ export default function NotificationSettings() {
         {showSaveModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-700/50">
+              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 rounded-full flex items-center justify-center">
+                <FiSave className="w-8 h-8 text-yellow-400" />
+              </div>
               <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
                 Save Confirmation
               </h2>
@@ -456,13 +462,13 @@ export default function NotificationSettings() {
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                 <button
                   onClick={handleConfirmSave}
-                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
+                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
                   Yes
                 </button>
                 <button
                   onClick={() => setShowSaveModal(false)}
-                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all order-1 sm:order-2 cursor-pointer"
+                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
                   No
                 </button>
@@ -475,6 +481,9 @@ export default function NotificationSettings() {
         {showCancelModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-700/50">
+              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-red-400/20 to-red-500/20 rounded-full flex items-center justify-center">
+                <MdCancel className="w-8 h-8 text-red-400" />
+              </div>
               <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
                 Cancel Confirmation
               </h2>
@@ -482,13 +491,13 @@ export default function NotificationSettings() {
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                 <button
                   onClick={handleConfirmCancel}
-                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
+                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
                   Yes, Cancel
                 </button>
                 <button
                   onClick={() => setShowCancelModal(false)}
-                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all order-1 sm:order-2 cursor-pointer"
+                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
                   No, Go Back
                 </button>
@@ -501,6 +510,9 @@ export default function NotificationSettings() {
         {showUnsavedModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-700/50">
+              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-orange-400/20 to-orange-500/20 rounded-full flex items-center justify-center">
+                <FiAlertTriangle className="w-8 h-8 text-orange-400" />
+              </div>
               <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
                 Unsaved Changes
               </h2>

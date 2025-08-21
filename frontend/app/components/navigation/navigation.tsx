@@ -33,6 +33,7 @@ import { GiHamburgerMenu } from "react-icons/gi";
 import axios from "@/app/lib/axios";
 import React from "react";
 import { useNavigation, navigationUtils } from "./hook/use-navigation";
+import { logoutUser } from "@/app/utils/API/LoginAPI";
 
 type Notification = {
   id: number;
@@ -123,8 +124,10 @@ interface NavigationBarProps {
   showRestoreSourceModal?: boolean;
   isRestoring?: boolean;
   isBackingUp?: boolean;
+  showEditModal?: boolean;
   showToggleModal?: boolean | ((value: boolean) => void);
   notificationModal?: Notification | null;
+  backupResultMsg?: string | null;
   onCloseAnyModal?: () => void;
 }
 
@@ -145,7 +148,9 @@ const NavigationBar = ({
   showRestoreSourceModal,
   isRestoring,
   isBackingUp,
+  showEditModal,
   onCloseAnyModal,
+  backupResultMsg,
 }: NavigationBarProps) => {
   // Enhanced navigation state using the improved hook
   const {
@@ -190,7 +195,9 @@ const NavigationBar = ({
   const bellRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
+  const [loggingOut, setLoggingOut] = useState(false);
   const { user, role } = useAuth();
+  console.log("User:", user, "Role:", role);
 
   // PWA Installation handling with enhanced hooks
   useEffect(() => {
@@ -326,14 +333,27 @@ const NavigationBar = ({
   const handleLogout = () => setShowModal(true);
 
   const confirmLogout = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      setShowModal(false);
-      router.push("/");
-    } catch (error) {
-      console.error("Error during sign out:", error);
-    }
+    setLoggingOut(true); // Show logging out modal
+    setShowModal(false); // Hide confirm modal
+    setTimeout(async () => {
+      try {
+        // Try to sign out, but catch missing session error
+        try {
+          await supabase.auth.signOut();
+        } catch (error: any) {
+          if (error.name !== "AuthSessionMissingError") {
+            throw error;
+          }
+          // Ignore missing session error, user is already logged out
+        }
+        await logoutUser();
+        setLoggingOut(false); // Hide logging out modal
+        router.push(routes.home);
+      } catch (error) {
+        setLoggingOut(false);
+        console.error("Error during sign out:", error);
+      }
+    }, 2000); // 2 seconds delay
   };
 
   const cancelLogout = () => setShowModal(false);
@@ -415,8 +435,7 @@ const NavigationBar = ({
     }
   }
 
-  const [clientDate, setClientDate] = useState<string>("");
-
+  const [clientDate, setClientDate] = useState("");
   useEffect(() => {
     setClientDate(getFormattedDate());
   }, []);
@@ -436,7 +455,9 @@ const NavigationBar = ({
     showToggleModal ||
     showRestoreSourceModal ||
     isRestoring ||
-    isBackingUp
+    isBackingUp ||
+    showEditModal ||
+    backupResultMsg
   );
 
   const handleBurgerClick = anyModalOpen
@@ -1242,6 +1263,22 @@ const NavigationBar = ({
                 Cancel
               </button>
             </div>
+          </section>
+        </div>
+      )}
+
+      {loggingOut && (
+        <div className="fixed inset-0 flex justify-center items-center bg-black/90 backdrop-blur-sm z-[101] px-4">
+          <section className="bg-black/95 backdrop-blur-sm rounded-2xl w-full p-6 text-center shadow-2xl border border-yellow-900/50 max-w-md">
+            <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-yellow-900/40 flex items-center justify-center animate-bounce">
+              <FaSignOutAlt size={32} className="text-yellow-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-yellow-400 mb-2">
+              Logging out...
+            </h3>
+            <p className="text-yellow-100 mb-8 text-sm leading-relaxed">
+              Please wait while we log you out.
+            </p>
           </section>
         </div>
       )}

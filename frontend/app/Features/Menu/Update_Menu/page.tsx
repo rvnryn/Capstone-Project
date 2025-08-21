@@ -36,8 +36,12 @@ export default function EditMenuPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const menu_id = Number(searchParams.get("id"));
-  const { updateMenu, updateMenuWithImageAndIngredients, fetchMenuById } =
-    useMenuAPI();
+  const {
+    updateMenu,
+    updateMenuWithImageAndIngredients,
+    fetchMenuById,
+    deleteIngredientFromMenu,
+  } = useMenuAPI();
 
   const { data: menu, isLoading } = useQuery({
     queryKey: ["menu", menu_id],
@@ -57,7 +61,9 @@ export default function EditMenuPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [error, setError] = useState("");
-  const [ingredients, setIngredients] = useState([{ name: "", quantity: "" }]);
+  const [ingredients, setIngredients] = useState([
+    { id: "", name: "", quantity: "" },
+  ]);
   const [showRemoveIngredientModal, setShowRemoveIngredientModal] =
     useState(false);
   const [ingredientToRemoveIdx, setIngredientToRemoveIdx] = useState<
@@ -83,10 +89,11 @@ export default function EditMenuPage() {
       setIngredients(
         menu.ingredients && menu.ingredients.length > 0
           ? menu.ingredients.map((ing: any) => ({
+              id: ing.ingredient_id,
               name: ing.ingredient_name || ing.name || "",
               quantity: ing.quantity || "",
             }))
-          : [{ name: "", quantity: "" }]
+          : [{ id: "", name: "", quantity: "" }]
       );
       setInitialSettings({
         dish_name: menu.dish_name,
@@ -94,6 +101,7 @@ export default function EditMenuPage() {
         price: menu.price.toString(),
         stock_status: menu.stock_status || "",
         ingredients: menu.ingredients?.map((ing: any) => ({
+          id: ing.ingredient_id,
           name: ing.ingredient_name || ing.name || "",
           quantity: ing.quantity || "",
         })),
@@ -136,18 +144,27 @@ export default function EditMenuPage() {
     setIsDirty(true);
   };
   const addIngredient = () =>
-    setIngredients([...ingredients, { name: "", quantity: "" }]);
+    setIngredients([...ingredients, { id: "", name: "", quantity: "" }]);
 
   const removeIngredient = (idx: number) => {
     setIngredientToRemoveIdx(idx);
     setShowRemoveIngredientModal(true);
   };
 
-  const confirmRemoveIngredient = () => {
+  const confirmRemoveIngredient = async () => {
     if (ingredientToRemoveIdx !== null) {
-      setIngredients((ings) =>
-        ings.filter((_, i) => i !== ingredientToRemoveIdx)
-      );
+      const ingredient = ingredients[ingredientToRemoveIdx];
+      try {
+        // Only call API if menu_id and ingredient have a name
+        if (menu_id && ingredient.id) {
+          await deleteIngredientFromMenu(menu_id, ingredient.id);
+        }
+        setIngredients((ings) =>
+          ings.filter((_, i) => i !== ingredientToRemoveIdx)
+        );
+      } catch (err) {
+        setError("Failed to remove ingredient from menu.");
+      }
       setShowRemoveIngredientModal(false);
       setIngredientToRemoveIdx(null);
     }
@@ -317,22 +334,6 @@ export default function EditMenuPage() {
           tabIndex={-1}
         >
           <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
-            {showSuccessMessage && (
-              <div className="mb-3 xs:mb-4 sm:mb-6 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/50 rounded-lg xs:rounded-xl p-2 xs:p-3 sm:p-4 backdrop-blur-sm">
-                <div className="flex items-center gap-2 xs:gap-3">
-                  <MdCheckCircle className="text-green-400 text-lg xs:text-xl sm:text-2xl" />
-                  <div>
-                    <h3 className="text-green-400 font-semibold text-sm xs:text-base">
-                      Success!
-                    </h3>
-                    <p className="text-green-300 text-xs xs:text-sm">
-                      Menu item updated successfully. Redirecting...
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl xs:rounded-3xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10 2xl:p-12 w-full">
               <div className="flex flex-row items-center justify-center gap-4 mb-6 w-full">
                 <div className="relative flex-shrink-0">
@@ -838,7 +839,7 @@ export default function EditMenuPage() {
 
         {/* Success Message */}
         {showSuccessMessage && (
-          <div className="fixed top-3 xs:top-4 sm:top-6 right-3 xs:right-4 sm:right-6 z-50 bg-gradient-to-r from-green-500/95 to-green-600/95 backdrop-blur-xl border border-green-400/50 text-white px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl shadow-2xl shadow-green-500/25 animate-slideInFromRight max-w-[calc(100vw-1.5rem)] xs:max-w-[calc(100vw-2rem)] sm:max-w-none">
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
             <div className="flex items-center gap-2 xs:gap-3">
               <div className="w-5 xs:w-6 h-5 xs:h-6 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
                 <FiCheck className="w-3 xs:w-4 h-3 xs:h-4 text-white" />

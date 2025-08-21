@@ -4,6 +4,9 @@ import axiosInstance from "@/app/lib/axios";
 
 export function useBackupRestoreAPI() {
   // Download backup from FastAPI, encrypt if password provided
+  const getToken = () =>
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
   const backup = async (password: string = ""): Promise<void> => {
     // Use axios for GET request, get raw gzip backup
     const response = await axiosInstance.get("/api/backup", {
@@ -92,9 +95,13 @@ export function useBackupRestoreAPI() {
     const blob = new Blob([jsonText], { type: "application/json" });
     const formData = new FormData();
     formData.append("file", blob, "restore.json");
+    const token = getToken(); // <-- Add this line
     try {
       await axiosInstance.post("/api/restore", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: {
+          "Content-Type": "multipart/form-data",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}), // <-- Add this line
+        },
       });
     } catch (error: any) {
       const errData = error?.response?.data;
@@ -108,10 +115,16 @@ export function useBackupRestoreAPI() {
     backupPassword: string
   ): Promise<string> => {
     try {
+      const token = getToken();
       const response = await axiosInstance.post(
         "/api/backup_drive",
         { access_token },
-        { headers: { "Content-Type": "application/json" } }
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
       );
       return response.data.file_id;
     } catch (error: any) {
@@ -130,10 +143,16 @@ export function useBackupRestoreAPI() {
     file_id: string
   ): Promise<boolean> => {
     try {
+      const token = getToken();
       await axiosInstance.post(
         "/api/restore_drive",
         { access_token, file_id },
-        { headers: { "Content-Type": "application/json" } }
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
       );
       return true;
     } catch (error: any) {

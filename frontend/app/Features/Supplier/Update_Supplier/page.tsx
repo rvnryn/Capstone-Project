@@ -658,13 +658,13 @@ export default function EditSupplier() {
 
         {/* Success Message */}
         {showSuccessMessage && (
-          <div className="fixed top-3 xs:top-4 sm:top-6 right-3 xs:right-4 sm:right-6 z-50 bg-gradient-to-r from-green-500/95 to-green-600/95 backdrop-blur-xl border border-green-400/50 text-white px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl shadow-2xl shadow-green-500/25 animate-slideInFromRight max-w-[calc(100vw-1.5rem)] xs:max-w-[calc(100vw-2rem)] sm:max-w-none">
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
             <div className="flex items-center gap-2 xs:gap-3">
               <div className="w-5 xs:w-6 h-5 xs:h-6 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
                 <FiCheck className="w-3 xs:w-4 h-3 xs:h-4 text-white" />
               </div>
               <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
-                Menu updated successfully!
+                Supplier updated successfully!
               </span>
             </div>
           </div>

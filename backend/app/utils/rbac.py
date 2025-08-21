@@ -11,8 +11,9 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../../.env'))
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 SECRET_KEY = os.getenv("SECRET_KEY")
-
+print("Loaded SECRET_KEY:", repr(SECRET_KEY), type(SECRET_KEY))
 async def get_current_user(token: str = Depends(oauth2_scheme)):
+    print("[RBAC] Token type:", type(token), "value:", token)
     try:
         print("[RBAC] Incoming token:", token)
         # Decode JWT (adjust for your auth system)
@@ -26,7 +27,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         async with SessionLocal() as session:
             from sqlalchemy import text
             result = await session.execute(
-                text("SELECT user_id, user_role FROM users WHERE auth_id = :auth_id"),
+                text("SELECT user_id, user_role, name FROM users WHERE auth_id = :auth_id"),
                 {"auth_id": auth_id}
             )
             user = result.fetchone()
@@ -34,9 +35,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             if not user:
                 print("[RBAC] User not found in DB for auth_id:", auth_id)
                 raise HTTPException(status_code=404, detail="User not found")
-            return {"user_id": user.user_id, "user_role": user.user_role}
+            return {"user_id": user.user_id, "user_role": user.user_role, "name": user.name}
     except Exception as e:
+        import traceback
         print("[RBAC] Exception during authentication:", str(e))
+        traceback.print_exc()
         raise HTTPException(status_code=401, detail="Invalid authentication")
 
 def require_role(*roles):

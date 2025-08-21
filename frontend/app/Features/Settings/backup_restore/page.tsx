@@ -15,6 +15,7 @@ import { FaGoogleDrive, FaDownload } from "react-icons/fa";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import { useAuth } from "@/app/context/AuthContext";
 import { MdCancel, MdSave } from "react-icons/md";
+import { FiAlertTriangle, FiSave } from "react-icons/fi";
 
 // Extend Window type to include __backupPassword, gapi, and google
 declare global {
@@ -654,6 +655,9 @@ export default function BackupRestorePage() {
           showPopup={showPopup}
           showRestoreSourceModal={showRestoreSourceModal}
           showPasswordModal={showPasswordModal}
+          isBackingUp={isBackingUp}
+          isRestoring={isRestoring}
+          backupResultMsg={backupResultMsg}
         />
         <ResponsiveMain>
           <main
@@ -1094,6 +1098,9 @@ export default function BackupRestorePage() {
           {showSaveModal && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
               <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-700/50">
+                <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 rounded-full flex items-center justify-center">
+                  <FiSave className="w-8 h-8 text-yellow-400" />
+                </div>
                 <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
                   Save Confirmation
                 </h2>
@@ -1103,13 +1110,13 @@ export default function BackupRestorePage() {
                 <div className="flex flex-col sm:flex-row justify-center gap-4">
                   <button
                     onClick={handleConfirmSave}
-                    className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
+                    className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all cursor-pointer"
                   >
                     Yes
                   </button>
                   <button
                     onClick={() => setShowSaveModal(false)}
-                    className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all order-1 sm:order-2 cursor-pointer"
+                    className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all cursor-pointer"
                   >
                     No
                   </button>
@@ -1122,6 +1129,9 @@ export default function BackupRestorePage() {
           {showCancelModal && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
               <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-700/50">
+                <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-red-400/20 to-red-500/20 rounded-full flex items-center justify-center">
+                  <MdCancel className="w-8 h-8 text-red-400" />
+                </div>
                 <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
                   Cancel Confirmation
                 </h2>
@@ -1148,27 +1158,31 @@ export default function BackupRestorePage() {
           {/* Unsaved Changes Modal */}
           {showUnsavedModal && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
-              <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-700/50"></div>
-              <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
-                Unsaved Changes
-              </h2>
-              <p className="text-gray-300">
-                You have unsaved changes. Are you sure you want to leave without
-                saving?
-              </p>
-              <div className="flex flex-col sm:flex-row justify-center gap-4">
-                <button
-                  onClick={handleConfirmUnsaved}
-                  className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
-                >
-                  Leave Without Saving
-                </button>
-                <button
-                  onClick={handleCancelUnsaved}
-                  className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all order-1 sm:order-2 cursor-pointer"
-                >
-                  Stay
-                </button>
+              <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-700/50">
+                <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-orange-400/20 to-orange-500/20 rounded-full flex items-center justify-center">
+                  <FiAlertTriangle className="w-8 h-8 text-orange-400" />
+                </div>
+                <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
+                  Unsaved Changes
+                </h2>
+                <p className="text-gray-300">
+                  You have unsaved changes. Are you sure you want to leave
+                  without saving?
+                </p>
+                <div className="flex flex-col sm:flex-row justify-center gap-4">
+                  <button
+                    onClick={handleConfirmUnsaved}
+                    className="px-8 py-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
+                  >
+                    Leave Without Saving
+                  </button>
+                  <button
+                    onClick={handleCancelUnsaved}
+                    className="px-8 py-3 rounded-lg border border-green-500 text-green-500 hover:bg-green-500 hover:text-black font-semibold transition-all order-1 sm:order-2 cursor-pointer"
+                  >
+                    Stay
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1315,7 +1329,7 @@ export default function BackupRestorePage() {
               </div>
             </div>
           )}
-          
+
           {/* Enhanced Backup Loading Modal */}
           {isBackingUp && (
             <div
@@ -1381,7 +1395,7 @@ export default function BackupRestorePage() {
           {/* Restore Source Modal */}
           {showRestoreSourceModal && (
             <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
-              <div className="bg-black p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border-2 border-yellow-400">
+              <div className="bg-black p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border-2 border-gray-400">
                 <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
                   Select Backup Source
                 </h2>

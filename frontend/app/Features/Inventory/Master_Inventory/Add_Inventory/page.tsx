@@ -24,6 +24,7 @@ import {
   FiArrowRight,
   FiAlertTriangle,
   FiX,
+  FiCheck,
 } from "react-icons/fi";
 import {
   useInventorySettingsAPI,
@@ -236,6 +237,7 @@ export default function AddInventoryItem() {
       setShowSuccessMessage(true);
       setFormData({ name: "", category: "", stock: 0, expiration_date: "" });
       setIsDirty(false);
+      setIsSubmitted(false);
 
       // Show success message for 2 seconds then redirect
       setTimeout(() => {
@@ -318,27 +320,6 @@ export default function AddInventoryItem() {
           tabIndex={-1}
         >
           <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
-            {/* Success Message */}
-            {showSuccessMessage && (
-              <aside
-                role="status"
-                aria-live="polite"
-                className="mb-3 xs:mb-4 sm:mb-6 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/50 rounded-lg xs:rounded-xl p-2 xs:p-3 sm:p-4 backdrop-blur-sm"
-              >
-                <div className="flex items-center gap-2 xs:gap-3">
-                  <MdCheckCircle className="text-green-400 text-lg xs:text-xl sm:text-2xl" />
-                  <div>
-                    <h3 className="text-green-400 font-semibold text-sm xs:text-base">
-                      Success!
-                    </h3>
-                    <p className="text-green-300 text-xs xs:text-sm">
-                      Inventory item added successfully. Redirecting...
-                    </p>
-                  </div>
-                </div>
-              </aside>
-            )}
-
             <article className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl xs:rounded-3xl shadow-2xl border border-gray-800/50 p-4 xs:p-6 sm:p-8 md:p-10 lg:p-12 xl:p-14 2xl:p-16 w-full">
               {/* Header with improved visual hierarchy */}
               <header className="flex items-center gap-3 xs:gap-4 sm:gap-5 mb-4 xs:mb-6 sm:mb-8 md:mb-10">
@@ -656,20 +637,20 @@ export default function AddInventoryItem() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={() => setShowCancelModal(false)}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
-                >
-                  <span className="hidden sm:inline">No, Go Back</span>
-                  <span className="sm:hidden">Keep</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => handleConfirmCancel(true)}
                   className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-400 to-red-500 hover:from-red-300 hover:to-red-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-red-400/25 order-1 sm:order-2 cursor-pointer"
                 >
                   <FiX className="w-4 h-4" />
                   <span className="hidden sm:inline">Yes, Cancel</span>
                   <span className="sm:hidden">Cancel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
+                >
+                  <span className="hidden sm:inline">No, Go Back</span>
+                  <span className="sm:hidden">Keep</span>
                 </button>
               </div>
             </form>
@@ -705,13 +686,6 @@ export default function AddInventoryItem() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={handleCancelUnsaved}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
-                >
-                  Stay
-                </button>
-                <button
-                  type="button"
                   onClick={handleConfirmUnsaved}
                   className="flex-2 flex items-center justify-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-300 hover:to-orange-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-orange-400/25 order-1 sm:order-2 cursor-pointer"
                 >
@@ -719,8 +693,28 @@ export default function AddInventoryItem() {
                   <span className="hidden sm:inline">Leave Without Saving</span>
                   <span className="sm:hidden">Leave</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={handleCancelUnsaved}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
+                >
+                  Stay
+                </button>
               </div>
             </form>
+          </div>
+        )}
+        {/* Success Message */}
+        {showSuccessMessage && (
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+            <div className="flex items-center gap-2 xs:gap-3">
+              <div className="w-5 xs:w-6 h-5 xs:h-6 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <FiCheck className="w-3 xs:w-4 h-3 xs:h-4 text-white" />
+              </div>
+              <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
+                Master Inventory item added successfully!
+              </span>
+            </div>
           </div>
         )}
       </ResponsiveMain>

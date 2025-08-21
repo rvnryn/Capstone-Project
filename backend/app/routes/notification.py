@@ -1,9 +1,11 @@
 from unittest import result
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
-from app.supabase import supabase
+from app.supabase import supabase, get_db
+from app.routes.userActivity import UserActivityLog
+from app.utils.rbac import require_role
 import json
 
 router = APIRouter()
@@ -36,13 +38,32 @@ def get_notification_settings(user_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/notification-settings")
-def update_notification_settings(settings: NotificationSettings):
+async def update_notification_settings(settings: NotificationSettings, user=Depends(require_role("Owner", "General Manager", "Store Manager")), db=Depends(get_db)):
     try:
         # Upsert (insert or update)
         result = supabase.table("notification_settings").upsert(settings.dict(), on_conflict=["user_id"]).execute()
         if hasattr(result, 'error') and result.error:
             print("Notification settings upsert error:", result.error)
             raise HTTPException(status_code=500, detail=str(result.error))
+        
+        try:
+            user_row = getattr(user, "user_row", user)
+            new_activity = UserActivityLog(
+            user_id=user_row.get("user_id"),
+            action_type="update notification settings",
+            description=f"Updated notification settings: {settings.dict()}",
+            activity_date=datetime.utcnow(),
+            report_date=datetime.utcnow(),
+            user_name=user_row.get("name"),
+            role=user_row.get("user_role")
+            )
+            db.add(new_activity)
+            await db.flush()
+            await db.commit()
+            print("Notification settings update activity logged successfully.")
+        except Exception as e:
+            print("Failed to record notification settings update activity:", e)
+
         return {"status": "success"}
     except Exception as e:
         print("Notification settings upsert exception:", e)

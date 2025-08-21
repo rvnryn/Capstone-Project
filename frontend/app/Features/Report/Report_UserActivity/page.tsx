@@ -22,7 +22,7 @@ import {
 import { MdCheckCircle, MdAssessment } from "react-icons/md";
 import { TbReportAnalytics } from "react-icons/tb";
 import { FiBarChart } from "react-icons/fi";
-
+import { useUserActivityLogAPI } from "./hook/use-userActivityLogAPI";
 const CLIENT_ID =
   "72672884523-epq2tf1eu53h6cvrq6jotgfs9osrnvpe.apps.googleusercontent.com";
 const SHEET_RANGE = "Sheet1!A1";
@@ -78,45 +78,19 @@ const Report_UserActivity = () => {
     "Store Manager",
     "Assistant Store Manager",
   ];
+  const { logs, loading, error, fetchLogs } = useUserActivityLogAPI();
 
-  // Fetch current user activity
-  // useEffect(() => {
-  //   async function fetchUserActivity() {
-  //     try {
-  //       const res = await axios.get("/report_user_activity");
-  //       setUserActivityData(res.data);
-  //     } catch (error) {
-  //       console.error("Error fetching user activity:", error);
-  //     }
-  //   }
-  //   fetchUserActivity();
-  // }, []);
+  useEffect(() => {
+    const params: any = {};
+    if (reportDate) params.report_date = reportDate;
+    if (role) params.role = role;
+    fetchLogs(params);
+  }, [reportDate, role]);
 
-  // Fetch past user activity when date is filtered
-  // useEffect(() => {
-  //   async function fetchPastUserActivity() {
-  //     if (reportDate) {
-  //       try {
-  //         const res = await axios.get("/report_past_user_activity_log");
-  //         setPastUserActivityData(
-  //           res.data.map((item: any) => ({
-  //             id: item.log_id,
-  //             username: item.username,
-  //             role: item.role,
-  //             action_performed: item.action_type,
-  //             date_time: item.action_date ?? "",
-  //             report_date: item.action_date ?? "",
-  //           }))
-  //         );
-  //       } catch (error) {
-  //         console.error("Error fetching past user activity:", error);
-  //       }
-  //     } else {
-  //       setPastUserActivityData([]);
-  //     }
-  //   }
-  //   fetchPastUserActivity();
-  // }, [reportDate]);
+  // Remove redeclaration and update state instead
+  useEffect(() => {
+    setUserActivityData(logs);
+  }, [logs]);
 
   // Choose data source based on filter
   const dataSource = useMemo(() => {
@@ -207,11 +181,11 @@ const Report_UserActivity = () => {
   const values = [
     ["ID", "Username", "Role", "Action Performed", "Date & Time"],
     ...sortedActivity.map((item) => [
-      item.id,
-      item.username,
+      item.activity_id,
+      item.user_name,
       item.role,
-      item.action_performed,
-      item.date_time,
+      item.description,
+      item.activity_date,
     ]),
   ];
 
@@ -439,8 +413,8 @@ const Report_UserActivity = () => {
                               sortedActivity.length > 0
                                 ? Object.entries(
                                     sortedActivity.reduce((acc: any, item) => {
-                                      acc[item.username] =
-                                        (acc[item.username] || 0) + 1;
+                                      acc[item.user_name] =
+                                        (acc[item.user_name] || 0) + 1;
                                       return acc;
                                     }, {})
                                   ).reduce(
@@ -457,8 +431,8 @@ const Report_UserActivity = () => {
                             {sortedActivity.length > 0
                               ? Object.entries(
                                   sortedActivity.reduce((acc: any, item) => {
-                                    acc[item.username] =
-                                      (acc[item.username] || 0) + 1;
+                                    acc[item.user_name] =
+                                      (acc[item.user_name] || 0) + 1;
                                     return acc;
                                   }, {})
                                 )
@@ -732,7 +706,7 @@ const Report_UserActivity = () => {
                 {/* Table Section */}
                 <section className="bg-gray-800/30 backdrop-blur-sm rounded-md xs:rounded-lg sm:rounded-xl lg:rounded-2xl shadow-2xl border border-gray-700/50 overflow-hidden custom-scrollbar">
                   {/* Ultra Small Screen - Compact Cards */}
-                  <div className="hidden">
+                  <div className="2xs:block md:hidden">
                     <div className="p-1.5 space-y-1.5">
                       {sortedActivity.length === 0 ? (
                         <div className="text-center py-6">
@@ -747,19 +721,24 @@ const Report_UserActivity = () => {
                       ) : (
                         sortedActivity.map((item, index) => (
                           <div
-                            key={`${item.id}-${index}`}
+                            key={`${item.activity_id}-${index}`}
                             className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded-lg p-2 border border-gray-700/30 xs-compact"
                           >
                             <div className="flex justify-between items-start gap-2 mb-2">
                               <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1 mb-1">
+                                  <span className="bg-violet-500/20 text-violet-400 px-1.5 py-0.5 rounded text-2xs font-medium">
+                                    ID: {item.activity_id}
+                                  </span>
+                                  <span className="bg-violet-600/20 text-violet-300 px-1.5 py-0.5 rounded text-2xs font-medium">
+                                    {item.role}
+                                  </span>
+                                </div>
                                 <span
                                   className="text-white font-semibold text-xs truncate block"
-                                  title={item.username}
+                                  title={item.user_name}
                                 >
-                                  {item.username}
-                                </span>
-                                <span className="text-violet-400 text-2xs">
-                                  {item.role}
+                                  Name: {item.user_name}
                                 </span>
                               </div>
                             </div>
@@ -767,13 +746,15 @@ const Report_UserActivity = () => {
                               <div className="bg-blue-500/10 rounded p-1.5">
                                 <p className="text-blue-400 mb-0.5">Action</p>
                                 <p className="text-white font-bold truncate">
-                                  {item.action_performed}
+                                  {item.description}
                                 </p>
                               </div>
                               <div className="bg-green-500/10 rounded p-1.5">
                                 <p className="text-green-400 mb-0.5">Time</p>
                                 <p className="text-white font-bold">
-                                  {new Date(item.date_time).toLocaleString()}
+                                  {new Date(
+                                    item.activity_date
+                                  ).toLocaleString()}
                                 </p>
                               </div>
                             </div>
@@ -804,8 +785,8 @@ const Report_UserActivity = () => {
                         >
                           <option value="date_time-desc">Latest First</option>
                           <option value="date_time-asc">Oldest First</option>
-                          <option value="username-asc">Username (A-Z)</option>
-                          <option value="username-desc">Username (Z-A)</option>
+                          <option value="user_name-asc">Name (A-Z)</option>
+                          <option value="user_name-desc">Name (Z-A)</option>
                           <option value="role-asc">Role (A-Z)</option>
                           <option value="role-desc">Role (Z-A)</option>
                           <option value="action_performed-asc">
@@ -841,9 +822,9 @@ const Report_UserActivity = () => {
                               <div className="flex-1 min-w-0">
                                 <h3
                                   className="text-white font-semibold text-sm xs:text-base mb-1 truncate"
-                                  title={item.username}
+                                  title={item.user_name}
                                 >
-                                  {item.username}
+                                  {item.user_name}
                                 </h3>
                                 <div className="flex flex-wrap gap-1 xs:gap-1.5 mb-1 xs:mb-2">
                                   <span className="px-1.5 xs:px-2 py-0.5 xs:py-1 bg-violet-600/20 rounded text-xs font-medium text-violet-300 whitespace-nowrap">
@@ -862,7 +843,7 @@ const Report_UserActivity = () => {
                                       Action Performed
                                     </p>
                                     <p className="text-white text-sm xs:text-base font-semibold truncate">
-                                      {item.action_performed}
+                                      {item.description}
                                     </p>
                                   </div>
                                 </div>
@@ -873,7 +854,7 @@ const Report_UserActivity = () => {
                             <div className="flex items-center justify-between text-xs xs:text-sm text-gray-400">
                               <span>Date & Time:</span>
                               <span className="text-violet-400 font-medium">
-                                {new Date(item.date_time).toLocaleString()}
+                                {new Date(item.activity_date).toLocaleString()}
                               </span>
                             </div>
                           </div>
@@ -888,14 +869,14 @@ const Report_UserActivity = () => {
                       <thead className="bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
                         <tr>
                           {[
-                            { key: "id", label: "ID" },
-                            { key: "username", label: "Username" },
+                            { key: "activity_id", label: "ID" },
+                            { key: "user_name", label: "Name" },
                             { key: "role", label: "Role" },
                             {
-                              key: "action_performed",
+                              key: "description",
                               label: "Action Performed",
                             },
-                            { key: "date_time", label: "Date & Time" },
+                            { key: "activity_date", label: "Date & Time" },
                           ].map((col) => (
                             <th
                               key={col.key}
@@ -943,7 +924,7 @@ const Report_UserActivity = () => {
                         ) : (
                           sortedActivity.map((item, index) => (
                             <tr
-                              key={`${item.id}-${index}`}
+                              key={`${item.activity_id}-${index}`}
                               className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-violet-400/5 hover:to-violet-500/5 transition-all duration-200 cursor-pointer ${
                                 index % 2 === 0
                                   ? "bg-gray-800/20"
@@ -952,19 +933,13 @@ const Report_UserActivity = () => {
                             >
                               <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 font-medium">
                                 <span className="text-white font-semibold text-xs lg:text-sm xl:text-base">
-                                  {item.id}
+                                  {item.activity_id}
                                 </span>
                               </td>
                               <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 font-medium">
-                                <div className="flex items-center gap-2 lg:gap-3 min-w-0">
-                                  <div className="w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full bg-violet-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"></div>
-                                  <span
-                                    className="text-white group-hover:text-violet-400 transition-colors truncate text-xs lg:text-sm xl:text-base"
-                                    title={item.username}
-                                  >
-                                    {item.username}
-                                  </span>
-                                </div>
+                                <span className="text-white group-hover:text-violet-400 transition-colors truncate text-xs lg:text-sm xl:text-base">
+                                  {item.user_name}
+                                </span>
                               </td>
                               <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap">
                                 <span className="px-2 py-1 bg-violet-600/20 rounded text-xs font-medium text-violet-300">
@@ -972,11 +947,13 @@ const Report_UserActivity = () => {
                                 </span>
                               </td>
                               <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap text-gray-300 text-xs lg:text-sm xl:text-base">
-                                {item.action_performed}
+                                {item.description}
                               </td>
                               <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap">
                                 <span className="text-green-400 font-semibold text-sm lg:text-base xl:text-lg">
-                                  {new Date(item.date_time).toLocaleString()}
+                                  {new Date(
+                                    item.activity_date
+                                  ).toLocaleString()}
                                 </span>
                               </td>
                             </tr>
@@ -1089,7 +1066,7 @@ const Report_UserActivity = () => {
                     </p>
 
                     <button
-                      onClick={() => setExportSuccess(false)}
+                      onClick={() => handleCloseSuccessPopup()}
                       className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-semibold px-8 py-3 rounded-xl transition-all duration-200"
                       type="button"
                     >

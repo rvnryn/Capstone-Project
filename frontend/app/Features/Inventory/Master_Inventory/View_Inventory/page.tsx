@@ -30,6 +30,7 @@ export default function ViewInventoryItem() {
   const { getItem } = useInventoryAPI();
   const [item, setItem] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const itemId = searchParams.get("id");
 
@@ -170,7 +171,7 @@ export default function ViewInventoryItem() {
 
   return (
     <section className="text-white font-poppins">
-      <NavigationBar />
+      <NavigationBar showEditModal={showEditModal} />
       <ResponsiveMain>
         <main
           className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
@@ -277,9 +278,7 @@ export default function ViewInventoryItem() {
                     role || ""
                   ) && (
                     <button
-                      onClick={() =>
-                        router.push(routes.UpdateInventory(item.id))
-                      }
+                      onClick={() => setShowEditModal(true)}
                       className="group flex items-center justify-center gap-1.5 xs:gap-2 px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl border-2 border-yellow-400/50 text-yellow-400 hover:border-yellow-400 hover:bg-yellow-400/10 hover:text-yellow-300 font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto order-2 xs:order-1"
                     >
                       <FiEdit3 className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 group-hover:rotate-12 transition-transform duration-300" />
@@ -300,6 +299,37 @@ export default function ViewInventoryItem() {
             </div>
           </div>
         </main>
+
+        {/* Edit Modal */}
+        {showEditModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-400/50">
+              <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
+                Edit Item
+              </h2>
+              <p className="text-gray-300">
+                Are you sure you want to edit this item?
+              </p>
+              <div className="flex flex-col sm:flex-row justify-center gap-4">
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    router.push(routes.UpdateInventory(item.id));
+                  }}
+                  className="px-8 py-3 rounded-lg border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
+                >
+                  Yes, Edit
+                </button>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="px-8 py-3 rounded-lg border border-gray-500 text-gray-500 hover:bg-gray-500 hover:text-white font-semibold transition-all order-1 sm:order-2 cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </ResponsiveMain>
     </section>
   );

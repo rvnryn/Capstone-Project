@@ -326,23 +326,6 @@ export default function EditInventoryItem() {
           tabIndex={-1}
         >
           <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
-            {/* Success Message */}
-            {showSuccessMessage && (
-              <div className="mb-3 xs:mb-4 sm:mb-6 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/50 rounded-lg xs:rounded-xl p-2 xs:p-3 sm:p-4 backdrop-blur-sm">
-                <div className="flex items-center gap-2 xs:gap-3">
-                  <MdCheckCircle className="text-green-400 text-lg xs:text-xl sm:text-2xl" />
-                  <div>
-                    <h3 className="text-green-400 font-semibold text-sm xs:text-base">
-                      Success!
-                    </h3>
-                    <p className="text-green-300 text-xs xs:text-sm">
-                      Item updated successfully. Redirecting...
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl xs:rounded-3xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10 2xl:p-12 w-full">
               <div className="flex flex-row items-center justify-center gap-4 mb-6 w-full">
                 <div className="relative flex-shrink-0">
@@ -645,17 +628,9 @@ export default function EditInventoryItem() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={() => setShowSaveModal(false)}
-                  disabled={isSubmitting}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
                   onClick={handleConfirmSave}
                   disabled={isSubmitting}
-                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 py-3 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base shadow-lg hover:shadow-yellow-400/25 order-1 sm:order-2 cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 py-3 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base shadow-lg hover:shadow-yellow-400/25 cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>
@@ -670,6 +645,14 @@ export default function EditInventoryItem() {
                       <span className="sm:hidden">Save</span>
                     </>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSaveModal(false)}
+                  disabled={isSubmitting}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base cursor-pointer"
+                >
+                  Cancel
                 </button>
               </div>
             </form>
@@ -705,20 +688,20 @@ export default function EditInventoryItem() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={() => setShowCancelModal(false)}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
-                >
-                  <span className="hidden sm:inline">No, Go Back</span>
-                  <span className="sm:hidden">Keep</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => handleConfirmCancel(true)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-400 to-red-500 hover:from-red-300 hover:to-red-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-red-400/25 order-1 sm:order-2 cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-red-400 to-red-500 hover:from-red-300 hover:to-red-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-red-400/25 cursor-pointer"
                 >
                   <FiX className="w-4 h-4" />
                   <span className="hidden sm:inline">Yes, Cancel</span>
                   <span className="sm:hidden">Cancel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(false)}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base cursor-pointer"
+                >
+                  <span className="hidden sm:inline">No, Go Back</span>
+                  <span className="sm:hidden">Keep</span>
                 </button>
               </div>
             </form>
@@ -754,19 +737,19 @@ export default function EditInventoryItem() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={handleCancelUnsaved}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
-                >
-                  Stay
-                </button>
-                <button
-                  type="button"
                   onClick={handleConfirmUnsaved}
-                  className="flex-2 flex items-center justify-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-300 hover:to-orange-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-orange-400/25 order-1 sm:order-2 cursor-pointer"
+                  className="flex-2 flex items-center justify-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-300 hover:to-orange-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-orange-400/25 cursor-pointer"
                 >
                   <FiArrowRight className="w-5 h-5" />
                   <span className="hidden sm:inline">Leave Without Saving</span>
                   <span className="sm:hidden">Leave</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelUnsaved}
+                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base cursor-pointer"
+                >
+                  Stay
                 </button>
               </div>
             </form>
@@ -775,13 +758,13 @@ export default function EditInventoryItem() {
 
         {/* Success Message */}
         {showSuccessMessage && (
-          <div className="fixed top-3 xs:top-4 sm:top-6 right-3 xs:right-4 sm:right-6 z-50 bg-gradient-to-r from-green-500/95 to-green-600/95 backdrop-blur-xl border border-green-400/50 text-white px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl shadow-2xl shadow-green-500/25 animate-slideInFromRight max-w-[calc(100vw-1.5rem)] xs:max-w-[calc(100vw-2rem)] sm:max-w-none">
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
             <div className="flex items-center gap-2 xs:gap-3">
               <div className="w-5 xs:w-6 h-5 xs:h-6 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
                 <FiCheck className="w-3 xs:w-4 h-3 xs:h-4 text-white" />
               </div>
               <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
-                Inventory updated successfully!
+                Master Inventory updated successfully!
               </span>
             </div>
           </div>

@@ -10,7 +10,7 @@ import { useSupplierAPI } from "@/app/Features/Supplier/hook/useSupplierAPI";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { FaTruck } from "react-icons/fa";
 import { MdCancel, MdSave } from "react-icons/md";
-import { FiAlertTriangle, FiArrowRight, FiX } from "react-icons/fi";
+import { FiAlertTriangle, FiArrowRight, FiCheck, FiX } from "react-icons/fi";
 
 export default function AddSupplier() {
   const router = useRouter();
@@ -526,6 +526,18 @@ export default function AddSupplier() {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+        {showSuccessMessage && (
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+            <div className="flex items-center gap-2 xs:gap-3">
+              <div className="w-5 xs:w-6 h-5 xs:h-6 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <FiCheck className="w-3 xs:w-4 h-3 xs:h-4 text-white" />
+              </div>
+              <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
+                Supplier added successfully!
+              </span>
+            </div>
           </div>
         )}
       </ResponsiveMain>
