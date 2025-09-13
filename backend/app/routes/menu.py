@@ -339,87 +339,100 @@ def get_menu():
             all_in_stock = True
             for ing in item["ingredients"]:
                 ing_name = ing.get("ingredient_name") or ing.get("name")
-                # Check inventory tables
-                stock = 0
-                expired = False
+                # Check all inventory tables for this ingredient
+                available_stock = 0
 
                 # Check inventory
                 inv = (
                     supabase.table("inventory")
                     .select("stock_quantity,expiration_date")
                     .ilike("item_name", ing_name)
-                    .limit(1)
                     .execute()
                 )
-                if inv.data and len(inv.data) > 0:
-                    stock += inv.data[0].get("stock_quantity", 0) or 0
-                    expiry = inv.data[0].get("expiration_date")
+                for inv_item in inv.data or []:
+                    stock = inv_item.get("stock_quantity", 0) or 0
+                    expiry = inv_item.get("expiration_date")
+                    is_expired = False
                     if expiry:
                         try:
                             if (
                                 datetime.strptime(expiry, "%Y-%m-%d").date()
                                 < datetime.now().date()
                             ):
-                                expired = True
+                                is_expired = True
                         except Exception:
                             pass
+                    # Only count non-expired stock
+                    if not is_expired:
+                        available_stock += stock
 
                 # Check inventory_surplus
                 surplus = (
                     supabase.table("inventory_surplus")
                     .select("stock_quantity,expiration_date")
                     .ilike("item_name", ing_name)
-                    .limit(1)
                     .execute()
                 )
-                if surplus.data and len(surplus.data) > 0:
-                    stock += surplus.data[0].get("stock_quantity", 0) or 0
-                    expiry = surplus.data[0].get("expiration_date")
+                for surplus_item in surplus.data or []:
+                    stock = surplus_item.get("stock_quantity", 0) or 0
+                    expiry = surplus_item.get("expiration_date")
+                    is_expired = False
                     if expiry:
                         try:
                             if (
                                 datetime.strptime(expiry, "%Y-%m-%d").date()
                                 < datetime.now().date()
                             ):
-                                expired = True
+                                is_expired = True
                         except Exception:
                             pass
+                    # Only count non-expired stock
+                    if not is_expired:
+                        available_stock += stock
 
                 # Check inventory_today
                 today = (
                     supabase.table("inventory_today")
                     .select("stock_quantity,expiration_date")
                     .ilike("item_name", ing_name)
-                    .limit(1)
                     .execute()
                 )
-                if today.data and len(today.data) > 0:
-                    stock += today.data[0].get("stock_quantity", 0) or 0
-                    expiry = today.data[0].get("expiration_date")
+                for today_item in today.data or []:
+                    stock = today_item.get("stock_quantity", 0) or 0
+                    expiry = today_item.get("expiration_date")
+                    is_expired = False
                     if expiry:
                         try:
                             if (
                                 datetime.strptime(expiry, "%Y-%m-%d").date()
                                 < datetime.now().date()
                             ):
-                                expired = True
+                                is_expired = True
                         except Exception:
                             pass
+                    # Only count non-expired stock
+                    if not is_expired:
+                        available_stock += stock
 
-                # If any ingredient is expired or out of stock, mark as not available
-                if expired or not stock or stock <= 0:
+                # If no available (non-expired) stock, mark as not available
+                if not available_stock or available_stock <= 0:
                     all_in_stock = False
                     break
 
-            item["stock_status"] = "Available" if all_in_stock else "Out of Stock"
             new_status = "Available" if all_in_stock else "Out of Stock"
             if item.get("stock_status") != new_status:
-                # Update DB if status changed
+                # Update DB if status changed - use the correct primary key column
+                # Check if using 'id' or 'menu_id' as primary key
+                pk_column = "id" if "id" in item else "menu_id"
+                pk_value = item.get("id") or item.get("menu_id")
                 update_res = (
                     supabase.table("menu")
                     .update({"stock_status": new_status})
-                    .eq("menu_id", mid)
+                    .eq(pk_column, pk_value)
                     .execute()
+                )
+                print(
+                    f"Updating menu item {item.get('dish_name')} from {item.get('stock_status')} to {new_status}"
                 )
                 update_error = (
                     getattr(update_res, "error", None)
@@ -432,7 +445,7 @@ def get_menu():
                 )
                 if update_error:
                     print(
-                        f"Failed to update stock_status for menu_id {mid}: {update_error}"
+                        f"Failed to update stock_status for menu item {item.get('dish_name')}: {update_error}"
                     )
             item["stock_status"] = new_status
     else:
@@ -810,7 +823,7 @@ def get_menu_by_id(menu_id: int):
     if not data:
         raise HTTPException(status_code=404, detail="Menu item not found.")
 
-    # Optionally, fetch ingredients for this menu item
+    # Fetch ingredients for this menu item with availability information
     ing_res = (
         supabase.table("menu_ingredients")
         .select("menu_id,ingredient_id,ingredient_name,quantity")
@@ -822,7 +835,157 @@ def get_menu_by_id(menu_id: int):
         if hasattr(ing_res, "data")
         else ing_res.get("data") if isinstance(ing_res, dict) else None
     )
-    data["ingredients"] = ing_data or []
+
+    # Check availability for each ingredient and calculate stock status
+    ingredients_with_availability = []
+    all_in_stock = True
+
+    for ing in ing_data or []:
+        ing_name = ing.get("ingredient_name") or ing.get("name")
+        stock = 0
+        expired = False
+
+        # Check inventory
+        inv = (
+            supabase.table("inventory")
+            .select("stock_quantity,expiration_date")
+            .ilike("item_name", ing_name)
+            .limit(1)
+            .execute()
+        )
+        if inv.data and len(inv.data) > 0:
+            stock += inv.data[0].get("stock_quantity", 0) or 0
+            expiry = inv.data[0].get("expiration_date")
+            if expiry:
+                try:
+                    if (
+                        datetime.strptime(expiry, "%Y-%m-%d").date()
+                        < datetime.now().date()
+                    ):
+                        expired = True
+                except Exception:
+                    pass
+
+        # Check inventory_surplus
+        surplus = (
+            supabase.table("inventory_surplus")
+            .select("stock_quantity,expiration_date")
+            .ilike("item_name", ing_name)
+            .limit(1)
+            .execute()
+        )
+        if surplus.data and len(surplus.data) > 0:
+            stock += surplus.data[0].get("stock_quantity", 0) or 0
+            expiry = surplus.data[0].get("expiration_date")
+            if expiry:
+                try:
+                    if (
+                        datetime.strptime(expiry, "%Y-%m-%d").date()
+                        < datetime.now().date()
+                    ):
+                        expired = True
+                except Exception:
+                    pass
+
+        # Check inventory_today
+        today = (
+            supabase.table("inventory_today")
+            .select("stock_quantity,expiration_date")
+            .ilike("item_name", ing_name)
+            .limit(1)
+            .execute()
+        )
+        if today.data and len(today.data) > 0:
+            stock += today.data[0].get("stock_quantity", 0) or 0
+            expiry = today.data[0].get("expiration_date")
+            if expiry:
+                try:
+                    if (
+                        datetime.strptime(expiry, "%Y-%m-%d").date()
+                        < datetime.now().date()
+                    ):
+                        expired = True
+                except Exception:
+                    pass
+
+        # Determine detailed availability status for this ingredient
+        available_stock = 0
+        total_stock = 0
+        expired_stock = 0
+        unavailable_reason = None
+
+        # Check all inventory tables for detailed stock information
+        for table_name in ["inventory", "inventory_surplus", "inventory_today"]:
+            table_res = (
+                supabase.table(table_name)
+                .select("stock_quantity,expiration_date")
+                .ilike("item_name", ing_name)
+                .execute()
+            )
+            for item in table_res.data or []:
+                item_stock = item.get("stock_quantity", 0) or 0
+                total_stock += item_stock
+                expiry = item.get("expiration_date")
+                is_expired = False
+                if expiry:
+                    try:
+                        if (
+                            datetime.strptime(expiry, "%Y-%m-%d").date()
+                            < datetime.now().date()
+                        ):
+                            is_expired = True
+                            expired_stock += item_stock
+                    except Exception:
+                        pass
+                # Only count non-expired stock as available
+                if not is_expired:
+                    available_stock += item_stock
+
+        # Determine specific unavailability reason
+        is_unavailable = False
+        if total_stock <= 0:
+            is_unavailable = True
+            unavailable_reason = "no_stock"
+        elif available_stock <= 0 and expired_stock > 0:
+            is_unavailable = True
+            unavailable_reason = "expired"
+        elif (
+            available_stock > 0 and available_stock <= 5
+        ):  # Consider low stock threshold
+            is_unavailable = False  # Still available but low
+            unavailable_reason = "low_stock"
+        else:
+            unavailable_reason = "available"
+
+        if is_unavailable:
+            all_in_stock = False
+
+        # Add detailed availability information to ingredient
+        ingredient_with_availability = {
+            **ing,
+            "is_unavailable": is_unavailable,
+            "stock_quantity": total_stock,
+            "available_stock": available_stock,
+            "expired_stock": expired_stock,
+            "unavailable_reason": unavailable_reason,
+            "is_expired": available_stock <= 0 and expired_stock > 0,
+            "is_low_stock": available_stock > 0 and available_stock <= 5,
+        }
+        ingredients_with_availability.append(ingredient_with_availability)
+
+    data["ingredients"] = ingredients_with_availability
+
+    # Update stock status based on ingredient availability
+    new_status = "Available" if all_in_stock else "Out of Stock"
+    if data.get("stock_status") != new_status:
+        # Update DB if status changed
+        update_res = (
+            supabase.table("menu")
+            .update({"stock_status": new_status})
+            .eq("menu_id", menu_id)
+            .execute()
+        )
+        data["stock_status"] = new_status
 
     return data
 
@@ -898,8 +1061,6 @@ async def delete_menu_ingredient(
 
 @router.post("/menu/recalculate-stock-status")
 def recalculate_stock_status():
-    # Instantly recalculate and update stock status for all menu items
-    # 1. Fetch all inventory data from all tables
     inventory_data = []
     for table in ["inventory", "inventory_surplus", "inventory_today"]:
         res = (
@@ -924,14 +1085,22 @@ def recalculate_stock_status():
         if not name:
             continue
         if name not in inventory_map:
-            inventory_map[name] = {"stock": 0, "expired": False}
-        inventory_map[name]["stock"] += stock
+            inventory_map[name] = {"total_stock": 0, "available_stock": 0}
+
+        inventory_map[name]["total_stock"] += stock
+
+        # Check if this specific entry is expired
+        is_expired = False
         if expiry:
             try:
                 if datetime.strptime(expiry, "%Y-%m-%d").date() < datetime.now().date():
-                    inventory_map[name]["expired"] = True
+                    is_expired = True
             except Exception:
                 pass
+
+        # Only add to available stock if not expired
+        if not is_expired:
+            inventory_map[name]["available_stock"] += stock
 
     # 3. Fetch all menu items and ingredients
     res = supabase.table("menu").select("*").execute()
@@ -972,16 +1141,19 @@ def recalculate_stock_status():
         for ing in ingredients:
             ing_name = ing.get("ingredient_name") or ing.get("name")
             inv_info = inventory_map.get(ing_name)
-            stock = inv_info["stock"] if inv_info else 0
-            expired = inv_info["expired"] if inv_info else False
-            if expired or not stock or stock <= 0:
+            available_stock = inv_info["available_stock"] if inv_info else 0
+            # Ingredient is available if there's non-expired stock
+            if not available_stock or available_stock <= 0:
                 all_in_stock = False
                 break
         new_status = "Available" if all_in_stock else "Out of Stock"
         if item.get("stock_status") != new_status:
             print(f"Updating menu_id {mid}: {item.get('stock_status')} -> {new_status}")
+            # Use the correct primary key column
+            pk_column = "id" if "id" in item else "menu_id"
+            pk_value = item.get("id") or item.get("menu_id")
             supabase.table("menu").update({"stock_status": new_status}).eq(
-                "menu_id", mid
+                pk_column, pk_value
             ).execute()
             updated += 1
 

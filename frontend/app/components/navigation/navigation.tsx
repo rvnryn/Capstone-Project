@@ -437,6 +437,44 @@ const NavigationBar = ({
     }
   }
 
+  function handleRemoveNotification(
+    n: Notification,
+    event: React.MouseEvent
+  ): void {
+    event.stopPropagation(); // Prevent triggering the notification click
+    const userId = user?.user_id || user?.id;
+    if (userId && typeof userId === "number") {
+      axios
+        .delete(`/api/notifications?user_id=${userId}&notification_id=${n.id}`)
+        .then(() => {
+          fetchNotifications();
+          // If the removed notification was open in modal, close it
+          if (notificationModalState?.id === n.id) {
+            setNotificationModal(null);
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to remove notification:", error);
+        });
+    }
+  }
+
+  function handleClearAllNotifications(): void {
+    const userId = user?.user_id || user?.id;
+    if (userId && typeof userId === "number") {
+      axios
+        .delete(`/api/notifications/clear-all?user_id=${userId}`)
+        .then(() => {
+          fetchNotifications();
+          setNotificationModal(null); // Close any open notification modal
+          setBellOpen(false); // Close the notification dropdown
+        })
+        .catch((error) => {
+          console.error("Failed to clear all notifications:", error);
+        });
+    }
+  }
+
   const [clientDate, setClientDate] = useState("");
   useEffect(() => {
     setClientDate(getFormattedDate());
@@ -617,9 +655,9 @@ const NavigationBar = ({
                   }}
                 />
                 <div
-                  className="transition-all flex items-center"
+                  className="transition-all flex items-center group relative"
                   style={{
-                    maxWidth: isMenuOpen || isMobile ? 220 : 0,
+                    maxWidth: isMenuOpen || isMobile ? (isPWA ? 180 : 220) : 0,
                     overflow: "hidden",
                     opacity: isMenuOpen || isMobile ? 1 : 0,
                     height: 40,
@@ -627,9 +665,25 @@ const NavigationBar = ({
                   }}
                 >
                   <div className="flex flex-col">
-                    <h1 className="text-lg sm:text-xl font-bold text-transparent bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text whitespace-nowrap tracking-wide drop-shadow-sm">
+                    <h1
+                      className="text-lg sm:text-xl font-bold text-transparent bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text whitespace-nowrap tracking-wide drop-shadow-sm cursor-default"
+                      title="Cardiac Delights - Restaurant Management System"
+                    >
                       Cardiac Delights
                     </h1>
+                  </div>
+
+                  {/* Hover Tooltip */}
+                  <div className="absolute left-0 top-full mt-2 px-3 py-2 bg-black/95 text-yellow-200 text-sm rounded-lg border border-yellow-400/30 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-lg backdrop-blur-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                      <span className="font-semibold">Cardiac Delights</span>
+                    </div>
+                    <div className="text-xs text-yellow-400 mt-1">
+                      Restaurant Management System
+                    </div>
+                    {/* Tooltip arrow */}
+                    <div className="absolute -top-1 left-4 w-2 h-2 bg-black/95 border-l border-t border-yellow-400/30 transform rotate-45"></div>
                   </div>
                 </div>
               </div>
@@ -994,7 +1048,7 @@ const NavigationBar = ({
               {bellOpen && (
                 <div
                   className={`absolute right-0 mt-3 bg-gradient-to-br from-black/98 via-gray-900/98 to-black/98 backdrop-blur-xl text-yellow-100 rounded-2xl shadow-2xl z-50 border border-yellow-400/20
-                  ${isMobile ? "w-80 max-w-[calc(100vw-2rem)]" : "w-80"}`}
+                ${isMobile ? "w-80 max-w-[calc(100vw-2rem)]" : "w-80"}`}
                   style={{
                     boxShadow:
                       "0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(251, 191, 36, 0.1)",
@@ -1002,9 +1056,20 @@ const NavigationBar = ({
                 >
                   <div className="p-4 font-bold border-b border-yellow-400/20 flex items-center justify-between bg-gradient-to-r from-yellow-400/5 to-transparent rounded-t-2xl">
                     <span className="text-yellow-200">Notifications</span>
-                    <span className="text-xs text-yellow-400 px-2 py-1 bg-yellow-400/10 rounded-full border border-yellow-400/20">
-                      {unreadCount} unread
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-yellow-400 px-2 py-1 bg-yellow-400/10 rounded-full border border-yellow-400/20">
+                        {unreadCount} unread
+                      </span>
+                      {notifications.length > 0 && (
+                        <button
+                          onClick={handleClearAllNotifications}
+                          className="text-xs text-red-400 hover:text-red-300 px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded-full border border-red-400/20 hover:border-red-400/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                          title="Clear all notifications"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="max-h-64 overflow-y-auto">
                     {notifications.length === 0 ? (
@@ -1017,33 +1082,110 @@ const NavigationBar = ({
                         </p>
                       </div>
                     ) : (
-                      notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl
-                            ${
-                              n.status === "unread"
-                                ? "bg-gradient-to-r from-red-800/18 via-red-700/15 to-transparent border-l-2 border-l-white"
-                                : "hover:bg-yellow-400/5"
-                            }`}
-                          onClick={() => handleNotificationClick(n)}
-                        >
-                          <div className="text-sm leading-relaxed text-red-600">
-                            {n.message}
+                      notifications.map((n) => {
+                        // Decide color based on notification type or message
+                        let messageColor = "text-yellow-100";
+                        let bgColor = "";
+                        const msg = n.message?.toLowerCase() || "";
+                        const type = (n.type || "").toLowerCase();
+
+                        // Expired/expiring soon
+                        if (
+                          type === "expired" ||
+                          type === "expiring" ||
+                          msg.includes("expired") ||
+                          msg.includes("expiring soon")
+                        ) {
+                          messageColor = "text-red-500";
+                          bgColor =
+                            "bg-gradient-to-r from-red-800/18 via-red-700/15 to-transparent border-l-2 border-l-white";
+                        }
+                        // Low stock
+                        else if (
+                          type === "low_stock" ||
+                          msg.includes("low stock")
+                        ) {
+                          messageColor = "text-orange-400";
+                          bgColor =
+                            "bg-gradient-to-r from-orange-800/18 via-orange-700/15 to-transparent border-l-2 border-l-orange-300";
+                        }
+                        // Missing threshold
+                        else if (
+                          type === "missing_threshold" ||
+                          msg.includes("missing threshold") ||
+                          msg.includes("threshold not set")
+                        ) {
+                          messageColor = "text-blue-400";
+                          bgColor =
+                            "bg-gradient-to-r from-blue-800/18 via-blue-700/15 to-transparent border-l-2 border-l-blue-300";
+                        }
+                        // Default unread
+                        else if (n.status === "unread") {
+                          messageColor = "text-yellow-200";
+                          bgColor =
+                            "bg-gradient-to-r from-yellow-800/18 via-yellow-700/15 to-transparent border-l-2 border-l-yellow-300";
+                        }
+
+                        // Add visual indicator for unread/read
+                        const isUnread = n.status === "unread";
+
+                        return (
+                          <div
+                            key={n.id}
+                            className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl ${bgColor} flex items-start gap-3 group`}
+                            onClick={() => handleNotificationClick(n)}
+                          >
+                            {/* Unread/Read dot indicator */}
+                            <span
+                              className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                                isUnread
+                                  ? "bg-yellow-400 animate-pulse shadow-yellow-400/40 shadow"
+                                  : "bg-gray-600"
+                              }`}
+                              title={isUnread ? "Unread" : "Read"}
+                            ></span>
+                            <div className="flex-1 min-w-0">
+                              <div
+                                className={`text-sm leading-relaxed font-medium ${messageColor}`}
+                              >
+                                {n.message}
+                              </div>
+                              <div className="text-xs text-yellow-400/70 mt-2 flex items-center gap-1">
+                                <div className="w-1 h-1 bg-yellow-400 rounded-full"></div>
+                                {new Date(n.created_at).toLocaleString(
+                                  "en-GB",
+                                  {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "2-digit",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    hour12: true,
+                                  }
+                                )}
+                                <span
+                                  className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                    isUnread
+                                      ? "bg-yellow-400/20 text-yellow-300 border border-yellow-400/40"
+                                      : "bg-gray-700/40 text-gray-300 border border-gray-500/40"
+                                  }`}
+                                >
+                                  {isUnread ? "Unread" : "Read"}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Remove notification button */}
+                            <button
+                              onClick={(e) => handleRemoveNotification(n, e)}
+                              className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                              title="Remove notification"
+                              aria-label="Remove notification"
+                            >
+                              <FaTimes size={12} />
+                            </button>
                           </div>
-                          <div className="text-xs text-yellow-400/70 mt-2 flex items-center gap-1">
-                            <div className="w-1 h-1 bg-yellow-400 rounded-full"></div>
-                            {new Date(n.created_at).toLocaleString("en-GB", {
-                              year: "numeric",
-                              month: "short",
-                              day: "2-digit",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              hour12: true,
-                            })}
-                          </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -1216,7 +1358,20 @@ const NavigationBar = ({
                 </span>
               </div>
             </div>
-            <div className="flex justify-end mt-6">
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  if (notificationModalState) {
+                    const mockEvent = {
+                      stopPropagation: () => {},
+                    } as React.MouseEvent;
+                    handleRemoveNotification(notificationModalState, mockEvent);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg border border-red-500 text-red-400 hover:bg-red-500 hover:text-white font-semibold transition-all cursor-pointer"
+              >
+                Remove
+              </button>
               <button
                 onClick={() => setNotificationModal(null)}
                 className="px-6 py-2 rounded-lg border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black font-semibold transition-all cursor-pointer"

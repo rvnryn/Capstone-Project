@@ -82,6 +82,11 @@ export default function ReportSales() {
   const [isExporting, setIsExporting] = useState(false);
   const [period, setPeriod] = useState("today");
   const [categoryFilter, setCategoryFilter] = useState("");
+
+  // Additional filter states
+  const [priceRangeFilter, setPriceRangeFilter] = useState("");
+  const [performanceFilter, setPerformanceFilter] = useState("");
+
   const [sortConfig, setSortConfig] = useState({
     key: "",
     direction: "asc" as "asc" | "desc",
@@ -114,12 +119,19 @@ export default function ReportSales() {
     setSearchQuery("");
     setCategoryFilter("");
     setPeriod("today");
+    setPriceRangeFilter("");
+    setPerformanceFilter("");
     setSortConfig({ key: "", direction: "asc" });
   }, []);
 
   const clearSearch = useCallback(() => setSearchQuery(""), []);
   const clearCategory = useCallback(() => setCategoryFilter(""), []);
-  const clearPeriod = useCallback(() => setPeriod("week"), []);
+  const clearPeriod = useCallback(() => setPeriod("today"), []);
+  const clearPriceRangeFilter = useCallback(() => setPriceRangeFilter(""), []);
+  const clearPerformanceFilter = useCallback(
+    () => setPerformanceFilter(""),
+    []
+  );
 
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => ({
@@ -176,19 +188,81 @@ export default function ReportSales() {
 
   const filteredSales = useMemo(() => {
     return salesData.filter((item: any) => {
+      // Search query filter
       const matchesSearch = searchQuery
         ? Object.values(item)
             .join(" ")
             .toLowerCase()
             .includes(searchQuery.toLowerCase())
         : true;
+
+      // Category filter
       const matchesCategory = filterByCategory(item, categoryFilter);
-      // ...no date filter...
-      const matchesDate = true;
+
+      // Period filter
       const matchesPeriod = filterByPeriod(item, period);
-      return matchesSearch && matchesCategory && matchesDate && matchesPeriod;
+
+      // Price range category filter
+      const matchesPriceRangeFilter = (() => {
+        if (!priceRangeFilter) return true;
+        const price = Number(item.unitPrice) || 0;
+        switch (priceRangeFilter) {
+          case "budget":
+            return price <= 100;
+          case "mid_range":
+            return price > 100 && price <= 300;
+          case "premium":
+            return price > 300;
+          default:
+            return true;
+        }
+      })();
+
+      // Performance filter
+      const matchesPerformanceFilter = (() => {
+        if (!performanceFilter) return true;
+        const quantity = Number(item.quantity) || 0;
+        const revenue = Number(item.totalRevenue) || 0;
+
+        // Calculate performance thresholds based on data
+        const avgQuantity =
+          salesData.reduce((sum, i) => sum + i.quantity, 0) / salesData.length;
+        const avgRevenue =
+          salesData.reduce((sum, i) => sum + i.totalRevenue, 0) /
+          salesData.length;
+
+        switch (performanceFilter) {
+          case "top_seller":
+            return quantity >= avgQuantity * 1.5;
+          case "high_revenue":
+            return revenue >= avgRevenue * 1.5;
+          case "low_performer":
+            return quantity < avgQuantity * 0.5 || revenue < avgRevenue * 0.5;
+          case "average":
+            return (
+              quantity >= avgQuantity * 0.5 && quantity < avgQuantity * 1.5
+            );
+          default:
+            return true;
+        }
+      })();
+
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesPeriod &&
+        matchesPriceRangeFilter &&
+        matchesPerformanceFilter
+      );
     });
-  }, [salesData, searchQuery, categoryFilter, period]);
+  }, [
+    salesData,
+    searchQuery,
+    categoryFilter,
+    period,
+    priceRangeFilter,
+    performanceFilter,
+  ]);
 
   const groupedSales = filteredSales;
 
@@ -598,9 +672,8 @@ export default function ReportSales() {
 
                   {/* Filter Controls */}
                   <div className="bg-gray-800/30 backdrop-blur-sm rounded-lg xs:rounded-xl p-2 xs:p-3 sm:p-4 border border-gray-700/50">
-                    <div className="grid grid-cols-1 xs:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 xs:gap-3 sm:gap-4">
-                      {/* Date filter removed */}
-
+                    {/* Primary Filters Row */}
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 xs:gap-3 sm:gap-4 mb-4">
                       <div>
                         <label className="flex items-center gap-1.5 xs:gap-2 text-gray-300 text-xs xs:text-xs sm:text-sm font-medium mb-1.5 xs:mb-2">
                           <FaBoxes className="text-yellow-400 text-xs flex-shrink-0" />
@@ -620,7 +693,7 @@ export default function ReportSales() {
                         </select>
                       </div>
 
-                      <div className="xs:col-span-1 sm:col-span-2 lg:col-span-1">
+                      <div>
                         <label className="flex items-center gap-1.5 xs:gap-2 text-gray-300 text-xs xs:text-xs sm:text-sm font-medium mb-1.5 xs:mb-2">
                           <FaChartLine className="text-yellow-400 text-xs flex-shrink-0" />
                           <span className="truncate">Time Period</span>
@@ -635,11 +708,48 @@ export default function ReportSales() {
                           <option value="month">This Month</option>
                         </select>
                       </div>
+
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
+                          Price Range
+                        </label>
+                        <select
+                          value={priceRangeFilter}
+                          onChange={(e) => setPriceRangeFilter(e.target.value)}
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-xs xs:text-sm transition-all"
+                        >
+                          <option value="">All Price Ranges</option>
+                          <option value="budget">Budget (≤₱100)</option>
+                          <option value="mid_range">
+                            Mid-range (₱101-₱300)
+                          </option>
+                          <option value="premium">Premium (&gt;₱300)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
+                          Performance
+                        </label>
+                        <select
+                          value={performanceFilter}
+                          onChange={(e) => setPerformanceFilter(e.target.value)}
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-xs xs:text-sm transition-all"
+                        >
+                          <option value="">All Performance</option>
+                          <option value="top_seller">Top Sellers</option>
+                          <option value="high_revenue">High Revenue</option>
+                          <option value="average">Average Performance</option>
+                          <option value="low_performer">Low Performers</option>
+                        </select>
+                      </div>
                     </div>
 
                     {/* Clear All Button inside filter controls */}
                     {(searchQuery ||
                       categoryFilter ||
+                      priceRangeFilter ||
+                      performanceFilter ||
                       period !== "today" ||
                       sortConfig.key !== "") && (
                       <div className="mt-3 xs:mt-4 pt-3 xs:pt-4 border-t border-gray-700/30">
@@ -663,7 +773,9 @@ export default function ReportSales() {
                         </span>
                         {!searchQuery &&
                         !categoryFilter &&
-                        period === "all" &&
+                        !priceRangeFilter &&
+                        !performanceFilter &&
+                        period === "today" &&
                         sortConfig.key === "" ? (
                           <span className="text-gray-500 italic">None</span>
                         ) : (
@@ -696,7 +808,7 @@ export default function ReportSales() {
                                 </button>
                               </div>
                             )}
-                            {period !== "all" && (
+                            {period !== "today" && (
                               <div className="flex items-center gap-1 bg-blue-500/20 text-blue-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-blue-500/30 max-w-full">
                                 <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
                                   Period: {period}
@@ -705,6 +817,35 @@ export default function ReportSales() {
                                   onClick={clearPeriod}
                                   className="text-blue-300 hover:text-white transition-colors ml-1 flex-shrink-0"
                                   title="Clear period filter"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                            {priceRangeFilter && (
+                              <div className="flex items-center gap-1 bg-pink-500/20 text-pink-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-pink-500/30 max-w-full">
+                                <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
+                                  Range: {priceRangeFilter.replace("_", " ")}
+                                </span>
+                                <button
+                                  onClick={clearPriceRangeFilter}
+                                  className="text-pink-300 hover:text-white transition-colors ml-1 flex-shrink-0"
+                                  title="Clear price range filter"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                            {performanceFilter && (
+                              <div className="flex items-center gap-1 bg-orange-500/20 text-orange-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-orange-500/30 max-w-full">
+                                <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
+                                  Performance:{" "}
+                                  {performanceFilter.replace("_", " ")}
+                                </span>
+                                <button
+                                  onClick={clearPerformanceFilter}
+                                  className="text-orange-300 hover:text-white transition-colors ml-1 flex-shrink-0"
+                                  title="Clear performance filter"
                                 >
                                   ✕
                                 </button>

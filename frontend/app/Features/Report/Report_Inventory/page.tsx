@@ -90,24 +90,45 @@ export default function ReportInventory() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const { user } = useAuth();
   const [pastInventory, setPastInventory] = useState<InventoryItem[]>([]);
+
+  // 💡 Smart Balance states
+  const [historicalInventory, setHistoricalInventory] = useState<
+    InventoryItem[]
+  >([]);
+  const [isHistoricalMode, setIsHistoricalMode] = useState(false);
+  const [availableHistoricalDates, setAvailableHistoricalDates] = useState<
+    string[]
+  >([]);
   // ...existing state...
 
-  // Unique normalized report dates for dropdown
-  // Unique normalized report dates for dropdown
+  // 💡 Smart Balance: Unique report dates including historical data
   const uniqueReportDates = useMemo(() => {
-    const dates = [...inventory, ...pastInventory]
+    const currentDates = inventory
       .map((item) => item.report_date)
-      .filter((date) => !!date)
-      .map((date) => dayjs(date).format("YYYY-MM-DD"));
-    return [...new Set(dates)];
-  }, [inventory, pastInventory]);
+      .filter((date) => !!date);
+    const pastDates = pastInventory
+      .map((item) => item.report_date)
+      .filter((date) => !!date);
+    const allDates = [
+      ...currentDates,
+      ...pastDates,
+      ...availableHistoricalDates,
+    ].map((date) => dayjs(date).format("YYYY-MM-DD"));
+    return [...new Set(allDates)].sort((a, b) => b.localeCompare(a)); // Sort newest first
+  }, [inventory, pastInventory, availableHistoricalDates]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showPopup, setShowPopup] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [groupedView] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [period, setPeriod] = useState("all");
+  const [period, setPeriod] = useState("all"); // 💡 Smart Balance: Default to all time
+
+  // Additional filter states
+  const [stockStatusFilter, setStockStatusFilter] = useState("");
+  const [expirationFilter, setExpirationFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [sortConfig, setSortConfig] = useState({
     key: "",
     direction: "asc",
@@ -166,6 +187,10 @@ export default function ReportInventory() {
                 today >= item.expiration_date
                   ? parseInt(item.stock_quantity, 10)
                   : 0,
+              item_name: String(item.item_name || item.name || "Unknown Item"),
+              batch_date: item.created_at
+                ? new Date(item.created_at).toISOString()
+                : new Date().toISOString(),
             }));
           try {
             await saveLogs(logEntries);
@@ -188,8 +213,83 @@ export default function ReportInventory() {
     load();
   }, [fetchLogs, saveLogs, user]);
 
-  // Fetch past inventory log when date is filtered
-  // No more reportDate filter, so remove loadPast effect
+  // 💡 Smart Balance: Load available historical dates (lightweight query)
+  useEffect(() => {
+    async function loadAvailableHistoricalDates() {
+      try {
+        const allLogs = await fetchLogs();
+        if (allLogs && allLogs.length > 0) {
+          const dates = [
+            ...new Set(
+              allLogs
+                .map((log: any) =>
+                  log.action_date
+                    ? new Date(log.action_date).toISOString().slice(0, 10)
+                    : null
+                )
+                .filter((date): date is string => date !== null)
+            ),
+          ].sort((a, b) => b.localeCompare(a));
+          setAvailableHistoricalDates(dates);
+        }
+      } catch (error) {
+        console.error("Error fetching available historical dates:", error);
+      }
+    }
+    loadAvailableHistoricalDates();
+  }, [fetchLogs]);
+
+  // 💡 Smart Balance: Load historical data only when specific date is selected
+  useEffect(() => {
+    async function loadHistoricalDataForDate() {
+      if (!reportDate) {
+        // No specific date selected, use live inventory
+        setIsHistoricalMode(false);
+        setHistoricalInventory([]);
+        return;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      if (reportDate === today) {
+        // Selected today, use live inventory
+        setIsHistoricalMode(false);
+        setHistoricalInventory([]);
+        return;
+      }
+
+      // Selected a historical date, load historical data
+      try {
+        setIsHistoricalMode(true);
+        const historicalLogs = await fetchLogs(reportDate, reportDate);
+        if (historicalLogs && historicalLogs.length > 0) {
+          const transformedData = historicalLogs.map((log: any) => ({
+            id: log.item_id,
+            name: log.item_name || `Item ${log.item_id}`,
+            inStock: log.remaining_stock || 0,
+            wastage: log.wastage || 0,
+            stock: log.status || "Unknown",
+            report_date: log.action_date
+              ? new Date(log.action_date).toISOString().slice(0, 10)
+              : "",
+            category: "Historical", // Default category for historical data
+            expiration_date: undefined,
+            batch_id: log.batch_date
+              ? new Date(log.batch_date).toLocaleDateString()
+              : `Batch-${log.item_id}`,
+            created_at: log.batch_date,
+          }));
+          setHistoricalInventory(transformedData);
+        } else {
+          setHistoricalInventory([]);
+        }
+      } catch (error) {
+        console.error("Error loading historical data:", error);
+        setHistoricalInventory([]);
+      }
+    }
+
+    loadHistoricalDataForDate();
+  }, [reportDate, fetchLogs]);
 
   const matchesPeriod = useCallback(
     (dateStr: string) => {
@@ -210,21 +310,21 @@ export default function ReportInventory() {
     [period]
   );
 
-  // Choose data source based on filter
+  // 💡 Smart Balance: Choose data source - live inventory or historical data
   const dataSource = useMemo(() => {
-    // For "weekly", "monthly", "yearly", use current inventory
+    const sourceData = isHistoricalMode ? historicalInventory : inventory;
+
+    // Apply period filters to the selected data source
     if (period !== "all") {
-      return inventory.filter((item) => matchesPeriod(item.report_date));
+      return sourceData.filter((item) => matchesPeriod(item.report_date));
     }
-    return inventory;
-  }, [inventory, pastInventory, period, matchesPeriod]);
+    return sourceData;
+  }, [inventory, historicalInventory, isHistoricalMode, period, matchesPeriod]);
 
   const dates = useMemo(
     () =>
-      [
-        ...new Set([...inventory, ...pastInventory].map((i) => i.report_date)),
-      ].filter(Boolean),
-    [inventory, pastInventory]
+      [...new Set([...inventory].map((i) => i.report_date))].filter(Boolean),
+    [inventory]
   );
 
   // Filter helpers
@@ -262,28 +362,103 @@ export default function ReportInventory() {
 
   const filtered = useMemo(() => {
     return dataSource.filter((item) => {
+      // Category filter
       const matchesCategory = filterByCategory(item, categoryFilter);
-      // Always filter by report_date column value
-      const matchesReportDate = true; // Always return true for report date
+
+      // Report date filter (specific date)
+      const matchesReportDate = reportDate
+        ? dayjs(item.report_date).format("YYYY-MM-DD") === reportDate
+        : true;
+
+      // Period filter (time range)
       const matchesPeriod = filterByPeriod(item, period);
+
+      // Search query filter
       const matchesSearch = searchQuery
         ? Object.values(item)
             .join(" ")
             .toLowerCase()
             .includes(searchQuery.toLowerCase())
         : true;
+
+      // Stock status filter
+      const matchesStockStatus = stockStatusFilter
+        ? item.stock === stockStatusFilter
+        : true;
+
+      // Expiration status filter
+      const matchesExpiration = (() => {
+        if (!expirationFilter) return true;
+        if (!item.expiration_date) return expirationFilter === "no_expiry";
+
+        const expiryDate = new Date(item.expiration_date);
+        const now = new Date();
+        const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+        switch (expirationFilter) {
+          case "expired":
+            return expiryDate <= now;
+          case "expiring_soon":
+            return expiryDate > now && expiryDate <= sevenDaysFromNow;
+          case "fresh":
+            return expiryDate > sevenDaysFromNow;
+          case "no_expiry":
+            return false; // Items with expiry date don't match "no_expiry"
+          default:
+            return true;
+        }
+      })();
+
+      // Date range filter (custom date range)
+      const matchesDateRange = (() => {
+        if (!startDate && !endDate) return true;
+        const itemDate = dayjs(item.report_date);
+        const start = startDate ? dayjs(startDate) : null;
+        const end = endDate ? dayjs(endDate) : null;
+
+        if (start && end) {
+          return (
+            itemDate.isAfter(start.subtract(1, "day")) &&
+            itemDate.isBefore(end.add(1, "day"))
+          );
+        } else if (start) {
+          return itemDate.isAfter(start.subtract(1, "day"));
+        } else if (end) {
+          return itemDate.isBefore(end.add(1, "day"));
+        }
+        return true;
+      })();
+
       return (
-        matchesCategory && matchesReportDate && matchesPeriod && matchesSearch
+        matchesCategory &&
+        matchesReportDate &&
+        matchesPeriod &&
+        matchesSearch &&
+        matchesStockStatus &&
+        matchesExpiration &&
+        matchesDateRange
       );
     });
-  }, [dataSource, searchQuery, categoryFilter, period, pastInventory]);
+  }, [
+    dataSource,
+    searchQuery,
+    categoryFilter,
+    stockStatusFilter,
+    expirationFilter,
+    startDate,
+    endDate,
+    reportDate,
+    period,
+    pastInventory,
+  ]);
 
   const excelValues = useMemo(
     () => [
       [
         "Item ID",
-        "Name",
+        "Item Name",
         "Batch ID",
+        "Batch Date",
         "Category",
         "In Stock",
         "Wastage",
@@ -295,6 +470,7 @@ export default function ReportInventory() {
         i.id || "N/A",
         i.name || "Unknown Item",
         i.batch_id || "N/A",
+        i.created_at ? new Date(i.created_at).toLocaleDateString() : "N/A",
         i.category || "No Category",
         i.inStock || 0,
         i.wastage || 0,
@@ -367,7 +543,12 @@ export default function ReportInventory() {
   const handleClear = () => {
     setSearchQuery("");
     setCategoryFilter("");
-    setPeriod("all");
+    setPeriod("all"); // 💡 Smart Balance: Reset to all time
+    setStockStatusFilter("");
+    setExpirationFilter("");
+    setStartDate("");
+    setEndDate("");
+    setReportDate("");
     setSortConfig({ key: "", direction: "asc" });
   };
 
@@ -382,7 +563,25 @@ export default function ReportInventory() {
   // clearDate removed (no reportDate)
 
   const clearPeriod = () => {
-    setPeriod("all");
+    setPeriod("all"); // 💡 Smart Balance: Reset to all time
+  };
+
+  // Clear functions for new filters
+  const clearStockStatus = () => {
+    setStockStatusFilter("");
+  };
+
+  const clearExpiration = () => {
+    setExpirationFilter("");
+  };
+
+  const clearDateRange = () => {
+    setStartDate("");
+    setEndDate("");
+  };
+
+  const clearReportDate = () => {
+    setReportDate("");
   };
 
   const requestSort = (key: string) => {
@@ -646,27 +845,69 @@ export default function ReportInventory() {
 
                   {/* Filter Controls */}
                   <div className="bg-gray-800/30 backdrop-blur-sm rounded-lg 2xs:rounded-xl p-2 2xs:p-3 xs:p-4 border border-gray-700/50">
-                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2 2xs:gap-3 xs:gap-4">
+                    {/* Primary Filters Row */}
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 2xs:gap-3 xs:gap-4 mb-4">
                       <div>
-                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
-                          Date
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
+                          Category
                         </label>
                         <select
-                          value={reportDate}
-                          onChange={(e) => setReportDate(e.target.value)}
+                          value={categoryFilter}
+                          onChange={(e) => setCategoryFilter(e.target.value)}
                           className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 cursor-pointer text-2xs xs:text-xs sm:text-sm transition-all"
-                          aria-label="Filter by date"
+                          aria-label="Filter by category"
                         >
-                          <option value="">All Dates</option>
-                          {uniqueReportDates.map((date) => (
-                            <option key={date} value={date}>
-                              {date ? dayjs(date).format("MMMM D, YYYY") : ""}
-                            </option>
-                          ))}
+                          <option value="">All Categories</option>
+                          <option value="Beverages">Beverages</option>
+                          <option value="Dairy">Dairy</option>
+                          <option value="Meat">Meat</option>
+                          <option value="Vegetables">Vegetables</option>
+                          <option value="Fruits">Fruits</option>
+                          <option value="Grains">Grains</option>
+                          <option value="Spices">Spices</option>
+                          <option value="Frozen">Frozen</option>
+                          <option value="Other">Other</option>
                         </select>
                       </div>
 
-                      <div className="xs:col-span-2 sm:col-span-1">
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
+                          Stock Status
+                        </label>
+                        <select
+                          value={stockStatusFilter}
+                          onChange={(e) => setStockStatusFilter(e.target.value)}
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 cursor-pointer text-2xs xs:text-xs sm:text-sm transition-all"
+                          aria-label="Filter by stock status"
+                        >
+                          <option value="">All Status</option>
+                          <option value="Low">Critical/Low</option>
+                          <option value="Normal">Normal/Moderate</option>
+                          <option value="High">High/Sufficient</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
+                          Expiration Status
+                        </label>
+                        <select
+                          value={expirationFilter}
+                          onChange={(e) => setExpirationFilter(e.target.value)}
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 cursor-pointer text-2xs xs:text-xs sm:text-sm transition-all"
+                          aria-label="Filter by expiration status"
+                        >
+                          <option value="">All Items</option>
+                          <option value="expired">Expired</option>
+                          <option value="expiring_soon">
+                            Expiring Soon (7 days)
+                          </option>
+                          <option value="fresh">Fresh (&gt;7 days)</option>
+                          <option value="no_expiry">No Expiry Date</option>
+                        </select>
+                      </div>
+
+                      <div>
                         <label className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-gray-300 text-2xs 2xs:text-xs xs:text-sm font-medium mb-1 2xs:mb-2">
                           <FaChartLine className="text-blue-400 text-2xs 2xs:text-xs flex-shrink-0" />
                           <span className="truncate">Time Period</span>
@@ -684,9 +925,60 @@ export default function ReportInventory() {
                       </div>
                     </div>
 
+                    {/* Date Range Filter Row */}
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2 2xs:gap-3 xs:gap-4">
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
+                          Specific Date
+                        </label>
+                        <select
+                          value={reportDate}
+                          onChange={(e) => setReportDate(e.target.value)}
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 cursor-pointer text-2xs xs:text-xs sm:text-sm transition-all"
+                          aria-label="Filter by specific date"
+                        >
+                          <option value="">All Dates</option>
+                          {uniqueReportDates.map((date) => (
+                            <option key={date} value={date}>
+                              {date ? dayjs(date).format("MMMM D, YYYY") : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
+                          From Date
+                        </label>
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 text-2xs xs:text-xs sm:text-sm transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
+                          To Date
+                        </label>
+                        <input
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 text-2xs xs:text-xs sm:text-sm transition-all"
+                        />
+                      </div>
+                    </div>
+
                     {/* Clear All Button inside filter controls */}
                     {(searchQuery ||
                       categoryFilter ||
+                      stockStatusFilter ||
+                      expirationFilter ||
+                      startDate ||
+                      endDate ||
+                      reportDate ||
                       period !== "all" ||
                       sortConfig.key !== "") && (
                       <div className="mt-2 2xs:mt-3 xs:mt-4 pt-2 2xs:pt-3 xs:pt-4 border-t border-gray-700/30">
@@ -710,6 +1002,11 @@ export default function ReportInventory() {
                         </span>
                         {!searchQuery &&
                         !categoryFilter &&
+                        !stockStatusFilter &&
+                        !expirationFilter &&
+                        !startDate &&
+                        !endDate &&
+                        !reportDate &&
                         period === "all" &&
                         sortConfig.key === "" ? (
                           <span className="text-gray-500 italic">None</span>
@@ -743,7 +1040,64 @@ export default function ReportInventory() {
                                 </button>
                               </div>
                             )}
-                            {period !== "all" && (
+                            {stockStatusFilter && (
+                              <div className="flex items-center gap-0.5 2xs:gap-1 bg-red-500/20 text-red-400 px-1 2xs:px-1.5 xs:px-2 py-0.5 2xs:py-1 rounded-sm 2xs:rounded-md border border-red-500/30 max-w-[120px] 2xs:max-w-[150px] xs:max-w-none">
+                                <span className="truncate">
+                                  Status: {stockStatusFilter}
+                                </span>
+                                <button
+                                  onClick={clearStockStatus}
+                                  className="text-red-300 hover:text-white transition-colors text-xs 2xs:text-sm touch-manipulation flex-shrink-0"
+                                  title="Clear status filter"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                            {expirationFilter && (
+                              <div className="flex items-center gap-0.5 2xs:gap-1 bg-yellow-500/20 text-yellow-400 px-1 2xs:px-1.5 xs:px-2 py-0.5 2xs:py-1 rounded-sm 2xs:rounded-md border border-yellow-500/30 max-w-[120px] 2xs:max-w-[150px] xs:max-w-none">
+                                <span className="truncate">
+                                  Expiry: {expirationFilter.replace("_", " ")}
+                                </span>
+                                <button
+                                  onClick={clearExpiration}
+                                  className="text-yellow-300 hover:text-white transition-colors text-xs 2xs:text-sm touch-manipulation flex-shrink-0"
+                                  title="Clear expiration filter"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                            {(startDate || endDate) && (
+                              <div className="flex items-center gap-0.5 2xs:gap-1 bg-pink-500/20 text-pink-400 px-1 2xs:px-1.5 xs:px-2 py-0.5 2xs:py-1 rounded-sm 2xs:rounded-md border border-pink-500/30 max-w-[120px] 2xs:max-w-[150px] xs:max-w-none">
+                                <span className="truncate">
+                                  Range: {startDate || "..."} to{" "}
+                                  {endDate || "..."}
+                                </span>
+                                <button
+                                  onClick={clearDateRange}
+                                  className="text-pink-300 hover:text-white transition-colors text-xs 2xs:text-sm touch-manipulation flex-shrink-0"
+                                  title="Clear date range"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                            {reportDate && (
+                              <div className="flex items-center gap-0.5 2xs:gap-1 bg-cyan-500/20 text-cyan-400 px-1 2xs:px-1.5 xs:px-2 py-0.5 2xs:py-1 rounded-sm 2xs:rounded-md border border-cyan-500/30 max-w-[120px] 2xs:max-w-[150px] xs:max-w-none">
+                                <span className="truncate">
+                                  Date: {dayjs(reportDate).format("MMM D")}
+                                </span>
+                                <button
+                                  onClick={clearReportDate}
+                                  className="text-cyan-300 hover:text-white transition-colors text-xs 2xs:text-sm touch-manipulation flex-shrink-0"
+                                  title="Clear specific date"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                            {period !== "today" && (
                               <div className="flex items-center gap-1 bg-blue-500/20 text-blue-400 px-2 py-1 rounded-md border border-blue-500/30">
                                 <span>Period: {period}</span>
                                 <button

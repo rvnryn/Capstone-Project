@@ -64,6 +64,13 @@ const Report_UserActivity = () => {
   const [reportDate, setReportDate] = useState("");
   const [period, setPeriod] = useState("all");
   const [role, setRole] = useState("");
+
+  // Additional filter states
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [username, setUsername] = useState("");
+  const [activityTimeFilter, setActivityTimeFilter] = useState("");
+
   const [userActivityData, setUserActivityData] = useState<any[]>([]);
   const [pastUserActivityData, setPastUserActivityData] = useState<any[]>([]);
   const [sortConfig, setSortConfig] = useState<{
@@ -77,6 +84,7 @@ const Report_UserActivity = () => {
     "Store Manager",
     "Assistant Store Manager",
   ];
+
   const { logs, loading, error, fetchLogs } = useUserActivityLogAPI();
 
   useEffect(() => {
@@ -118,31 +126,109 @@ const Report_UserActivity = () => {
     return [...new Set(dates)];
   }, [userActivityData, pastUserActivityData]);
 
+  const uniqueUsernames = useMemo(() => {
+    const usernames = [...userActivityData, ...pastUserActivityData]
+      .map((item) => item.user_name)
+      .filter((name) => !!name);
+    return [...new Set(usernames)];
+  }, [userActivityData, pastUserActivityData]);
+
   // Sorting functionality
   const filteredActivity = useMemo(() => {
     const filtered = dataSource.filter((item) => {
+      // Search query filter
       const matchesSearch = searchQuery
         ? Object.values(item)
             .join(" ")
             .toLowerCase()
             .includes(searchQuery.toLowerCase())
         : true;
+
+      // Date filter
       const matchesDate = reportDate
         ? dayjs(item.report_date).format("YYYY-MM-DD") === reportDate
         : true;
-      // If a specific date is selected, ignore period filter
+
+      // Period filter (if no specific date is selected)
       const matchesPeriodFilter = reportDate
         ? true
         : period === "all"
         ? true
         : matchesPeriod(item.report_date);
+
+      // Role filter
       const matchesRole = role ? item.role === role : true;
-      return matchesSearch && matchesDate && matchesPeriodFilter && matchesRole;
+
+      // Date range filter
+      const matchesDateRange = (() => {
+        if (!startDate && !endDate) return true;
+        const itemDate = dayjs(item.activity_date);
+        const start = startDate ? dayjs(startDate) : null;
+        const end = endDate ? dayjs(endDate) : null;
+
+        if (start && end) {
+          return (
+            (itemDate.isAfter(start, "day") || itemDate.isSame(start, "day")) &&
+            (itemDate.isBefore(end, "day") || itemDate.isSame(end, "day"))
+          );
+        } else if (start) {
+          return (
+            itemDate.isAfter(start, "day") || itemDate.isSame(start, "day")
+          );
+        } else if (end) {
+          return itemDate.isBefore(end, "day") || itemDate.isSame(end, "day");
+        }
+        return true;
+      })();
+
+      // Username filter
+      const matchesUsername = username
+        ? item.user_name?.toLowerCase().includes(username.toLowerCase())
+        : true;
+
+      // Activity time filter (based on hour of day)
+      const matchesActivityTime = (() => {
+        if (!activityTimeFilter) return true;
+        const hour = dayjs(item.activity_date).hour();
+
+        switch (activityTimeFilter) {
+          case "morning":
+            return hour >= 6 && hour < 12;
+          case "afternoon":
+            return hour >= 12 && hour < 18;
+          case "evening":
+            return hour >= 18 && hour < 24;
+          case "night":
+            return hour >= 0 && hour < 6;
+          default:
+            return true;
+        }
+      })();
+
+      return (
+        matchesSearch &&
+        matchesDate &&
+        matchesPeriodFilter &&
+        matchesRole &&
+        matchesDateRange &&
+        matchesUsername &&
+        matchesActivityTime
+      );
     });
 
     // No aggregation: just return all filtered items for the selected date
     return filtered;
-  }, [dataSource, searchQuery, reportDate, period, role]);
+  }, [
+    dataSource,
+    searchQuery,
+    reportDate,
+    period,
+    role,
+    startDate,
+    endDate,
+    username,
+    activityTimeFilter,
+  ]);
 
   const sortedActivity = useMemo(() => {
     const sorted = [...filteredActivity];
@@ -170,6 +256,10 @@ const Report_UserActivity = () => {
     setReportDate("");
     setRole("");
     setPeriod("all");
+    setStartDate("");
+    setEndDate("");
+    setUsername("");
+    setActivityTimeFilter("");
     setSortConfig({ key: "", direction: "asc" });
   }, []);
 
@@ -177,6 +267,15 @@ const Report_UserActivity = () => {
   const clearDate = useCallback(() => setReportDate(""), []);
   const clearRole = useCallback(() => setRole(""), []);
   const clearPeriod = useCallback(() => setPeriod("all"), []);
+  const clearDateRange = useCallback(() => {
+    setStartDate("");
+    setEndDate("");
+  }, []);
+  const clearUsername = useCallback(() => setUsername(""), []);
+  const clearActivityTimeFilter = useCallback(
+    () => setActivityTimeFilter(""),
+    []
+  );
 
   const values = [
     ["ID", "Username", "Role", "Action Performed", "Date & Time"],
@@ -295,11 +394,15 @@ const Report_UserActivity = () => {
     searchQuery ||
     reportDate ||
     role ||
+    startDate ||
+    endDate ||
+    username ||
+    activityTimeFilter ||
     period !== "all" ||
     sortConfig.key !== "";
   const filterGridClass = isClearAllVisible
-    ? "grid grid-cols-1 xs:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 xs:gap-3 sm:gap-4"
-    : "grid grid-cols-1 xs:grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 xs:gap-3 sm:gap-4";
+    ? "grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 xs:gap-3 sm:gap-4"
+    : "grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 xs:gap-3 sm:gap-4";
 
   return (
     <GoogleOAuthProvider clientId={CLIENT_ID}>
@@ -537,7 +640,8 @@ const Report_UserActivity = () => {
 
                   {/* Filter Controls */}
                   <div className="bg-gray-800/30 backdrop-blur-sm rounded-lg xs:rounded-xl p-2 xs:p-3 sm:p-4 border border-gray-700/50">
-                    <div className={filterGridClass}>
+                    {/* Primary Filters Row */}
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 xs:gap-3 sm:gap-4 mb-4">
                       <div>
                         <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
                           Date
@@ -592,25 +696,99 @@ const Report_UserActivity = () => {
                           ))}
                         </select>
                       </div>
+                    </div>
 
-                      {/* Clear All Button - only show when filters are active */}
-                      {isClearAllVisible && (
-                        <div className="flex items-end">
+                    {/* Secondary Filters Row */}
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2 xs:gap-3 sm:gap-4 mb-4">
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
+                          Username
+                        </label>
+                        <select
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-violet-400 cursor-pointer text-2xs xs:text-xs sm:text-sm transition-all"
+                        >
+                          <option value="">All Users</option>
+                          {uniqueUsernames.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
+                          Time of Day
+                        </label>
+                        <select
+                          value={activityTimeFilter}
+                          onChange={(e) =>
+                            setActivityTimeFilter(e.target.value)
+                          }
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-violet-400 cursor-pointer text-2xs xs:text-xs sm:text-sm transition-all"
+                        >
+                          <option value="">All Times</option>
+                          <option value="morning">Morning (6AM-12PM)</option>
+                          <option value="afternoon">
+                            Afternoon (12PM-6PM)
+                          </option>
+                          <option value="evening">Evening (6PM-12AM)</option>
+                          <option value="night">Night (12AM-6AM)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Date Range Filters */}
+                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 xs:gap-3 sm:gap-4">
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
+                          Start Date
+                        </label>
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-violet-400 text-2xs xs:text-xs sm:text-sm transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
+                          End Date
+                        </label>
+                        <input
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-violet-400 text-2xs xs:text-xs sm:text-sm transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Clear All Button - only show when filters are active */}
+                    {isClearAllVisible && (
+                      <div className="mt-3 xs:mt-4 pt-3 xs:pt-4 border-t border-gray-700/30">
+                        <div className="flex justify-center">
                           <button
                             onClick={handleClear}
-                            className="w-full bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-red-300 px-3 xs:px-4 py-2 xs:py-2.5 rounded-md xs:rounded-lg border border-red-500/30 hover:border-red-500/40 transition-all duration-200 text-2xs xs:text-xs sm:text-sm font-medium touch-manipulation"
-                            type="button"
+                            className="flex items-center gap-1.5 xs:gap-2 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-3 xs:px-4 py-1.5 xs:py-2 rounded-md xs:rounded-lg sm:rounded-xl transition-all duration-200 text-xs xs:text-sm font-medium"
                           >
-                            Clear All
+                            <span>🗑️</span>
+                            <span>Clear All Filters</span>
                           </button>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Active Filters Summary */}
                     {(searchQuery ||
                       reportDate ||
                       role ||
+                      startDate ||
+                      endDate ||
+                      username ||
+                      activityTimeFilter ||
                       period !== "all" ||
                       sortConfig.key !== "") && (
                       <div className="mt-3 xs:mt-4 pt-3 xs:pt-4 border-t border-gray-700/30">
@@ -669,6 +847,49 @@ const Report_UserActivity = () => {
                                 onClick={clearPeriod}
                                 className="text-blue-300 hover:text-white transition-colors ml-1 flex-shrink-0"
                                 title="Clear period filter"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                          {(startDate || endDate) && (
+                            <div className="flex items-center gap-1 bg-cyan-500/20 text-cyan-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-cyan-500/30 max-w-full">
+                              <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
+                                Range: {startDate || "Start"} -{" "}
+                                {endDate || "End"}
+                              </span>
+                              <button
+                                onClick={clearDateRange}
+                                className="text-cyan-300 hover:text-white transition-colors ml-1 flex-shrink-0"
+                                title="Clear date range"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                          {username && (
+                            <div className="flex items-center gap-1 bg-indigo-500/20 text-indigo-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-indigo-500/30 max-w-full">
+                              <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
+                                User: {username}
+                              </span>
+                              <button
+                                onClick={clearUsername}
+                                className="text-indigo-300 hover:text-white transition-colors ml-1 flex-shrink-0"
+                                title="Clear username filter"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                          {activityTimeFilter && (
+                            <div className="flex items-center gap-1 bg-pink-500/20 text-pink-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-pink-500/30 max-w-full">
+                              <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
+                                Time: {activityTimeFilter}
+                              </span>
+                              <button
+                                onClick={clearActivityTimeFilter}
+                                className="text-pink-300 hover:text-white transition-colors ml-1 flex-shrink-0"
+                                title="Clear activity time filter"
                               >
                                 ✕
                               </button>

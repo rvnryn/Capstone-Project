@@ -352,12 +352,6 @@ export default function NotificationSettings() {
                     Get notified when ingredients or supplies are running low so
                     you can reorder before you run out.
                   </p>
-                  <div className="mt-2">
-                    <span className="text-yellow-400 text-sm">
-                      Tip: Enable both Email and In-App notifications for
-                      maximum awareness.
-                    </span>
-                  </div>
                 </section>
 
                 {/* Expiration Alert */}
@@ -424,12 +418,6 @@ export default function NotificationSettings() {
                     />
                     <span className="text-gray-400 text-sm">
                       (Set how many days in advance you want to be notified)
-                    </span>
-                  </div>
-                  <div className="mt-2">
-                    <span className="text-yellow-400 text-sm">
-                      Tip: Enable both Email and In-App notifications for
-                      maximum awareness.
                     </span>
                   </div>
                 </section>

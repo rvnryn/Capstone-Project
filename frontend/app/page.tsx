@@ -22,7 +22,7 @@ const Modal: React.FC<ModalProps> = ({ message, onClose }) => {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-md z-50 px-4 transition-opacity duration-300 animate-fadeIn">
+    <div className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-md z-50 px-4 transition-opacity duration-300 animate-fadeIn">
       <section className="relative g-gradient-to-br from-gray-900/95 to-black/95 text-white p-8 border-2 border-yellow-400 rounded-3xl shadow-2xl w-full max-w-sm text-center scale-100 animate-popIn">
         <button
           onClick={onClose}
@@ -139,19 +139,6 @@ const Login = () => {
     setShowResetModal(true);
   };
 
-  const handleSendReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setResetStatus(null);
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: "http://localhost:3000/update-password",
-    });
-    if (error) {
-      setResetStatus("Failed to send reset link. Please check your email.");
-    } else {
-      setResetStatus("If your email exists, a reset link has been sent.");
-    }
-  };
-
   const handleCloseResetModal = () => {
     setShowResetModal(false);
     setResetStatus(null);
@@ -266,32 +253,32 @@ const Login = () => {
             Login
           </button>
         </form>
-
-        {showResetModal && (
-          <Modal
-            message={
-              <div>
-                <h3 className="text-xl font-semibold mb-2 text-white">
-                  Reset Password
-                </h3>
-                <p className="text-yellow-200 mb-4">
-                  Please contact the Owner to change your password.
-                </p>
-                <button
-                  onClick={handleCloseResetModal}
-                  className="mt-4 bg-black border border-yellow-400 text-yellow-400 px-4 py-2 rounded-full hover:bg-yellow-400 hover:text-black transition"
-                >
-                  Close
-                </button>
-              </div>
-            }
-            onClose={handleCloseResetModal}
-          />
-        )}
       </section>
 
       {isModalOpen && (
         <Modal message="Logged in successfully!" onClose={handleModalClose} />
+      )}
+
+      {showResetModal && (
+        <Modal
+          message={
+            <div>
+              <h3 className="text-xl font-semibold mb-2 text-white">
+                Reset Password
+              </h3>
+              <p className="text-yellow-200 mb-4">
+                Please contact the Owner to change your password.
+              </p>
+              <button
+                onClick={handleCloseResetModal}
+                className="mt-4 bg-black border border-yellow-400 text-yellow-400 px-4 py-2 rounded-full hover:bg-yellow-400 hover:text-black transition"
+              >
+                Close
+              </button>
+            </div>
+          }
+          onClose={handleCloseResetModal}
+        />
       )}
     </main>
   );

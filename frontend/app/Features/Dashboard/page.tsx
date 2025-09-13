@@ -1,8 +1,11 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { useDashboardAPI } from "./hook/use-dashboardAPI";
-import { useSalesPrediction } from "./hook/useSalesPrediction";
+import {
+  useSalesPrediction,
+  useHistoricalAnalysis,
+  useSalesAnalytics,
+} from "./hook/useSalesPrediction";
 import Chart from "chart.js/auto";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
@@ -13,9 +16,13 @@ import {
   FaWarehouse,
   FaBoxes,
   FaClock,
+  FaMinus,
+  FaChartBar,
+  FaArrowUp,
+  FaArrowDown,
 } from "react-icons/fa";
-import { FiWifiOff } from "react-icons/fi";
-import { MdDashboard, MdTrendingUp } from "react-icons/md";
+import { FiWifiOff, FiTrendingUp, FiTrendingDown } from "react-icons/fi";
+import { MdDashboard, MdTrendingUp, MdInsights } from "react-icons/md";
 import { HiSparkles } from "react-icons/hi";
 
 export default function Dashboard() {
@@ -23,13 +30,12 @@ export default function Dashboard() {
   const [filterType, setFilterType] = useState<"daily" | "weekly" | "monthly">(
     "daily"
   );
-  const [topItemsCount, setTopItemsCount] = useState(6); // State for number of items to show
-  const {
-    data: TopSalesData,
-    loading: isLoading,
-    error: topSalesError,
-    fetchSalesPrediction,
-  } = useSalesPrediction();
+  const [topItemsCount, setTopItemsCount] = useState(6);
+  const [showHistoricalView, setShowHistoricalView] = useState(false);
+
+  // Use the combined analytics hook for better performance
+  const { prediction, historical, loading, fetchAll } = useSalesAnalytics();
+
   const [lowStockIngredients, setLowStockIngredients] = useState<any[]>([]);
   const [expiringIngredients, setExpiringIngredients] = useState<any[]>([]);
   const { fetchLowStock, fetchExpiring, fetchSurplus } = useDashboardAPI();
@@ -37,14 +43,14 @@ export default function Dashboard() {
 
   const { isOnline } = usePWA();
 
-  // Fetch on filter change and every 60 seconds for real-time updates
+  // Fetch analytics data with historical analysis
   useEffect(() => {
-    fetchSalesPrediction(filterType, topItemsCount);
+    fetchAll(filterType, topItemsCount, 90); // 90 days of historical data
     const interval = setInterval(() => {
-      fetchSalesPrediction(filterType, topItemsCount);
+      fetchAll(filterType, topItemsCount, 90);
     }, 60000); // 60 seconds
     return () => clearInterval(interval);
-  }, [filterType, topItemsCount, fetchSalesPrediction]);
+  }, [filterType, topItemsCount, fetchAll]);
 
   useEffect(() => {
     let isMounted = true;
@@ -114,13 +120,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     console.log(
-      "[DEBUG] Chart effect triggered. isLoading:",
-      isLoading,
-      "TopSalesData:",
-      TopSalesData
+      "[DEBUG] Chart effect triggered. loading:",
+      loading,
+      "SalesData:",
+      prediction.data
     );
 
-    if (isLoading || !TopSalesData.length) {
+    if (loading || !prediction.data.length) {
       console.log("[DEBUG] Skipping chart creation - loading or no data");
       return;
     }
@@ -142,32 +148,74 @@ export default function Dashboard() {
     try {
       // Use bar chart for daily, line for weekly/monthly
       const chartType = filterType === "daily" ? "bar" : "line";
+
+      // Ensure all datasets have the same labels and consistent data structure
+      const allLabels = prediction.data[0]?.week ?? [];
+      console.log("[DEBUG] Chart labels:", allLabels);
+      console.log(
+        "[DEBUG] Prediction data structure:",
+        prediction.data.map((d) => ({
+          name: d.name,
+          salesLength: d.sales?.length,
+          sales: d.sales,
+        }))
+      );
+
+      // Normalize datasets to ensure consistent data points
+      const normalizedDatasets = prediction.data.map((trend: any) => {
+        // Ensure sales array has same length as labels, fill with 0 if missing
+        const normalizedSales = allLabels.map(
+          (_, index) => trend.sales[index] || 0
+        );
+
+        return {
+          label: trend.name,
+          data: normalizedSales,
+          borderColor: trend.color,
+          backgroundColor:
+            chartType === "bar" ? trend.color + "BB" : trend.color + "33",
+          borderWidth: 3,
+          tension: chartType === "line" ? 0.4 : 0,
+          fill:
+            chartType === "line"
+              ? { target: "origin", above: trend.color + "20" }
+              : false,
+          pointRadius: chartType === "line" ? 4 : 0,
+          pointHoverRadius: chartType === "line" ? 6 : 0,
+          pointBackgroundColor: trend.color,
+          pointBorderColor: "#fff",
+          pointBorderWidth: chartType === "line" ? 2 : 0,
+          // Bar chart specific options to reduce gaps
+          barPercentage: chartType === "bar" ? 0.95 : undefined,
+          categoryPercentage: chartType === "bar" ? 0.95 : undefined,
+        };
+      });
+
       chart = new Chart(canvas, {
         type: chartType,
         data: {
-          labels: TopSalesData[0]?.week ?? [],
-          datasets: TopSalesData.map((trend: any) => ({
-            label: trend.name,
-            data: trend.sales,
-            borderColor: trend.color,
-            backgroundColor:
-              chartType === "bar" ? trend.color + "BB" : trend.color + "33",
-            borderWidth: 3,
-            tension: chartType === "line" ? 0.4 : 0,
-            fill:
-              chartType === "line"
-                ? { target: "origin", above: trend.color + "20" }
-                : false,
-            pointRadius: chartType === "line" ? 4 : 0,
-            pointHoverRadius: chartType === "line" ? 6 : 0,
-            pointBackgroundColor: trend.color,
-            pointBorderColor: "#fff",
-            pointBorderWidth: chartType === "line" ? 2 : 0,
-          })),
+          labels: allLabels,
+          datasets: normalizedDatasets,
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          layout: {
+            padding: {
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: 0,
+            },
+          },
+          // Ensure consistent data alignment
+          skipNull: false,
+          spanGaps: false,
+          elements: {
+            bar: {
+              borderWidth: 2,
+            },
+          },
           interaction: {
             intersect: false,
             mode: "index",
@@ -180,46 +228,107 @@ export default function Dashboard() {
               display: true,
               position: "top",
               align: "start",
-              maxHeight: 100,
+              maxHeight: 120,
               labels: {
                 color: "#fff",
-                font: { size: 12, weight: 500 },
-                padding: 15,
+                font: { size: 11, weight: 500 },
+                padding: 8,
                 usePointStyle: true,
                 pointStyle: "circle",
-                boxWidth: 12,
-                boxHeight: 12,
+                boxWidth: 10,
+                boxHeight: 10,
+                textAlign: "left",
                 generateLabels: function (chart: any) {
                   const original =
                     Chart.defaults.plugins.legend.labels.generateLabels;
                   const labels = original.call(this, chart);
-                  console.log("[DEBUG] Legend labels:", labels);
-                  return labels;
+
+                  const truncatedLabels = labels.map((label: any) => {
+                    if (label.text && label.text.length > 35) {
+                      label.text = label.text.substring(0, 32) + "...";
+                    }
+                    return label;
+                  });
+
+                  console.log("[DEBUG] Legend labels:", truncatedLabels);
+                  return truncatedLabels;
                 },
               },
             },
             tooltip: {
-              backgroundColor: "rgba(0,0,0,0.9)",
+              backgroundColor: "rgba(0,0,0,0.95)",
               titleFont: { size: 14, weight: 600 },
               bodyFont: { size: 12 },
-              padding: 12,
-              cornerRadius: 8,
+              padding: 15,
+              cornerRadius: 10,
               displayColors: true,
               usePointStyle: true,
               borderColor: "#fbbf24",
-              borderWidth: 1,
+              borderWidth: 2,
+              multiKeyBackground: "rgba(0,0,0,0.8)",
+              filter: function (tooltipItem: any) {
+                // Only show tooltip items that have sales > 0
+                return tooltipItem.parsed.y > 0;
+              },
+              callbacks: {
+                title: function (context: any) {
+                  return context[0].label || "";
+                },
+                label: function (context: any) {
+                  // Show full dataset label (menu item name) in tooltip
+                  const label = context.dataset.label || "";
+                  const value = context.parsed.y;
+                  return `${label}: ${value} sales`;
+                },
+                afterLabel: function (context: any) {
+                  // Calculate percentage only from items with sales > 0
+                  const dataIndex = context.dataIndex;
+                  const total = context.chart.data.datasets.reduce(
+                    (sum: number, dataset: any) => {
+                      const value = dataset.data[dataIndex] || 0;
+                      return sum + (value > 0 ? value : 0);
+                    },
+                    0
+                  );
+                  if (total > 0 && context.parsed.y > 0) {
+                    const percentage = (
+                      (context.parsed.y / total) *
+                      100
+                    ).toFixed(1);
+                    return `${percentage}% of total`;
+                  }
+                  return "";
+                },
+              },
             },
           },
           scales: {
             y: {
               beginAtZero: true,
-              grid: { color: "#374151", lineWidth: 1 },
-              ticks: { color: "#d1d5db", font: { size: 11 } },
+              grid: {
+                color: "#374151",
+                lineWidth: 1,
+                display: true,
+              },
+              ticks: {
+                color: "#d1d5db",
+                font: { size: 11 },
+                padding: 4,
+              },
               border: { display: false },
             },
             x: {
-              grid: { display: false },
-              ticks: { color: "#d1d5db", font: { size: 11 } },
+              type: "category",
+              grid: {
+                display: false,
+              },
+              ticks: {
+                color: "#d1d5db",
+                font: { size: 11 },
+                padding: 4,
+                maxRotation: 0,
+                minRotation: 0,
+              },
               border: { display: false },
             },
           },
@@ -255,18 +364,19 @@ export default function Dashboard() {
         }
       }
     };
-  }, [TopSalesData, isLoading]); // Removed isLoading from dependencies to prevent double renders
+  }, [prediction.data, loading, filterType]);
 
   const renderFilterButtons = () => (
-    <div className="flex flex-wrap gap-2 items-center">
-      <div className="flex flex-wrap gap-1 sm:gap-2">
+    <div className="w-full sm:w-auto">
+      {/* First row: Time period buttons */}
+      <div className="flex flex-wrap gap-1 sm:gap-2 mb-2 sm:mb-0">
         {["daily", "weekly", "monthly"].map((type) => (
           <button
             key={type}
             onClick={() =>
               setFilterType(type as "daily" | "weekly" | "monthly")
             }
-            className={`text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-all duration-200 ${
+            className={`text-xs sm:text-sm font-semibold px-2 xs:px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-all duration-200 flex-1 sm:flex-none min-w-0 ${
               filterType === type
                 ? "bg-yellow-400 text-black shadow-lg shadow-yellow-400/30"
                 : "text-gray-300 hover:text-white hover:bg-gray-700/50 border border-gray-600"
@@ -276,21 +386,150 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
-      <div className="flex items-center gap-2 ml-4">
-        <label className="text-gray-300 text-xs sm:text-sm">Items:</label>
-        <select
-          value={topItemsCount}
-          onChange={(e) => setTopItemsCount(Number(e.target.value))}
-          className="bg-gray-700 text-white text-xs sm:text-sm px-2 py-1 rounded border border-gray-600 focus:border-yellow-400 focus:outline-none"
+
+      {/* Second row: Controls */}
+      <div className="flex flex-wrap mt-5 items-center gap-2 sm:gap-3 justify-between sm:justify-start">
+        <div className="flex items-center gap-2">
+          <label className="text-gray-300 text-xs sm:text-sm whitespace-nowrap">
+            Items:
+          </label>
+          <select
+            value={topItemsCount}
+            onChange={(e) => setTopItemsCount(Number(e.target.value))}
+            className="bg-gray-700 text-white text-xs sm:text-sm px-2 py-1 rounded border border-gray-600 focus:border-yellow-400 focus:outline-none min-w-0"
+          >
+            <option value={3}>Top 3</option>
+            <option value={5}>Top 5</option>
+            <option value={6}>All 6</option>
+            <option value={10}>Top 10</option>
+          </select>
+        </div>
+
+        <button
+          onClick={() => setShowHistoricalView(!showHistoricalView)}
+          className={`text-xs sm:text-sm font-semibold px-2 xs:px-3 py-1.5 rounded-lg transition-all duration-200 whitespace-nowrap ${
+            showHistoricalView
+              ? "bg-blue-500 text-white"
+              : "text-gray-300 hover:text-white border border-gray-600"
+          }`}
         >
-          <option value={3}>Top 3</option>
-          <option value={5}>Top 5</option>
-          <option value={6}>All 6</option>
-          <option value={10}>Top 10</option>
-        </select>
+          <MdInsights className="inline mr-1" />
+          <span className="hidden xs:inline">
+            {showHistoricalView ? "Hide" : "Show"}
+          </span>
+          <span className="xs:hidden">
+            {showHistoricalView ? "Hide Insights" : "Show Insights"}
+          </span>
+        </button>
       </div>
     </div>
   );
+
+  const getTrendIcon = (direction: string) => {
+    switch (direction) {
+      case "increasing":
+        return <FiTrendingUp className="text-green-400" />;
+      case "decreasing":
+        return <FiTrendingDown className="text-red-400" />;
+      default:
+        return <FaMinus className="text-gray-400" />;
+    }
+  };
+
+  const renderHistoricalInsights = () => {
+    if (!showHistoricalView || !historical.data) return null;
+
+    return (
+      <section className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 rounded-xl p-4 mb-6 border border-blue-500/30">
+        <header className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-blue-500/20 rounded-lg">
+            <MdInsights className="text-blue-400 text-xl" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-blue-300">
+              Historical Analysis
+            </h3>
+            <p className="text-blue-200 text-sm">
+              {historical.data.overview.analysis_period} •{" "}
+              {historical.data.overview.total_sales} total sales
+            </p>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Top Performers */}
+          <div className="bg-black/40 rounded-lg p-3">
+            <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
+              <FaChartBar className="text-yellow-400" />
+              Top Performers
+            </h4>
+            <div className="space-y-2">
+              {historical.data.top_performers.by_total_sales
+                .slice(0, 3)
+                .map((item, idx) => (
+                  <div
+                    key={item.item}
+                    className="flex justify-between items-center text-sm"
+                  >
+                    <span className="text-gray-300 truncate">{item.item}</span>
+                    <div className="text-right">
+                      <div className="text-white font-medium">
+                        {item.total_sales}
+                      </div>
+                      <div className="text-gray-400 text-xs">
+                        Avg: {item.avg_sales}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* Trends */}
+          <div className="bg-black/40 rounded-lg p-3">
+            <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
+              <FiTrendingUp className="text-green-400" />
+              Trends
+            </h4>
+            <div className="space-y-2">
+              {historical.data.trends.items_with_trends
+                .slice(0, 3)
+                .map((trend) => (
+                  <div
+                    key={trend.item}
+                    className="flex justify-between items-center text-sm"
+                  >
+                    <span className="text-gray-300 truncate">{trend.item}</span>
+                    <div className="flex items-center gap-2">
+                      {getTrendIcon(trend.trend_direction)}
+                      <span className="text-white text-xs">
+                        {trend.change_percent > 0 ? "+" : ""}
+                        {trend.change_percent}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* Insights */}
+          <div className="bg-black/40 rounded-lg p-3">
+            <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
+              <HiSparkles className="text-purple-400" />
+              Insights
+            </h4>
+            <div className="space-y-1">
+              {historical.data.insights.slice(0, 3).map((insight, idx) => (
+                <p key={idx} className="text-gray-300 text-xs leading-relaxed">
+                  • {insight}
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  };
 
   const StatCard = ({ icon, title, count, color, bgColor }: any) => (
     <div
@@ -317,11 +556,12 @@ export default function Dashboard() {
     </div>
   );
 
-  // ✨ DEBUG: Log current state
+  // Debug: Log current state
   console.log("Dashboard State:", {
-    isLoading,
+    loading,
     isOnline,
-    TopSalesDataLength: TopSalesData.length,
+    salesDataLength: prediction.data.length,
+    historicalData: historical.data ? "loaded" : "none",
     lowStockCount: lowStockIngredients.length,
     expiringCount: expiringIngredients.length,
     surplusCount: surplusIngredients.length,
@@ -350,8 +590,6 @@ export default function Dashboard() {
                 <HiSparkles className="text-black text-xl sm:text-2xl lg:text-3xl animate-pulse" />
               </div>
 
-              {/* ✨ PWA Status Components */}
-              {/* Simple Offline Notice */}
               {!isOnline && (
                 <aside
                   className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg mb-4"
@@ -373,7 +611,7 @@ export default function Dashboard() {
               )}
 
               <p className="text-lg sm:text-xl md:text-2xl text-gray-700 font-medium leading-relaxed">
-                Monitor your inventory stock and real-time alerts
+                Monitor your inventory stock and historical sales performance
               </p>
             </header>
 
@@ -416,12 +654,13 @@ export default function Dashboard() {
                   aria-label="Sales Analytics"
                   className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-gray-400"
                 >
-                  <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-4 lg:mb-6 gap-3 sm:gap-2">
-                    <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-0">
-                      <div className="p-1.5 sm:p-2 bg-yellow-400/20 rounded-lg">
+                  <header className="mb-3 sm:mb-4 lg:mb-6">
+                    {/* Title Section */}
+                    <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                      <div className="p-1.5 sm:p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
                         <FaChartLine className="text-yellow-400 text-lg sm:text-xl" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <h2 className="text-lg sm:text-xl font-bold text-white">
                           Sales Analytics
                         </h2>
@@ -430,17 +669,19 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    {renderFilterButtons()}
+
+                    {/* Filter Controls */}
+                    <div className="w-full">{renderFilterButtons()}</div>
                   </header>
-                  <div className="w-full h-56 xs:h-64 sm:h-72 md:h-80 lg:h-88 xl:h-[28rem] p-2 sm:p-3 lg:p-4 bg-gray-900/50 rounded-xl border border-gray-700">
-                    {isLoading ? (
+                  <div className="w-full h-56 xs:h-64 sm:h-72 md:h-80 lg:h-88 xl:h-[28rem] bg-gray-900/50 rounded-xl border border-gray-700">
+                    {loading ? (
                       <div className="w-full h-full flex items-center justify-center">
                         <div className="animate-pulse text-center">
                           <div className="w-12 sm:w-16 h-12 sm:h-16 bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto">
                             <MdTrendingUp className="text-yellow-400 text-xl sm:text-2xl animate-bounce" />
                           </div>
                           <p className="text-gray-400 text-center mt-3 sm:mt-4 text-sm">
-                            Loading analytics...
+                            Loading historical sales data...
                           </p>
                         </div>
                       </div>
@@ -450,6 +691,11 @@ export default function Dashboard() {
                         className="w-full h-full"
                       />
                     )}
+                  </div>
+                  {/* Historical Insights Section */}
+                  <div className="mt-6">
+                    {/* Historical Insights Section */}
+                    {renderHistoricalInsights()}
                   </div>
                 </section>
 
@@ -499,10 +745,10 @@ export default function Dashboard() {
                         {expiringIngredients.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={5}
+                              colSpan={6}
                               className="py-6 sm:py-8 px-4 text-center text-gray-400"
                             >
-                              <div className="flex flex-col items-center gap-2">
+                              <div className="flex flex-col items-center justify-center gap-2 w-full">
                                 <FaClock className="text-gray-500 text-xl sm:text-2xl" />
                                 <p className="text-sm">
                                   No expiring ingredients found

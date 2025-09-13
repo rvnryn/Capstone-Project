@@ -16,6 +16,8 @@ export interface MenuIngredient {
   name?: string; // for new/edited ingredients
   ingredient_name?: string; // for compatibility
   quantity?: string;
+  is_unavailable?: boolean; // indicates if this ingredient is out of stock
+  stock_quantity?: number; // current stock quantity
 }
 
 export function useMenuAPI() {

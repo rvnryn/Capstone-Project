@@ -23,6 +23,8 @@ class InventoryLogEntry(BaseModel):
     user_id: int
     status: str
     wastage: int
+    item_name: str
+    batch_date: str  # will parse to datetime in route
 
 
 from fastapi import Body
@@ -53,19 +55,34 @@ async def put_inventory_log(
                     status_code=400,
                     detail=f"Invalid action_date: {entry_data['action_date']}",
                 )
+
+            # Parse batch_date to datetime object
+            try:
+                batch_date_dt = datetime.datetime.fromisoformat(
+                    entry_data["batch_date"].replace("Z", "+00:00")
+                )
+                print("Parsed batch_date_dt:", batch_date_dt, type(batch_date_dt))
+            except Exception as e:
+                print("Error parsing batch_date:", entry_data["batch_date"], e)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid batch_date: {entry_data['batch_date']}",
+                )
+
             # Ensure int types
             entry_data["remaining_stock"] = int(entry_data["remaining_stock"])
             entry_data["wastage"] = int(entry_data["wastage"])
             await db.execute(
                 text(
                     """
-                INSERT INTO inventory_log (item_id, remaining_stock, action_date, user_id, status, wastage)
-                VALUES (:item_id, :remaining_stock, :action_date, :user_id, :status, :wastage)
+                INSERT INTO inventory_log (item_id, remaining_stock, action_date, user_id, status, wastage, item_name, batch_date)
+                VALUES (:item_id, :remaining_stock, :action_date, :user_id, :status, :wastage, :item_name, :batch_date)
                 """
                 ),
                 {
                     **entry_data,
                     "action_date": action_date_dt,
+                    "batch_date": batch_date_dt,
                 },
             )
         await db.commit()

@@ -20,10 +20,14 @@ import {
   FiCalendar,
   FiTrendingUp,
   FiClock,
-  FiXCircle,
-  FiCheckCircle,
+  FiX,
 } from "react-icons/fi";
-import { FaCheckCircle, FaSortDown, FaTimesCircle } from "react-icons/fa";
+import {
+  FaCheckCircle,
+  FaSortDown,
+  FaTimesCircle,
+  FaExclamationTriangle,
+} from "react-icons/fa";
 
 export default function ViewMenu() {
   const { role } = useAuth();
@@ -196,6 +200,39 @@ export default function ViewMenu() {
     icon: stockStatusIcon,
   } = getStockStatusProps(menu.stock_status);
 
+  function getUnavailabilityReasonProps(reason?: string) {
+    switch (reason) {
+      case "expired":
+        return {
+          label: "Expired",
+          color: "bg-red-600/20 text-red-300 border-red-500/40",
+          icon: <FiClock className="inline mr-1" size={10} />,
+          description: "Ingredients have expired",
+        };
+      case "no_stock":
+        return {
+          label: "No Stock",
+          color: "bg-gray-600/20 text-gray-300 border-gray-500/40",
+          icon: <FiX className="inline mr-1" size={10} />,
+          description: "No inventory available",
+        };
+      case "low_stock":
+        return {
+          label: "Low Stock",
+          color: "bg-orange-500/20 text-orange-300 border-orange-400/40",
+          icon: <FaExclamationTriangle className="inline mr-1" size={10} />,
+          description: "Limited quantity available",
+        };
+      default:
+        return {
+          label: "Not Available",
+          color: "bg-red-500/20 text-red-300 border-red-400/30",
+          icon: <FaTimesCircle className="inline mr-1" size={10} />,
+          description: "Currently unavailable",
+        };
+    }
+  }
+
   return (
     <section className="text-white font-poppins">
       <NavigationBar />
@@ -287,15 +324,67 @@ export default function ViewMenu() {
                   value={
                     menu.ingredients && menu.ingredients.length > 0 ? (
                       <div>
-                        <ul className="list-disc list-inside text-white">
-                          {menu.ingredients.map((ing: any, idx: number) => (
-                            <li key={idx}>
-                              {ing.ingredient_name || ing.name}{" "}
-                              <span className="text-gray-400">
-                                {ing.quantity ? `(${ing.quantity})` : ""}
-                              </span>
-                            </li>
-                          ))}
+                        <ul className="list-disc list-inside text-white space-y-2">
+                          {menu.ingredients.map((ing: any, idx: number) => {
+                            const reasonProps = getUnavailabilityReasonProps(
+                              ing.unavailable_reason
+                            );
+                            const isProblematic =
+                              ing.is_unavailable || ing.is_low_stock;
+
+                            return (
+                              <li
+                                key={idx}
+                                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border transition-all duration-200 ${
+                                  isProblematic
+                                    ? "bg-red-500/5 border-red-400/20 text-red-200"
+                                    : "bg-green-500/5 border-green-400/20 text-green-200"
+                                }`}
+                              >
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">
+                                      {ing.ingredient_name || ing.name}
+                                    </span>
+                                    <span className="text-gray-400 text-sm">
+                                      {ing.quantity ? `(${ing.quantity})` : ""}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-400 mt-1">
+                                    Total: {ing.stock_quantity || 0} |
+                                    Available: {ing.available_stock || 0}
+                                    {ing.expired_stock > 0 && (
+                                      <span className="text-red-400 ml-2">
+                                        | Expired: {ing.expired_stock}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                {isProblematic && (
+                                  <div className="flex flex-col gap-1">
+                                    <span
+                                      className={`text-xs px-2 py-1 rounded-full border ${reasonProps.color} inline-flex items-center`}
+                                    >
+                                      {reasonProps.icon}
+                                      {reasonProps.label}
+                                    </span>
+                                    <span className="text-xs text-gray-400 text-right">
+                                      {reasonProps.description}
+                                    </span>
+                                  </div>
+                                )}
+                                {!isProblematic && (
+                                  <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full border border-green-400/30 inline-flex items-center">
+                                    <FaCheckCircle
+                                      className="inline mr-1"
+                                      size={10}
+                                    />
+                                    Available
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     ) : (
