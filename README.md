@@ -1788,8 +1788,8 @@ pytest
 <summary>Contributor Graph</summary>
 <br>
 <p align="left">
-   <a href="https://github.com{/AcsOfficial/Capstone-Project/}graphs/contributors">
-      <img src="https://contrib.rocks/image?repo=AcsOfficial/Capstone-Project">
+   <a href="https://github.com{/AcsOfficial/capstone-POS/}graphs/contributors">
+      <img src="https://contrib.rocks/image?repo=AcsOfficial/capstone-POS">
    </a>
 </p>
 </details>
