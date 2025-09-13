@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useState, useCallback } from "react";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
@@ -121,7 +120,7 @@ const Report_UserActivity = () => {
 
   // Sorting functionality
   const filteredActivity = useMemo(() => {
-    let filtered = dataSource.filter((item) => {
+    const filtered = dataSource.filter((item) => {
       const matchesSearch = searchQuery
         ? Object.values(item)
             .join(" ")

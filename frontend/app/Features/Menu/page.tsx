@@ -90,7 +90,7 @@ const Menu: React.FC = () => {
   }, [menuData, selectedCategory, searchQuery]);
 
   const summaryStats = useMemo(() => {
-    let total = menuData.length;
+    const total = menuData.length;
     let outOfStock = 0;
     let criticalStock = 0;
     let lowStock = 0;

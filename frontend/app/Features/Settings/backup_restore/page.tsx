@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
@@ -61,25 +60,13 @@ const GoogleDriveIntegration = ({
 };
 
 export default function BackupRestorePage() {
-  // State to hold Google Drive access token for restore
+  // Fixed: All hooks must be called at the top level, before any conditionals (v2)
   const [gDriveAccessToken, setGDriveAccessToken] = useState<string | null>(
     null
   );
-  if (!CLIENT_ID) {
-    return (
-      <section className="min-h-screen flex flex-col items-center justify-center bg-black text-yellow-400 font-bold text-2xl p-8">
-        <FaGoogleDrive className="text-5xl mb-4" />
-        Google OAuth Error: NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set.
-        <br />
-        Please set it in your .env.local and restart the server.
-      </section>
-    );
-  }
-
   const { backup, restore, backupToDrive, restoreFromDrive } =
     useBackupRestoreAPI();
   const router = useRouter();
-  // Unsaved changes modal state
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
 
@@ -95,12 +82,57 @@ export default function BackupRestorePage() {
   const [dayOfWeek, setDayOfWeek] = useState("");
   const [dayOfMonth, setDayOfMonth] = useState("");
   const [timeOfDay, setTimeOfDay] = useState("");
-  // Track if values are loaded from backend
   const [scheduleLoaded, setScheduleLoaded] = useState(false);
 
   // Track initial settings for change detection
   const initialSettingsRef = useReactRef<any>(null);
   const [initialSettingsSet, setInitialSettingsSet] = useState(false);
+
+  // Navigation hooks
+  const { isMenuOpen, isMobile } = useNavigation();
+
+  // State for backup/restore operations
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreMsg, setRestoreMsg] = useState("");
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [loading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [restoreFileName, setRestoreFileName] = useState("");
+  const [restoreError, setRestoreError] = useState("");
+
+  // Restore flow state
+  const [showRestoreSourceModal, setShowRestoreSourceModal] = useState(false);
+  const [restoreSource, setRestoreSource] = useState<null | "local" | "gdrive">(
+    null
+  );
+  const [pendingRestoreFile, setPendingRestoreFile] = useState<File | null>(
+    null
+  );
+  const [pendingGDriveFileId, setPendingGDriveFileId] = useState<string | null>(
+    null
+  );
+
+  // Password modal state
+  const [showPasswordModalType, setShowPasswordModalType] = useState<
+    null | "backup" | "restore" | "history-restore"
+  >(null);
+  const showPasswordModal = !!showPasswordModalType;
+  const [passwordInput, setPasswordInput] = useState("");
+
+  // History state
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [backupHistory, setBackupHistory] = useState<any[]>([]);
+  const [selectedHistory, setSelectedHistory] = useState<any | null>(null);
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyDate, setHistoryDate] = useState("");
+
+  // Popup state
+  const [showPopup, setShowBackupChoiceModal] = useState(false);
+  const [backupResultMsg, setBackupResultMsg] = useState("");
+  const [backupPassword, setBackupPassword] = useState<string>("");
 
   // Convert 24-hour time to 12-hour format with AM/PM
   const convertTo12Hour = (time24: string): string => {
@@ -117,7 +149,6 @@ export default function BackupRestorePage() {
     return `${hour12}:${minuteStr.padStart(2, "0")} ${period}`;
   };
 
-  // Remove useGoogleLogin from here. Instead, handle Google Drive backup inside GoogleDriveIntegration below.
   // Load schedule from backend on mount or when schedule changes
   useEffect(() => {
     if (!scheduleLoaded && schedule) {
@@ -160,42 +191,18 @@ export default function BackupRestorePage() {
     }
   }, [schedule, scheduleLoading, scheduleLoaded]);
 
-  const { isMenuOpen, isMobile } = useNavigation();
-  // Removed selectedBackup, not used in new restore logic
-  const [isBackingUp, setIsBackingUp] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
-  const [restoreMsg, setRestoreMsg] = useState("");
-  const [showSaveModal, setShowSaveModal] = useState(false);
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [saveMessage, setSaveMessage] = useState("");
-  const [loading] = useState(false); // Simulate loading if needed
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [restoreFileName, setRestoreFileName] = useState("");
-  const [restoreError, setRestoreError] = useState("");
-  // Password modal state
-  // Restore flow state
-  const [showRestoreSourceModal, setShowRestoreSourceModal] = useState(false);
-  const [restoreSource, setRestoreSource] = useState<null | "local" | "gdrive">(
-    null
-  );
-  const [pendingRestoreFile, setPendingRestoreFile] = useState<File | null>(
-    null
-  );
-  const [pendingGDriveFileId, setPendingGDriveFileId] = useState<string | null>(
-    null
-  );
-  // Boolean for password modal visibility
-  const [showPasswordModalType, setShowPasswordModalType] = useState<
-    null | "backup" | "restore" | "history-restore"
-  >(null);
-  const showPasswordModal = !!showPasswordModalType;
-  const [passwordInput, setPasswordInput] = useState("");
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [backupHistory, setBackupHistory] = useState<any[]>([]);
-  const [selectedHistory, setSelectedHistory] = useState<any | null>(null);
-  // Search/filter state for backup history
-  const [historySearch, setHistorySearch] = useState("");
-  const [historyDate, setHistoryDate] = useState("");
+  // Check CLIENT_ID after all hooks
+  if (!CLIENT_ID) {
+    return (
+      <section className="min-h-screen flex flex-col items-center justify-center bg-black text-yellow-400 font-bold text-2xl p-8">
+        <FaGoogleDrive className="text-5xl mb-4" />
+        Google OAuth Error: NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set.
+        <br />
+        Please set it in your .env.local and restart the server.
+      </section>
+    );
+  }
+
   // Fetch backup history from Supabase
   const fetchBackupHistory = async (search = "", date = "") => {
     let query = supabase
@@ -398,9 +405,6 @@ export default function BackupRestorePage() {
     setShowHistoryModal(false);
     setSelectedHistory(null);
   };
-  const [showPopup, setShowBackupChoiceModal] = useState(false);
-  const [backupResultMsg, setBackupResultMsg] = useState("");
-  const [backupPassword, setBackupPassword] = useState<string>("");
 
   // Start backup: ask for password
   const handleBackup = () => {
