@@ -8,7 +8,7 @@ import React, {
   ReactNode,
   JSX,
 } from "react";
-import { supabase } from "@/app/utils/Server/supabaseClient"; // Import your Supabase client
+import { supabase } from "@/app/utils/Server/supabaseClient";
 import axios from "@/app/lib/axios";
 
 // --- Types ---
@@ -20,16 +20,17 @@ export type UserRole =
   | null;
 
 export interface AuthUser {
-  id: string; // Supabase auth_id
-  user_id?: number; // Integer PK from users table
+  id: string;
+  user_id?: number;
   email?: string;
   name?: string;
   [key: string]: any;
 }
 
-interface AuthContextType {
+export interface AuthContextType {
   user: AuthUser | null;
   role: UserRole;
+  loading: boolean;
   refreshSession: () => Promise<void>;
 }
 
@@ -37,14 +38,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
-  refreshSession: function (): Promise<void> {
+  loading: true,
+  refreshSession: async () => {
     throw new Error("Function not implemented.");
   },
 });
 
 export const useAuth = () => useContext(AuthContext);
 
-// --- Provider ---
 type AuthProviderProps = {
   children: ReactNode;
 };
@@ -52,14 +53,16 @@ type AuthProviderProps = {
 export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [role, setRole] = useState<UserRole>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   console.log("AuthProvider mounted");
 
-  // Hybrid session refresh: get Supabase session, then backend info
   const refreshSession = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
     const { data, error } = await supabase.auth.getSession();
     console.log("Supabase session:", data.session, "Error:", error);
 
-    // Only proceed if session and user exist and token is not expired
     const session = data.session;
     if (
       error ||
@@ -70,6 +73,11 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     ) {
       setUser(null);
       setRole(null);
+      setLoading(false);
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+      }
+      setRefreshing(false);
       return;
     }
 
@@ -90,20 +98,42 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         ...res.data.user,
       }));
     } catch (err) {
-      // If backend returns 401, clear session
+
       setUser(null);
       setRole(null);
+      setLoading(false);
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+      }
       await supabase.auth.signOut();
+      setRefreshing(false);
+      return;
     }
+    setLoading(false);
+    setRefreshing(false);
   };
 
   useEffect(() => {
-    console.log("useEffect running");
-    // Listen for Supabase auth state changes
-    const { data: listener } = supabase.auth.onAuthStateChange(() => {
-      refreshSession();
-    });
-    // Initial session fetch
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+
+        if (
+          session &&
+          session.user &&
+          session.access_token &&
+          (!session.expires_at || session.expires_at * 1000 > Date.now())
+        ) {
+          refreshSession();
+        } else {
+          setUser(null);
+          setRole(null);
+          setLoading(false);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("token");
+          }
+        }
+      }
+    );
     refreshSession();
     return () => {
       listener?.subscription.unsubscribe();
@@ -111,8 +141,14 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, role, refreshSession }}>
-      {children}
+    <AuthContext.Provider value={{ user, role, loading, refreshSession }}>
+      {loading ? (
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ color: "#facc15", fontSize: 24 }}>Loading...</span>
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 }

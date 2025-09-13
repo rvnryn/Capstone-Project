@@ -3,7 +3,11 @@
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { FaDatabase } from "react-icons/fa";
-import { useRef, useState, useRef as useReactRef } from "react";
+import { useRef, useState, useRef as useReactRef, useEffect } from "react";
+import {
+  useBackupSchedule,
+  updateBackupSchedule,
+} from "./hook/useBackupSchedule";
 import CryptoJS from "crypto-js";
 import { useBackupRestoreAPI } from "./hook/use-BackupRestoreAPI";
 import { supabase } from "@/app/utils/Server/supabaseClient";
@@ -13,11 +17,9 @@ import { FaEyeSlash, FaEye } from "react-icons/fa";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { FaGoogleDrive, FaDownload } from "react-icons/fa";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
-import { useAuth } from "@/app/context/AuthContext";
 import { MdCancel, MdSave } from "react-icons/md";
 import { FiAlertTriangle, FiSave } from "react-icons/fi";
 
-// Extend Window type to include __backupPassword, gapi, and google
 declare global {
   interface Window {
     __backupPassword?: string;
@@ -81,59 +83,82 @@ export default function BackupRestorePage() {
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
 
-  // Declare all settings state variables BEFORE using them
+  // Automatic Backup Schedule State (from backend)
+  const {
+    schedule,
+    isLoading: scheduleLoading,
+    isError,
+    refresh,
+  } = useBackupSchedule();
   const [autoBackup, setAutoBackup] = useState(false);
   const [frequency, setFrequency] = useState("");
   const [dayOfWeek, setDayOfWeek] = useState("");
   const [dayOfMonth, setDayOfMonth] = useState("");
   const [timeOfDay, setTimeOfDay] = useState("");
+  // Track if values are loaded from backend
+  const [scheduleLoaded, setScheduleLoaded] = useState(false);
 
   // Track initial settings for change detection
   const initialSettingsRef = useReactRef<any>(null);
   const [initialSettingsSet, setInitialSettingsSet] = useState(false);
 
+  // Convert 24-hour time to 12-hour format with AM/PM
+  const convertTo12Hour = (time24: string): string => {
+    if (!time24 || !time24.includes(":")) return "";
+    const [hourStr, minuteStr] = time24.split(":");
+    const hour = parseInt(hourStr);
+    const minute = parseInt(minuteStr);
+
+    if (isNaN(hour) || isNaN(minute)) return "";
+
+    const period = hour >= 12 ? "PM" : "AM";
+    const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+
+    return `${hour12}:${minuteStr.padStart(2, "0")} ${period}`;
+  };
+
   // Remove useGoogleLogin from here. Instead, handle Google Drive backup inside GoogleDriveIntegration below.
-  // Load settings from localStorage on first render
-  if (!initialSettingsSet) {
-    const saved =
-      typeof window !== "undefined"
-        ? localStorage.getItem("backupRestoreSettings")
-        : null;
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setAutoBackup(!!parsed.autoBackup);
-        setFrequency(parsed.frequency || "");
-        setDayOfWeek(parsed.dayOfWeek || "");
-        setDayOfMonth(parsed.dayOfMonth || "");
-        setTimeOfDay(parsed.timeOfDay || "");
-        initialSettingsRef.current = {
-          autoBackup: !!parsed.autoBackup,
-          frequency: parsed.frequency || "",
-          dayOfWeek: parsed.dayOfWeek || "",
-          dayOfMonth: parsed.dayOfMonth || "",
-          timeOfDay: parsed.timeOfDay || "",
-        };
-      } catch {
-        initialSettingsRef.current = {
-          autoBackup,
-          frequency,
-          dayOfWeek,
-          dayOfMonth,
-          timeOfDay,
-        };
-      }
-    } else {
+  // Load schedule from backend on mount or when schedule changes
+  useEffect(() => {
+    if (!scheduleLoaded && schedule) {
+      setAutoBackup(!!schedule.frequency); // If frequency is set, auto-backup is enabled
+      setFrequency(schedule.frequency || "");
+      setDayOfWeek(schedule.day_of_week || "");
+      setDayOfMonth(schedule.day_of_month ? String(schedule.day_of_month) : "");
+      // Use 12-hour format if available, otherwise convert from 24-hour
+      const displayTime =
+        (schedule as any).time_of_day_12h ||
+        convertTo12Hour(schedule.time_of_day) ||
+        "";
+      setTimeOfDay(displayTime);
       initialSettingsRef.current = {
-        autoBackup,
-        frequency,
-        dayOfWeek,
-        dayOfMonth,
-        timeOfDay,
+        autoBackup: !!schedule.frequency,
+        frequency: schedule.frequency || "",
+        dayOfWeek: schedule.day_of_week || "",
+        dayOfMonth: schedule.day_of_month ? String(schedule.day_of_month) : "",
+        timeOfDay: displayTime,
       };
+      setScheduleLoaded(true);
+      setInitialSettingsSet(true);
     }
-    setInitialSettingsSet(true);
-  }
+    if (!schedule && !scheduleLoading && !scheduleLoaded) {
+      // No schedule set yet
+      setAutoBackup(false);
+      setFrequency("");
+      setDayOfWeek("");
+      setDayOfMonth("");
+      setTimeOfDay("");
+      initialSettingsRef.current = {
+        autoBackup: false,
+        frequency: "",
+        dayOfWeek: "",
+        dayOfMonth: "",
+        timeOfDay: "",
+      };
+      setScheduleLoaded(true);
+      setInitialSettingsSet(true);
+    }
+  }, [schedule, scheduleLoading, scheduleLoaded]);
 
   const { isMenuOpen, isMobile } = useNavigation();
   // Removed selectedBackup, not used in new restore logic
@@ -199,6 +224,52 @@ export default function BackupRestorePage() {
       initialSettingsRef.current.dayOfMonth !== dayOfMonth ||
       initialSettingsRef.current.timeOfDay !== timeOfDay
     );
+  };
+
+  // Save handler for all settings, including automatic backup schedule
+  const handleSave = async () => {
+    setShowSaveModal(false);
+    // Save automatic backup schedule to backend
+    if (!autoBackup) {
+      await updateBackupSchedule({
+        frequency: "",
+        day_of_week: "",
+        day_of_month: undefined,
+        time_of_day: "",
+      });
+    } else {
+      await updateBackupSchedule({
+        frequency,
+        day_of_week: frequency === "weekly" ? dayOfWeek : undefined,
+        day_of_month: frequency === "monthly" ? Number(dayOfMonth) : undefined,
+        time_of_day: timeOfDay,
+      });
+    }
+    await refresh();
+    setSaveMessage("Settings saved successfully!");
+    setTimeout(() => setSaveMessage(""), 2000);
+    // Save other settings to localStorage if needed
+    if (typeof window !== "undefined") {
+      localStorage.setItem(
+        "backupRestoreSettings",
+        JSON.stringify({
+          autoBackup,
+          frequency,
+          dayOfWeek,
+          dayOfMonth,
+          timeOfDay,
+        })
+      );
+    }
+    // Reset initial settings to current after save
+    initialSettingsRef.current = {
+      autoBackup,
+      frequency,
+      dayOfWeek,
+      dayOfMonth,
+      timeOfDay,
+    };
+    router.push(routes.settings); // Redirect to settings page after save
   };
 
   const handleSidebarNavigate = (route: string) => {
@@ -521,13 +592,30 @@ export default function BackupRestorePage() {
     setRestoreSource(null);
   };
 
-  const handleSave = () => setShowSaveModal(true);
+  const handleShowSaveModal = () => setShowSaveModal(true);
   const handleCancel = () => setShowCancelModal(true);
-  const handleConfirmSave = () => {
+  const handleConfirmSave = async () => {
     setShowSaveModal(false);
+    // Save automatic backup schedule to backend
+    if (!autoBackup) {
+      await updateBackupSchedule({
+        frequency: "",
+        day_of_week: "",
+        day_of_month: undefined,
+        time_of_day: "",
+      });
+    } else {
+      await updateBackupSchedule({
+        frequency,
+        day_of_week: frequency === "weekly" ? dayOfWeek : undefined,
+        day_of_month: frequency === "monthly" ? Number(dayOfMonth) : undefined,
+        time_of_day: timeOfDay,
+      });
+    }
+    await refresh();
     setSaveMessage("Settings saved successfully!");
     setTimeout(() => setSaveMessage(""), 2000);
-    // Save settings to localStorage
+    // Save other settings to localStorage if needed
     if (typeof window !== "undefined") {
       localStorage.setItem(
         "backupRestoreSettings",
@@ -658,6 +746,7 @@ export default function BackupRestorePage() {
           isBackingUp={isBackingUp}
           isRestoring={isRestoring}
           backupResultMsg={backupResultMsg}
+          showHistoryModal={showHistoryModal}
         />
         <ResponsiveMain>
           <main
@@ -692,7 +781,7 @@ export default function BackupRestorePage() {
                     >
                       <button
                         type="button"
-                        onClick={handleSave}
+                        onClick={handleShowSaveModal}
                         disabled={isBackingUp || isRestoring}
                         className="group flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-5 sm:px-6 py-3 sm:py-3.5 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm sm:text-base w-full sm:w-auto shadow-lg hover:shadow-yellow-400/25 order-1"
                       >
@@ -705,9 +794,7 @@ export default function BackupRestorePage() {
                         ) : (
                           <>
                             <MdSave className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform duration-300" />
-                            <span className="hidden sm:inline">
-                              Save Changes
-                            </span>
+                            <span className="hidden sm:inline">Save</span>
                             <span className="sm:hidden">Save</span>
                           </>
                         )}
@@ -795,7 +882,14 @@ export default function BackupRestorePage() {
                       style={{ accentColor: "#FFD600" }}
                       title="Enable or disable automatic backups"
                       aria-label="Enable automatic backup"
+                      disabled={scheduleLoading}
                     />
+                    {scheduleLoading && (
+                      <div className="col-span-2 text-yellow-300">
+                        Loading schedule...
+                      </div>
+                    )}
+                    {/* Save button removed; handled by main Save button above */}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 max-w-xl">
                     <div className="flex items-center">
@@ -807,7 +901,11 @@ export default function BackupRestorePage() {
                       </label>
                       <select
                         id="frequency-select"
-                        className="bg-gray-800 text-white px-3 py-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                        className={`px-3 py-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+                          !autoBackup
+                            ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+                            : "bg-gray-800 text-white"
+                        }`}
                         value={frequency}
                         onChange={(e) => setFrequency(e.target.value)}
                         disabled={!autoBackup}
@@ -828,7 +926,11 @@ export default function BackupRestorePage() {
                       </label>
                       <select
                         id="dayofweek-select"
-                        className="bg-gray-800 text-white px-3 py-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                        className={`px-3 py-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+                          !autoBackup || frequency !== "weekly"
+                            ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+                            : "bg-gray-800 text-white"
+                        }`}
                         value={dayOfWeek}
                         onChange={(e) => setDayOfWeek(e.target.value)}
                         disabled={!autoBackup || frequency !== "weekly"}
@@ -853,7 +955,11 @@ export default function BackupRestorePage() {
                       </label>
                       <select
                         id="dayofmonth-select"
-                        className="bg-gray-800 text-white px-3 py-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                        className={`px-3 py-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+                          !autoBackup || frequency !== "monthly"
+                            ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+                            : "bg-gray-800 text-white"
+                        }`}
                         value={dayOfMonth}
                         onChange={(e) => setDayOfMonth(e.target.value)}
                         disabled={!autoBackup || frequency !== "monthly"}
@@ -869,25 +975,139 @@ export default function BackupRestorePage() {
                     </div>
                     <div className="flex items-center">
                       <label
-                        className="text-yellow-100 w-40"
+                        className="text-yellow-100 w-40 pr-2"
                         htmlFor="timeofday-select"
                       >
-                        Time of Day:
+                        Time:
                       </label>
-                      <select
-                        id="timeofday-select"
-                        className="bg-gray-800 text-white px-3 py-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                        value={timeOfDay}
-                        onChange={(e) => setTimeOfDay(e.target.value)}
-                        disabled={!autoBackup}
-                        aria-disabled={!autoBackup}
-                      >
-                        <option value="">-</option>
-                        <option value="00:00">12:00 AM</option>
-                        <option value="06:00">6:00 AM</option>
-                        <option value="12:00">12:00 PM</option>
-                        <option value="18:00">6:00 PM</option>
-                      </select>
+                      {/* 12-hour time selection: hour, minute, AM/PM */}
+                      <div className="flex gap-2 items-center w-full">
+                        <select
+                          id="timeofday-hour"
+                          className={`px-2 py-2 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+                            !autoBackup
+                              ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+                              : "bg-gray-800 text-white"
+                          }`}
+                          value={(() => {
+                            const m = timeOfDay.match(/^(\d{1,2}):/);
+                            return m ? m[1] : "";
+                          })()}
+                          onChange={(e) => {
+                            const hour = e.target.value;
+                            const min = (() => {
+                              const m = timeOfDay.match(/:(\d{2})/);
+                              return m ? m[1] : "00";
+                            })();
+                            const ampm = /PM$/i.test(timeOfDay) ? "PM" : "AM";
+                            setTimeOfDay(hour ? `${hour}:${min} ${ampm}` : "");
+                          }}
+                          disabled={!autoBackup}
+                          aria-disabled={!autoBackup}
+                        >
+                          <option value="">-</option>
+                          {[...Array(12)].map((_, i) => (
+                            <option key={i + 1} value={i + 1}>
+                              {i + 1}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-yellow-100">:</span>
+                        <select
+                          id="timeofday-minute"
+                          className={`px-2 py-2 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+                            !autoBackup
+                              ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+                              : "bg-gray-800 text-white"
+                          }`}
+                          value={(() => {
+                            const m = timeOfDay.match(/:(\d{2})/);
+                            return m ? m[1] : "00";
+                          })()}
+                          onChange={(e) => {
+                            const min = e.target.value;
+                            const hour = (() => {
+                              const m = timeOfDay.match(/^(\d{1,2}):/);
+                              return m ? m[1] : "12";
+                            })();
+                            const ampm = /PM$/i.test(timeOfDay) ? "PM" : "AM";
+                            setTimeOfDay(`${hour}:${min} ${ampm}`);
+                          }}
+                          disabled={!autoBackup}
+                          aria-disabled={!autoBackup}
+                        >
+                          {[...Array(60)].map((_, i) => (
+                            <option
+                              key={i}
+                              value={i.toString().padStart(2, "0")}
+                            >
+                              {i.toString().padStart(2, "0")}
+                            </option>
+                          ))}
+                        </select>
+                        <label
+                          className={`ml-2 flex items-center gap-1 ${
+                            !autoBackup ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="timeofday-ampm"
+                            value="AM"
+                            checked={/AM$/i.test(timeOfDay)}
+                            onChange={() => {
+                              const hour = (() => {
+                                const m = timeOfDay.match(/^(\d{1,2}):/);
+                                return m ? m[1] : "12";
+                              })();
+                              const min = (() => {
+                                const m = timeOfDay.match(/:(\d{2})/);
+                                return m ? m[1] : "00";
+                              })();
+                              setTimeOfDay(`${hour}:${min} AM`);
+                            }}
+                            disabled={!autoBackup}
+                          />
+                          <span
+                            className={
+                              !autoBackup ? "text-gray-400" : "text-yellow-100"
+                            }
+                          >
+                            AM
+                          </span>
+                        </label>
+                        <label
+                          className={`flex items-center gap-1 ${
+                            !autoBackup ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="timeofday-ampm"
+                            value="PM"
+                            checked={/PM$/i.test(timeOfDay)}
+                            onChange={() => {
+                              const hour = (() => {
+                                const m = timeOfDay.match(/^(\d{1,2}):/);
+                                return m ? m[1] : "12";
+                              })();
+                              const min = (() => {
+                                const m = timeOfDay.match(/:(\d{2})/);
+                                return m ? m[1] : "00";
+                              })();
+                              setTimeOfDay(`${hour}:${min} PM`);
+                            }}
+                            disabled={!autoBackup}
+                          />
+                          <span
+                            className={
+                              !autoBackup ? "text-gray-400" : "text-yellow-100"
+                            }
+                          >
+                            PM
+                          </span>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -952,137 +1172,11 @@ export default function BackupRestorePage() {
                       Backup History
                     </button>
                   </div>
-                  {/* Backup History Modal */}
-                  {showHistoryModal && (
-                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
-                      <div className="bg-black p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-4xl w-full border-2 border-yellow-400">
-                        <div className="flex items-center justify-between mb-2">
-                          <h2 className="text-3xl font-bold text-yellow-400 font-poppins">
-                            Backup History
-                          </h2>
-                          <button
-                            className="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-2 rounded-xl font-semibold ml-4"
-                            onClick={() => setShowHistoryModal(false)}
-                            disabled={isRestoring}
-                          >
-                            Back
-                          </button>
-                        </div>
-                        <hr className="border-yellow-400 border-t-2 mb-4" />
-                        <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
-                          <input
-                            type="text"
-                            className="bg-gray-900 text-white px-4 py-2 rounded w-64 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                            placeholder="Search"
-                            value={historySearch}
-                            onChange={(e) => setHistorySearch(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleHistorySearch();
-                            }}
-                          />
-                          <input
-                            type="date"
-                            className="bg-gray-900 text-white px-4 py-2 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                            value={historyDate}
-                            onChange={(e) => setHistoryDate(e.target.value)}
-                          />
-                          <button
-                            className="text-yellow-400 underline text-sm ml-2"
-                            onClick={handleClearHistoryFilters}
-                            disabled={isRestoring}
-                          >
-                            [Clear Filter]
-                          </button>
-                          <button
-                            className="bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-2 rounded font-semibold ml-2"
-                            onClick={handleHistorySearch}
-                            disabled={isRestoring}
-                          >
-                            Search
-                          </button>
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full text-left text-sm text-gray-200 border border-yellow-400">
-                            <thead>
-                              <tr className="bg-gray-900">
-                                <th className="px-4 py-2 text-yellow-300">
-                                  Backup Time
-                                </th>
-                                <th className="px-4 py-2 text-yellow-300">
-                                  Backup Size
-                                </th>
-                                <th className="px-4 py-2 text-yellow-300">
-                                  Action
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {backupHistory.length === 0 ? (
-                                <tr>
-                                  <td
-                                    colSpan={3}
-                                    className="px-4 py-4 text-center text-gray-400"
-                                  >
-                                    No backup history found.
-                                  </td>
-                                </tr>
-                              ) : (
-                                backupHistory.map((history) => (
-                                  <tr
-                                    key={history.id}
-                                    className="border-b border-yellow-400/30"
-                                  >
-                                    <td className="px-4 py-2">
-                                      {new Date(
-                                        history.created_at
-                                      ).toLocaleString("en-US", {
-                                        month: "long",
-                                        day: "numeric",
-                                        year: "numeric",
-                                        hour: "numeric",
-                                        minute: "2-digit",
-                                        second: "2-digit",
-                                        hour12: true,
-                                      })}
-                                    </td>
-                                    <td className="px-4 py-2">
-                                      {history.size
-                                        ? formatSize(history.size)
-                                        : "-"}
-                                    </td>
-                                    <td className="px-4 py-2">
-                                      <button
-                                        className="bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-1 rounded font-semibold mr-2"
-                                        onClick={() =>
-                                          handleHistoryRestore(history)
-                                        }
-                                        disabled={isRestoring}
-                                      >
-                                        Restore
-                                      </button>
-                                      <button
-                                        className="bg-gray-700 hover:bg-gray-600 text-yellow-300 px-4 py-1 rounded font-semibold"
-                                        onClick={() =>
-                                          alert("Archive not implemented")
-                                        }
-                                        disabled={isRestoring}
-                                      >
-                                        Archive
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </section>
               </article>
             </div>
           </main>
+
           {saveMessage && (
             <div
               className="mt-8 text-green-400 text-center font-semibold animate-fade-in"
@@ -1091,6 +1185,172 @@ export default function BackupRestorePage() {
               aria-live="polite"
             >
               {saveMessage}
+            </div>
+          )}
+
+          {/* Backup History Modal */}
+          {showHistoryModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 px-4">
+              <div className="bg-gradient-to-br from-gray-900/95 to-black/95 p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-5xl w-full border-2 border-yellow-400 relative">
+                {/* Close Button (top right) */}
+                <button
+                  className="absolute top-4 right-4 bg-yellow-400 hover:bg-yellow-300 text-black px-3 py-1.5 rounded-full font-bold text-lg shadow transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                  onClick={() => setShowHistoryModal(false)}
+                  aria-label="Close Backup History"
+                  disabled={isRestoring}
+                >
+                  &times;
+                </button>
+                <div className="flex flex-col sm:flex-row items-center justify-between mb-2 gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-yellow-400/20 rounded-full blur-lg"></div>
+                      <div className="relative bg-gradient-to-br from-yellow-400 to-yellow-500 p-2 rounded-full">
+                        <FaDatabase className="text-black text-2xl" />
+                      </div>
+                    </div>
+                    <h2 className="text-3xl font-bold text-transparent bg-gradient-to-r from-yellow-400 to-yellow-500 bg-clip-text font-poppins">
+                      Backup History
+                    </h2>
+                  </div>
+                  <div className="flex gap-2"></div>
+                </div>
+                <hr className="border-yellow-400 border-t-2 mb-4" />
+                {/* Filters */}
+                <div className="flex flex-col sm:flex-row items-center gap-4 mb-6 justify-center">
+                  <input
+                    type="text"
+                    className="bg-gray-900 text-white px-4 py-2 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all duration-200 border border-yellow-400/30 focus:border-yellow-400"
+                    placeholder="Search by description..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleHistorySearch();
+                    }}
+                  />
+                  <input
+                    type="date"
+                    className="bg-gray-900 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400 border border-yellow-400/30 focus:border-yellow-400 transition-all duration-200"
+                    value={historyDate}
+                    onChange={(e) => setHistoryDate(e.target.value)}
+                  />
+                  <button
+                    className="text-yellow-400 underline text-sm ml-2 hover:text-yellow-300 transition-all duration-200"
+                    onClick={handleClearHistoryFilters}
+                    disabled={isRestoring}
+                  >
+                    [Clear Filter]
+                  </button>
+                  <button
+                    className="bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-2 rounded-lg font-semibold ml-2 shadow transition-all duration-200"
+                    onClick={handleHistorySearch}
+                    disabled={isRestoring}
+                  >
+                    Search
+                  </button>
+                </div>
+                {/* Table */}
+                <div className="overflow-x-auto rounded-xl border border-yellow-400/40 shadow-inner">
+                  <table className="min-w-full text-left text-sm text-gray-200">
+                    <thead>
+                      <tr className="bg-gradient-to-r from-yellow-400/10 to-yellow-500/10">
+                        <th className="px-4 py-3 text-yellow-300 font-semibold">
+                          Backup Time
+                        </th>
+                        <th className="px-4 py-3 text-yellow-300 font-semibold">
+                          Description
+                        </th>
+                        <th className="px-4 py-3 text-yellow-300 font-semibold">
+                          Backup Size
+                        </th>
+                        <th className="px-4 py-3 text-yellow-300 font-semibold">
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {backupHistory.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="px-4 py-6 text-center text-gray-400"
+                          >
+                            <span className="text-lg">
+                              ⚠️ The Backup History is still in development
+                            </span>
+                          </td>
+                        </tr>
+                      ) : (
+                        backupHistory.map((history, idx) => (
+                          <tr
+                            key={history.id}
+                            className={`border-b border-yellow-400/20 ${
+                              idx % 2 === 0 ? "bg-gray-900/60" : "bg-black/40"
+                            } hover:bg-yellow-400/10 transition-all duration-150`}
+                          >
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className="font-semibold text-yellow-200">
+                                {new Date(history.created_at).toLocaleString(
+                                  "en-US",
+                                  {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                    second: "2-digit",
+                                    hour12: true,
+                                  }
+                                )}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 max-w-xs truncate">
+                              <span className="text-yellow-100">
+                                {history.description || (
+                                  <span className="italic text-gray-400">
+                                    No description
+                                  </span>
+                                )}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className="text-yellow-300 font-mono">
+                                {history.size ? formatSize(history.size) : "-"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 flex gap-2">
+                              <button
+                                className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 py-1.5 rounded-lg font-semibold shadow transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                                onClick={() => handleHistoryRestore(history)}
+                                disabled={isRestoring}
+                                title="Restore this backup"
+                              >
+                                Restore
+                              </button>
+                              <button
+                                className="bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-600 hover:to-gray-700 text-yellow-300 px-4 py-1.5 rounded-lg font-semibold shadow transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                                onClick={() => alert("Archive not implemented")}
+                                disabled={isRestoring}
+                                title="Archive this backup (not implemented)"
+                              >
+                                Archive
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-4 text-xs text-gray-400 text-left">
+                  <span className="block">
+                    <b>Tip:</b> You can search by description or filter by date.
+                    Restoring a backup will{" "}
+                    <span className="text-red-400 font-bold">overwrite</span>{" "}
+                    your current data.
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1155,6 +1415,7 @@ export default function BackupRestorePage() {
               </div>
             </div>
           )}
+
           {/* Unsaved Changes Modal */}
           {showUnsavedModal && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -1186,6 +1447,7 @@ export default function BackupRestorePage() {
               </div>
             </div>
           )}
+
           {/* Password Modal */}
           {showPasswordModal && (
             <PasswordModal
@@ -1223,6 +1485,7 @@ export default function BackupRestorePage() {
               }}
             />
           )}
+
           {/* Enhanced Backup Choice Modal */}
           {showPopup && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">

@@ -86,11 +86,22 @@ const GoogleSheetIntegration = ({
 };
 
 export default function ReportInventory() {
+  const [reportDate, setReportDate] = useState("");
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const { user } = useAuth();
   const [pastInventory, setPastInventory] = useState<InventoryItem[]>([]);
+  // ...existing state...
+
+  // Unique normalized report dates for dropdown
+  // Unique normalized report dates for dropdown
+  const uniqueReportDates = useMemo(() => {
+    const dates = [...inventory, ...pastInventory]
+      .map((item) => item.report_date)
+      .filter((date) => !!date)
+      .map((date) => dayjs(date).format("YYYY-MM-DD"));
+    return [...new Set(dates)];
+  }, [inventory, pastInventory]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [reportDate, setReportDate] = useState("");
   const [showPopup, setShowPopup] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -113,20 +124,16 @@ export default function ReportInventory() {
         // Always display master inventory for today
         const masterRes = await axiosInstance.get("/api/inventory");
         const masterInventory = masterRes.data;
-        console.log("masterInventory from /api/inventory:", masterInventory);
-
         setInventory(
           masterInventory.map((item: any) => {
-            // Use created_at as the batch date since it's available
             const batchDate = item.created_at;
-
             return {
               id: item.item_id || item.id,
               name: item.item_name || item.name,
               inStock: today < item.expiration_date ? item.stock_quantity : 0,
               wastage: today >= item.expiration_date ? item.stock_quantity : 0,
               stock: item.stock_status,
-              report_date: today,
+              report_date: typeof today === "string" ? today : String(today),
               category: item.category,
               expiration_date: item.expiration_date,
               batch_id: batchDate
@@ -138,10 +145,6 @@ export default function ReportInventory() {
         );
         // Only save today's log if it does not already exist
         if (!logs || logs.length === 0) {
-          console.log("masterInventory items for logEntries:");
-          masterInventory.forEach((item: any, idx: number) => {
-            console.log(`Item[${idx}]:`, item);
-          });
           if (!user || !user.user_id) {
             console.error(
               "Cannot save logs: user_id is missing from AuthContext user object."
@@ -164,7 +167,6 @@ export default function ReportInventory() {
                   ? parseInt(item.stock_quantity, 10)
                   : 0,
             }));
-          console.log("logEntries to be saved:", logEntries);
           try {
             await saveLogs(logEntries);
           } catch (err: any) {
@@ -178,8 +180,6 @@ export default function ReportInventory() {
               console.error("saveLogs error:", err);
             }
           }
-        } else {
-          console.log("Today's log already exists, not saving.", logs);
         }
       } catch (error) {
         console.error("Error fetching inventory:", error);
@@ -189,41 +189,7 @@ export default function ReportInventory() {
   }, [fetchLogs, saveLogs, user]);
 
   // Fetch past inventory log when date is filtered
-  useEffect(() => {
-    async function loadPast() {
-      if (reportDate) {
-        try {
-          const logs = await fetchLogs(reportDate);
-          setPastInventory(
-            logs.map((item: any) => {
-              // Use created_at as the batch date
-              const batchDate = item.created_at;
-
-              return {
-                id: item.item_id || item.id,
-                name: item.item_name || item.name,
-                inStock: item.remaining_stock,
-                wastage: item.action_quantity ?? 0,
-                stock: item.action_type,
-                report_date: item.action_date ?? "",
-                category: item.category,
-                expiration_date: item.expiration_date,
-                batch_id: batchDate
-                  ? new Date(batchDate).toLocaleDateString()
-                  : `Batch-${item.item_id || "Unknown"}`,
-                created_at: item.created_at,
-              };
-            })
-          );
-        } catch (error) {
-          console.error("Error fetching past inventory:", error);
-        }
-      } else {
-        setPastInventory([]);
-      }
-    }
-    loadPast();
-  }, [reportDate, fetchLogs]);
+  // No more reportDate filter, so remove loadPast effect
 
   const matchesPeriod = useCallback(
     (dateStr: string) => {
@@ -246,16 +212,12 @@ export default function ReportInventory() {
 
   // Choose data source based on filter
   const dataSource = useMemo(() => {
-    if (reportDate) {
-      // Filter pastInventory by selected date
-      return pastInventory.filter((item) => item.report_date === reportDate);
-    }
     // For "weekly", "monthly", "yearly", use current inventory
     if (period !== "all") {
       return inventory.filter((item) => matchesPeriod(item.report_date));
     }
     return inventory;
-  }, [inventory, pastInventory, reportDate, period, matchesPeriod]);
+  }, [inventory, pastInventory, period, matchesPeriod]);
 
   const dates = useMemo(
     () =>
@@ -265,20 +227,56 @@ export default function ReportInventory() {
     [inventory, pastInventory]
   );
 
+  // Filter helpers
+  const filterByCategory = (item: InventoryItem, category: string) => {
+    if (!category) return true;
+    return item.category === category;
+  };
+
+  const filterByReportDate = (item: InventoryItem, reportDate: string) => {
+    if (!reportDate) return true;
+    return item.report_date === reportDate;
+  };
+
+  const filterByPeriod = (item: InventoryItem, period: string) => {
+    if (!period || period === "all") return true;
+    if (!item.report_date) return true;
+    const today = new Date();
+    const itemDate = new Date(item.report_date);
+    if (period === "weekly") {
+      const weekAgo = new Date(today);
+      weekAgo.setDate(today.getDate() - 7);
+      return itemDate >= weekAgo && itemDate <= today;
+    }
+    if (period === "monthly") {
+      return (
+        itemDate.getFullYear() === today.getFullYear() &&
+        itemDate.getMonth() === today.getMonth()
+      );
+    }
+    if (period === "yearly") {
+      return itemDate.getFullYear() === today.getFullYear();
+    }
+    return true;
+  };
+
   const filtered = useMemo(() => {
     return dataSource.filter((item) => {
-      const matchesCategory = categoryFilter
-        ? item.category === categoryFilter
-        : true;
+      const matchesCategory = filterByCategory(item, categoryFilter);
+      // Always filter by report_date column value
+      const matchesReportDate = true; // Always return true for report date
+      const matchesPeriod = filterByPeriod(item, period);
       const matchesSearch = searchQuery
         ? Object.values(item)
             .join(" ")
             .toLowerCase()
             .includes(searchQuery.toLowerCase())
         : true;
-      return matchesCategory && matchesSearch;
+      return (
+        matchesCategory && matchesReportDate && matchesPeriod && matchesSearch
+      );
     });
-  }, [dataSource, searchQuery, categoryFilter]);
+  }, [dataSource, searchQuery, categoryFilter, period, pastInventory]);
 
   const excelValues = useMemo(
     () => [
@@ -369,7 +367,6 @@ export default function ReportInventory() {
   const handleClear = () => {
     setSearchQuery("");
     setCategoryFilter("");
-    setReportDate("");
     setPeriod("all");
     setSortConfig({ key: "", direction: "asc" });
   };
@@ -382,9 +379,7 @@ export default function ReportInventory() {
     setCategoryFilter("");
   };
 
-  const clearDate = () => {
-    setReportDate("");
-  };
+  // clearDate removed (no reportDate)
 
   const clearPeriod = () => {
     setPeriod("all");
@@ -427,6 +422,9 @@ export default function ReportInventory() {
     setExportSuccess(false);
     setShowPopup(false);
   };
+
+  // Filter inventory by selected date (normalized)
+  // (removed duplicate filteredInventory logic)
 
   return (
     <GoogleOAuthProvider clientId={CLIENT_ID}>
@@ -650,50 +648,19 @@ export default function ReportInventory() {
                   <div className="bg-gray-800/30 backdrop-blur-sm rounded-lg 2xs:rounded-xl p-2 2xs:p-3 xs:p-4 border border-gray-700/50">
                     <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2 2xs:gap-3 xs:gap-4">
                       <div>
-                        <label className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-gray-300 text-2xs 2xs:text-xs xs:text-sm font-medium mb-1 2xs:mb-2">
-                          <FaBoxes className="text-blue-400 text-2xs 2xs:text-xs flex-shrink-0" />
-                          <span className="truncate">Category Filter</span>
-                        </label>
-                        <select
-                          value={categoryFilter}
-                          onChange={(e) => setCategoryFilter(e.target.value)}
-                          className="w-full bg-gray-700/50 text-white rounded-md 2xs:rounded-lg px-2 2xs:px-3 py-2 2xs:py-3 border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 cursor-pointer text-2xs 2xs:text-xs xs:text-sm transition-all min-h-[36px] 2xs:min-h-[40px] xs:min-h-[44px] touch-manipulation"
-                        >
-                          <option value="">All Categories</option>
-                          {[
-                            ...new Set(
-                              [...inventory, ...pastInventory].map(
-                                (i) => i.category
-                              )
-                            ),
-                          ]
-                            .filter(Boolean)
-                            .map((cat) => (
-                              <option key={cat} value={cat}>
-                                {cat}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-gray-300 text-2xs 2xs:text-xs xs:text-sm font-medium mb-1 2xs:mb-2">
-                          <FaCalendarAlt className="text-blue-400 text-2xs 2xs:text-xs flex-shrink-0" />
-                          <span className="truncate">Report Date</span>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
+                          Date
                         </label>
                         <select
                           value={reportDate}
                           onChange={(e) => setReportDate(e.target.value)}
-                          className="w-full bg-gray-700/50 text-white rounded-md 2xs:rounded-lg px-2 2xs:px-3 py-2 2xs:py-3 border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 cursor-pointer text-2xs 2xs:text-xs xs:text-sm transition-all min-h-[36px] 2xs:min-h-[40px] xs:min-h-[44px] touch-manipulation"
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 cursor-pointer text-2xs xs:text-xs sm:text-sm transition-all"
+                          aria-label="Filter by date"
                         >
                           <option value="">All Dates</option>
-                          {dates.map((d) => (
-                            <option key={d} value={d}>
-                              {new Date(d).toLocaleDateString("en-CA", {
-                                year: "numeric",
-                                month: "2-digit",
-                                day: "2-digit",
-                              })}
+                          {uniqueReportDates.map((date) => (
+                            <option key={date} value={date}>
+                              {date ? dayjs(date).format("MMMM D, YYYY") : ""}
                             </option>
                           ))}
                         </select>
@@ -720,7 +687,6 @@ export default function ReportInventory() {
                     {/* Clear All Button inside filter controls */}
                     {(searchQuery ||
                       categoryFilter ||
-                      reportDate ||
                       period !== "all" ||
                       sortConfig.key !== "") && (
                       <div className="mt-2 2xs:mt-3 xs:mt-4 pt-2 2xs:pt-3 xs:pt-4 border-t border-gray-700/30">
@@ -744,7 +710,6 @@ export default function ReportInventory() {
                         </span>
                         {!searchQuery &&
                         !categoryFilter &&
-                        !reportDate &&
                         period === "all" &&
                         sortConfig.key === "" ? (
                           <span className="text-gray-500 italic">None</span>
@@ -773,18 +738,6 @@ export default function ReportInventory() {
                                   onClick={clearCategory}
                                   className="text-purple-300 hover:text-white transition-colors text-xs 2xs:text-sm touch-manipulation flex-shrink-0"
                                   title="Clear category filter"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            )}
-                            {reportDate && (
-                              <div className="flex items-center gap-1 bg-green-500/20 text-green-400 px-2 py-1 rounded-md border border-green-500/30">
-                                <span>Date: {reportDate}</span>
-                                <button
-                                  onClick={clearDate}
-                                  className="text-green-300 hover:text-white transition-colors ml-1"
-                                  title="Clear date filter"
                                 >
                                   ✕
                                 </button>
@@ -844,7 +797,7 @@ export default function ReportInventory() {
                       ) : (
                         sortedData.map((item, index) => (
                           <div
-                            key={item.id ? item.id : `${item.name}-${index}`}
+                            key={`${item.id ?? "noid"}-${index}`}
                             className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded p-1.5 border border-gray-700/30 fold-compact"
                           >
                             <div className="flex justify-between items-start gap-1 mb-1">
@@ -852,7 +805,10 @@ export default function ReportInventory() {
                                 className="text-white font-semibold text-2xs truncate flex-1"
                                 title={item.name}
                               >
-                                {item.name.substring(0, 10)}...
+                                {typeof item.name === "string"
+                                  ? item.name.substring(0, 10)
+                                  : String(item.name).substring(0, 10)}
+                                ...
                               </span>
                               <span
                                 className={`text-2xs font-bold ${
@@ -892,7 +848,7 @@ export default function ReportInventory() {
                       ) : (
                         sortedData.map((item, index) => (
                           <div
-                            key={item.id ? item.id : `${item.name}-${index}`}
+                            key={`${item.id ?? "noid"}-${index}`}
                             className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded-lg p-2 border border-gray-700/30 xs-compact"
                           >
                             <div className="flex justify-between items-start gap-2 mb-2">
@@ -984,7 +940,7 @@ export default function ReportInventory() {
                       ) : (
                         sortedData.map((item, index) => (
                           <div
-                            key={item.id ? item.id : `${item.name}-${index}`}
+                            key={`${item.id ?? "noid"}-${index}`}
                             className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-lg xs:rounded-xl p-2 xs:p-3 border border-gray-700/30 hover:border-blue-500/30 transition-all duration-200 touch-manipulation responsive-card"
                           >
                             <div className="flex items-start justify-between mb-2 gap-2">
@@ -1113,7 +1069,7 @@ export default function ReportInventory() {
                         ) : (
                           sortedData.map((item, index) => (
                             <tr
-                              key={item.id ? item.id : `${item.name}-${index}`}
+                              key={`${item.id ?? "noid"}-${index}`}
                               className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-blue-400/5 hover:to-blue-500/5 transition-all duration-200 cursor-pointer ${
                                 index % 2 === 0
                                   ? "bg-gray-800/20"
@@ -1243,9 +1199,7 @@ export default function ReportInventory() {
                             });
                             return (
                               <tr
-                                key={
-                                  item.id ? item.id : `${item.name}-${index}`
-                                }
+                                key={`${item.id ?? "noid"}-${index}`}
                                 className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-blue-400/5 hover:to-blue-500/5 transition-all duration-200 cursor-pointer ${
                                   index % 2 === 0
                                     ? "bg-gray-800/20"
@@ -1419,7 +1373,7 @@ export default function ReportInventory() {
                       ) : (
                         sortedData.map((item, index) => (
                           <div
-                            key={item.id ? item.id : `${item.name}-${index}`}
+                            key={`${item.id ?? "noid"}-${index}`}
                             className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-xl p-4 border border-gray-700/30 hover:border-blue-500/30 transition-all duration-200 touch-manipulation"
                           >
                             {/* Card Header */}

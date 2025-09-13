@@ -283,7 +283,7 @@ export default function NotificationSettings() {
                       ) : (
                         <>
                           <MdSave className="material-icons w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform duration-300" />
-                          <span className="hidden sm:inline">Save Changes</span>
+                          <span className="hidden sm:inline">Save</span>
                           <span className="sm:hidden">Save</span>
                         </>
                       )}

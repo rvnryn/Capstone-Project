@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useDashboardAPI } from "./hook/use-dashboardAPI";
-import axios from "@/app/lib/axios";
+import { useSalesPrediction } from "./hook/useSalesPrediction";
 import Chart from "chart.js/auto";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
@@ -20,76 +20,32 @@ import { HiSparkles } from "react-icons/hi";
 
 export default function Dashboard() {
   const topSalesCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [TopSalesData, setTopSalesData] = useState<any[]>([]);
-  const [filterType, setFilterType] = useState<
-    "daily" | "weekly" | "monthly" | "yearly"
-  >("daily");
+  const [filterType, setFilterType] = useState<"daily" | "weekly" | "monthly">(
+    "daily"
+  );
+  const [topItemsCount, setTopItemsCount] = useState(6); // State for number of items to show
+  const {
+    data: TopSalesData,
+    loading: isLoading,
+    error: topSalesError,
+    fetchSalesPrediction,
+  } = useSalesPrediction();
   const [lowStockIngredients, setLowStockIngredients] = useState<any[]>([]);
   const [expiringIngredients, setExpiringIngredients] = useState<any[]>([]);
   const { fetchLowStock, fetchExpiring, fetchSurplus } = useDashboardAPI();
   const [surplusIngredients, setSurplusIngredients] = useState<any[]>([]);
 
-  // ✨ ULTRA SIMPLE PWA - No complex dependencies
   const { isOnline } = usePWA();
 
-  // ✨ SIMPLE: Manual data fetching with basic cache
+  // Fetch on filter change and every 60 seconds for real-time updates
   useEffect(() => {
-    let isMounted = true;
+    fetchSalesPrediction(filterType, topItemsCount);
+    const interval = setInterval(() => {
+      fetchSalesPrediction(filterType, topItemsCount);
+    }, 60000); // 60 seconds
+    return () => clearInterval(interval);
+  }, [filterType, topItemsCount, fetchSalesPrediction]);
 
-    const fetchTopSalesData = async () => {
-      if (!isMounted) return;
-
-      console.log("🔄 Fetching top sales data for filterType:", filterType);
-
-      try {
-        const response = await axios.get(
-          `/api/predict_top_sales?timeframe=${filterType}`
-        );
-        console.log("✅ Top sales response:", response.data);
-
-        if (isMounted) {
-          setTopSalesData(response.data);
-          setIsLoading(false);
-
-          // Simple cache
-          localStorage.setItem(
-            "top-sales-cache",
-            JSON.stringify({
-              data: response.data,
-              timestamp: Date.now(),
-              filterType,
-            })
-          );
-        }
-      } catch (error) {
-        console.error("❌ Failed to fetch top sales:", error);
-
-        if (isMounted) {
-          // Try cache
-          const cached = localStorage.getItem("top-sales-cache");
-          if (cached) {
-            try {
-              const { data } = JSON.parse(cached);
-              console.log("📦 Using cached top sales data:", data);
-              setTopSalesData(data || []);
-            } catch (e) {
-              console.error("Cache parse error:", e);
-            }
-          }
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchTopSalesData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [filterType]); // Only filterType dependency
-
-  // ✨ SIMPLE: Inventory data fetching
   useEffect(() => {
     let isMounted = true;
 
@@ -154,13 +110,26 @@ export default function Dashboard() {
     return () => {
       isMounted = false;
     };
-  }, []); // No dependencies to prevent loops
+  }, []);
 
   useEffect(() => {
-    if (isLoading || !TopSalesData.length) return;
+    console.log(
+      "[DEBUG] Chart effect triggered. isLoading:",
+      isLoading,
+      "TopSalesData:",
+      TopSalesData
+    );
+
+    if (isLoading || !TopSalesData.length) {
+      console.log("[DEBUG] Skipping chart creation - loading or no data");
+      return;
+    }
 
     const canvas = topSalesCanvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      console.log("[DEBUG] No canvas found");
+      return;
+    }
 
     // Destroy existing chart before creating new one
     const existingChart = Chart.getChart(canvas);
@@ -171,23 +140,29 @@ export default function Dashboard() {
     let chart: Chart | null = null;
 
     try {
+      // Use bar chart for daily, line for weekly/monthly
+      const chartType = filterType === "daily" ? "bar" : "line";
       chart = new Chart(canvas, {
-        type: "line",
+        type: chartType,
         data: {
           labels: TopSalesData[0]?.week ?? [],
           datasets: TopSalesData.map((trend: any) => ({
             label: trend.name,
             data: trend.sales,
             borderColor: trend.color,
-            backgroundColor: trend.color + "33",
+            backgroundColor:
+              chartType === "bar" ? trend.color + "BB" : trend.color + "33",
             borderWidth: 3,
-            tension: 0.4,
-            fill: { target: "origin", above: trend.color + "20" },
-            pointRadius: 4,
-            pointHoverRadius: 6,
+            tension: chartType === "line" ? 0.4 : 0,
+            fill:
+              chartType === "line"
+                ? { target: "origin", above: trend.color + "20" }
+                : false,
+            pointRadius: chartType === "line" ? 4 : 0,
+            pointHoverRadius: chartType === "line" ? 6 : 0,
             pointBackgroundColor: trend.color,
             pointBorderColor: "#fff",
-            pointBorderWidth: 2,
+            pointBorderWidth: chartType === "line" ? 2 : 0,
           })),
         },
         options: {
@@ -204,12 +179,23 @@ export default function Dashboard() {
             legend: {
               display: true,
               position: "top",
+              align: "start",
+              maxHeight: 100,
               labels: {
                 color: "#fff",
-                font: { size: 13, weight: 500 },
-                padding: 20,
+                font: { size: 12, weight: 500 },
+                padding: 15,
                 usePointStyle: true,
                 pointStyle: "circle",
+                boxWidth: 12,
+                boxHeight: 12,
+                generateLabels: function (chart: any) {
+                  const original =
+                    Chart.defaults.plugins.legend.labels.generateLabels;
+                  const labels = original.call(this, chart);
+                  console.log("[DEBUG] Legend labels:", labels);
+                  return labels;
+                },
               },
             },
             tooltip: {
@@ -272,20 +258,37 @@ export default function Dashboard() {
   }, [TopSalesData, isLoading]); // Removed isLoading from dependencies to prevent double renders
 
   const renderFilterButtons = () => (
-    <div className="flex flex-wrap gap-1 sm:gap-2">
-      {["daily", "weekly", "monthly"].map((type) => (
-        <button
-          key={type}
-          onClick={() => setFilterType(type as "daily" | "weekly" | "monthly")}
-          className={`text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-all duration-200 ${
-            filterType === type
-              ? "bg-yellow-400 text-black shadow-lg shadow-yellow-400/30"
-              : "text-gray-300 hover:text-white hover:bg-gray-700/50 border border-gray-600"
-          }`}
+    <div className="flex flex-wrap gap-2 items-center">
+      <div className="flex flex-wrap gap-1 sm:gap-2">
+        {["daily", "weekly", "monthly"].map((type) => (
+          <button
+            key={type}
+            onClick={() =>
+              setFilterType(type as "daily" | "weekly" | "monthly")
+            }
+            className={`text-xs sm:text-sm font-semibold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-all duration-200 ${
+              filterType === type
+                ? "bg-yellow-400 text-black shadow-lg shadow-yellow-400/30"
+                : "text-gray-300 hover:text-white hover:bg-gray-700/50 border border-gray-600"
+            }`}
+          >
+            {type.charAt(0).toUpperCase() + type.slice(1)}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 ml-4">
+        <label className="text-gray-300 text-xs sm:text-sm">Items:</label>
+        <select
+          value={topItemsCount}
+          onChange={(e) => setTopItemsCount(Number(e.target.value))}
+          className="bg-gray-700 text-white text-xs sm:text-sm px-2 py-1 rounded border border-gray-600 focus:border-yellow-400 focus:outline-none"
         >
-          {type.charAt(0).toUpperCase() + type.slice(1)}
-        </button>
-      ))}
+          <option value={3}>Top 3</option>
+          <option value={5}>Top 5</option>
+          <option value={6}>All 6</option>
+          <option value={10}>Top 10</option>
+        </select>
+      </div>
     </div>
   );
 
@@ -429,7 +432,7 @@ export default function Dashboard() {
                     </div>
                     {renderFilterButtons()}
                   </header>
-                  <div className="w-full h-48 xs:h-56 sm:h-64 md:h-72 lg:h-80 xl:h-96 p-2 sm:p-3 lg:p-4 bg-gray-900/50 rounded-xl border border-gray-700">
+                  <div className="w-full h-56 xs:h-64 sm:h-72 md:h-80 lg:h-88 xl:h-[28rem] p-2 sm:p-3 lg:p-4 bg-gray-900/50 rounded-xl border border-gray-700">
                     {isLoading ? (
                       <div className="w-full h-full flex items-center justify-center">
                         <div className="animate-pulse text-center">
@@ -672,11 +675,16 @@ export default function Dashboard() {
                         >
                           <div className="flex justify-between items-center">
                             <div className="min-w-0 flex-1">
-                                <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                <span className="text-yellow-300 font-semibold">ID:</span> {item.item_id}
+                              <p className="font-medium text-white text-xs sm:text-sm truncate">
+                                <span className="text-yellow-300 font-semibold">
+                                  ID:
+                                </span>{" "}
+                                {item.item_id}
                                 <span className="mx-1 text-gray-400">|</span>
-                                <span className="font-semibold">{item.item_name}</span>
-                                </p>
+                                <span className="font-semibold">
+                                  {item.item_name}
+                                </span>
+                              </p>
                               <p className="text-yellow-300 text-xs">
                                 Stock: {item.stock_quantity}
                               </p>

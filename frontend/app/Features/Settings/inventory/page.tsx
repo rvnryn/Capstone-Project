@@ -230,7 +230,7 @@ export default function InventorySettings() {
                       className="group flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-5 sm:px-6 py-3 sm:py-3.5 rounded-xl font-semibold transition-all duration-300 cursor-pointer text-sm sm:text-base w-full sm:w-auto shadow-lg hover:shadow-yellow-400/25 order-1"
                     >
                       <MdSave className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform duration-300" />
-                      <span className="hidden sm:inline">Save Changes</span>
+                      <span className="hidden sm:inline">Save</span>
                       <span className="sm:hidden">Save</span>
                     </button>
                     <button

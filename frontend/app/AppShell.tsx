@@ -7,16 +7,12 @@ import {
   NetworkStatusIndicator,
 } from "@/app/components/PWA/PWAComponents";
 import { ToastContainer } from "react-toastify";
-import { useState, useEffect } from "react";
-import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
-import { LoadingProvider } from "../app/context/LoadingContext";
-import { registerLoadingSetter } from "../app/lib/loadingSetter";
+import {useEffect } from "react";
 import "react-toastify/dist/ReactToastify.css";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient();
-  const [loading, setLoading] = useState(false);
-  const { isMenuOpen, screenSize, deviceType } = useNavigation();
+
 
   useEffect(() => {
     const preventInstallPrompt = (e: Event) => {

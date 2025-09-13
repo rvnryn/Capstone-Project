@@ -128,6 +128,7 @@ interface NavigationBarProps {
   showToggleModal?: boolean | ((value: boolean) => void);
   notificationModal?: Notification | null;
   backupResultMsg?: string | null;
+  showHistoryModal?: boolean;
   onCloseAnyModal?: () => void;
 }
 
@@ -151,6 +152,7 @@ const NavigationBar = ({
   showEditModal,
   onCloseAnyModal,
   backupResultMsg,
+  showHistoryModal,
 }: NavigationBarProps) => {
   // Enhanced navigation state using the improved hook
   const {
@@ -457,7 +459,8 @@ const NavigationBar = ({
     isRestoring ||
     isBackingUp ||
     showEditModal ||
-    backupResultMsg
+    backupResultMsg ||
+    showHistoryModal
   );
 
   const handleBurgerClick = anyModalOpen
@@ -1025,7 +1028,7 @@ const NavigationBar = ({
                             }`}
                           onClick={() => handleNotificationClick(n)}
                         >
-                          <div className="text-sm leading-relaxed">
+                          <div className="text-sm leading-relaxed text-red-600">
                             {n.message}
                           </div>
                           <div className="text-xs text-yellow-400/70 mt-2 flex items-center gap-1">
@@ -1131,7 +1134,7 @@ const NavigationBar = ({
             <div className="space-y-2">
               <div>
                 <span className="font-semibold text-gray-300">Message:</span>{" "}
-                <span className="text-white">
+                <span className="text-red-600">
                   {notificationModalState.message}
                 </span>
               </div>

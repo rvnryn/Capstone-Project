@@ -92,18 +92,8 @@ const Report_UserActivity = () => {
     setUserActivityData(logs);
   }, [logs]);
 
-  // Choose data source based on filter
-  const dataSource = useMemo(() => {
-    if (reportDate) {
-      return pastUserActivityData.filter(
-        (item) => item.report_date === reportDate
-      );
-    }
-    if (period !== "all") {
-      return userActivityData.filter((item) => matchesPeriod(item.report_date));
-    }
-    return userActivityData;
-  }, [userActivityData, pastUserActivityData, reportDate, period]);
+  // Always use userActivityData as the data source
+  const dataSource = useMemo(() => userActivityData, [userActivityData]);
 
   function matchesPeriod(dateStr?: string) {
     if (period === "all" || !dateStr) return true;
@@ -124,32 +114,43 @@ const Report_UserActivity = () => {
   const uniqueReportDates = useMemo(() => {
     const dates = [...userActivityData, ...pastUserActivityData]
       .map((item) => item.report_date)
-      .filter((date) => !!date);
+      .filter((date) => !!date)
+      .map((date) => dayjs(date).format("YYYY-MM-DD"));
     return [...new Set(dates)];
   }, [userActivityData, pastUserActivityData]);
 
+  // Sorting functionality
   const filteredActivity = useMemo(() => {
-    return dataSource.filter((item) => {
+    let filtered = dataSource.filter((item) => {
       const matchesSearch = searchQuery
         ? Object.values(item)
             .join(" ")
             .toLowerCase()
             .includes(searchQuery.toLowerCase())
         : true;
-      const matchesDate = reportDate ? item.report_date === reportDate : true;
+      const matchesDate = reportDate
+        ? dayjs(item.report_date).format("YYYY-MM-DD") === reportDate
+        : true;
+      // If a specific date is selected, ignore period filter
+      const matchesPeriodFilter = reportDate
+        ? true
+        : period === "all"
+        ? true
+        : matchesPeriod(item.report_date);
       const matchesRole = role ? item.role === role : true;
-      return matchesSearch && matchesDate && matchesRole;
+      return matchesSearch && matchesDate && matchesPeriodFilter && matchesRole;
     });
-  }, [dataSource, searchQuery, reportDate, role]);
 
-  // Sorting functionality
+    // No aggregation: just return all filtered items for the selected date
+    return filtered;
+  }, [dataSource, searchQuery, reportDate, period, role]);
+
   const sortedActivity = useMemo(() => {
     const sorted = [...filteredActivity];
     if (sortConfig.key) {
       sorted.sort((a, b) => {
         const aVal = a[sortConfig.key];
         const bVal = b[sortConfig.key];
-
         if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
         if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
         return 0;
@@ -551,13 +552,7 @@ const Report_UserActivity = () => {
                           <option value="">All Dates</option>
                           {uniqueReportDates.map((date) => (
                             <option key={date} value={date}>
-                              {date
-                                ? new Date(date).toLocaleDateString("en-US", {
-                                    year: "numeric",
-                                    month: "long",
-                                    day: "numeric",
-                                  })
-                                : ""}
+                              {date ? dayjs(date).format("MMMM D, YYYY") : ""}
                             </option>
                           ))}
                         </select>
