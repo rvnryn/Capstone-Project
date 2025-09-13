@@ -5,7 +5,7 @@
 
 # CAPSTONE-PROJECT
 
-<em>Transform Ideas Into Impactful Solutions Instantly</em>
+<em>Transforming Ideas Into Impactful Solutions Daily</em>
 
 <!-- BADGES -->
 <img src="https://img.shields.io/github/license/AcsOfficial/Capstone-Project?style=flat&logo=opensourceinitiative&logoColor=white&color=0080ff" alt="license">
@@ -55,23 +55,30 @@
 
 ## ✨ Overview
 
+Capstone-Project is a comprehensive developer toolkit designed to accelerate full-stack application development. It combines a modular architecture with powerful frontend and backend integrations, enabling the creation of scalable, secure, and responsive web solutions. The core features include:
 
+- 🛠️ **Modular Architecture:** Seamlessly connect frontend and backend components for efficient development.
+- 🔐 **Secure Authentication:** Implement role-based access control with integrated user management.
+- 📊 **Real-Time Analytics:** Leverage live inventory, sales, and user activity data for informed decision-making.
+- ☁️ **Cloud Backup & Restore:** Automate data backups with cloud storage integration for data resilience.
+- 🚀 **Progressive Web App (PWA):** Build fast, offline-capable interfaces with responsive design.
+- ⚙️ **Developer Utilities:** Simplify styling, loading states, and API interactions for a smoother workflow.
 
 ---
 
 ## 📌 Features
 
-|      | Component       | Details                                                                                     |
-| :--- | :-------------- | :------------------------------------------------------------------------------------------ |
-| ⚙️  | **Architecture**  | <ul><li>Modular monorepo structure with separate frontend and backend directories</li><li>REST API and client-server separation</li><li>Uses Next.js for frontend, Python backend with Flask or FastAPI</li></ul> |
-| 🔩 | **Code Quality**  | <ul><li>TypeScript used extensively for frontend logic</li><li>Python code adheres to PEP8 standards</li><li>ESLint and TSLint configurations enforce code consistency</li></ul> |
-| 📄 | **Documentation** | <ul><li>Comprehensive README with setup instructions</li><li>API documentation generated via Swagger/OpenAPI</li><li>Inline code comments and JSDoc/TypeScript types</li></ul> |
-| 🔌 | **Integrations**  | <ul><li>Supabase JS SDK for backend data management</li><li>Axios for HTTP requests</li><li>Chart.js for data visualization</li><li>Tailwind CSS for styling</li><li>OAuth via @react-oauth/google</li></ul> |
-| 🧩 | **Modularity**    | <ul><li>Component-based React frontend with reusable components</li><li>Python modules for different backend functionalities</li><li>Environment variables managed via credentials.json and dotenv</li></ul> |
-| 🧪 | **Testing**       | <ul><li>Frontend tests with Jest and React Testing Library</li><li>Backend tests with pytest</li><li>CI pipelines include test runs via npm and pip</li></ul> |
-| ⚡️  | **Performance**   | <ul><li>Code splitting and lazy loading in Next.js</li><li>Client-side caching with SWR and React Query</li><li>Optimized images and assets</li></ul> |
-| 🛡️ | **Security**      | <ul><li>OAuth 2.0 authentication with Google</li><li>Secure storage of credentials.json</li><li>Input validation and sanitization</li></ul> |
-| 📦 | **Dependencies**  | <ul><li>Frontend: React, Next.js, Tailwind CSS, Chart.js, Axios</li><li>Backend: Python with Flask/FastAPI, SQL dependencies</li><li>Package managers: npm, pip</li></ul> |
+|      | Component           | Details                                                                                     |
+| :--- | :------------------ | :------------------------------------------------------------------------------------------ |
+| ⚙️  | **Architecture**     | <ul><li>Modular monorepo structure with separate frontend and backend directories</li><li>Client-side built with Next.js (React framework)</li><li>Backend likely Python-based (requirements.txt) with API endpoints</li><li>Clear separation of concerns between UI, API, and data layers</li></ul> |
+| 🔩 | **Code Quality**     | <ul><li>TypeScript used extensively for frontend type safety</li><li>ESLint and Next.js recommended configs for linting</li><li>Python code adheres to PEP8 standards, with dependencies managed via requirements.txt</li></ul> |
+| 📄 | **Documentation**    | <ul><li>README.md provides project overview and setup instructions</li><li>Code comments and type annotations present in TypeScript and Python</li><li>API documentation likely generated via Swagger or similar tools (not explicitly shown)</li></ul> |
+| 🔌 | **Integrations**     | <ul><li>Supabase JS SDK for backend data storage and auth</li><li>OAuth via @react-oauth/google</li><li>Chart.js for data visualization</li><li>Axios for HTTP requests with retry logic</li><li>Tailwind CSS for styling</li></ul> |
+| 🧩 | **Modularity**       | <ul><li>Frontend components built with React, organized into reusable components</li><li>Backend functions modularized with separate API routes</li><li>Shared types/interfaces across frontend and backend</li></ul> |
+| 🧪 | **Testing**          | <ul><li>Testing frameworks not explicitly listed, but likely Jest for frontend (implied by React/TypeScript)</li><li>Python tests via pytest or unittest (not explicitly shown)</li><li>CI/CD pipelines probably include test scripts with npm and pip</li></ul> |
+| ⚡️  | **Performance**      | <ul><li>Use of React Query (@tanstack/react-query) and SWR for efficient data fetching and caching</li><li>Code splitting and lazy loading via Next.js</li><li>Chart.js optimized for rendering large datasets</li></ul> |
+| 🛡️ | **Security**         | <ul><li>OAuth integration for user authentication</li><li>Credentials stored in credentials.json, likely secured via environment variables in CI/CD</li><li>Use of HTTPS in deployment (assumed)</li></ul> |
+| 📦 | **Dependencies**     | <ul><li>Frontend managed via package.json with React, Tailwind, Axios, Chart.js, etc.</li><li>Backend dependencies via requirements.txt, including Python packages</li><li>Build tools include npm, pip, and related scripts</li></ul> |
 
 ---
 
@@ -127,11 +134,11 @@
 			</thead>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/package.json'>package.json</a></b></td>
-					<td style='padding: 8px;'>- Defines project dependencies and development tools, ensuring proper integration of cryptographic functions, animation capabilities, and type support<br>- Serves as the foundation for managing external libraries essential to the applications security, user interface, and overall functionality, facilitating a cohesive and maintainable architecture across the codebase.</td>
+					<td style='padding: 8px;'>- Defines project dependencies and development tools, ensuring proper integration of cryptographic functions, animation capabilities, and type support<br>- Facilitates smooth development workflows and maintains consistency across the codebase by managing essential libraries such as crypto-js, framer-motion, and type definitions for pako<br>- Supports the overall architecture by streamlining setup and dependency management for a robust, feature-rich application.</td>
 				</tr>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/README.md'>README.md</a></b></td>
-					<td style='padding: 8px;'>- The main purpose of this code file, <code>README.md</code>, is to serve as the comprehensive documentation and project overview for the <strong>CAPSTONE-PROJECT</strong><br>- It provides an at-a-glance summary of the projects goals—transforming innovative ideas into impactful solutions—and highlights the core tools and technologies used throughout the codebase<br>- This README establishes the projects context within its architecture, offering essential information for developers, contributors, and stakeholders to understand its scope, structure, and technological foundation.</td>
+					<td style='padding: 8px;'>- The main purpose of this code file, <code>README.md</code>, is to serve as the comprehensive documentation and project overview for the <strong>CAPSTONE-PROJECT</strong><br>- It introduces the projects core mission—transforming ideas into impactful solutions—and highlights the key tools and technologies used in its development<br>- This README provides essential context, project structure, and badges that communicate the projects status, licensing, and technical stack, thereby guiding contributors and users to understand the overall architecture and intent of the codebase.</td>
 				</tr>
 			</table>
 		</blockquote>
@@ -151,39 +158,39 @@
 			</thead>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/PWA_USAGE_GUIDE.md'>PWA_USAGE_GUIDE.md</a></b></td>
-					<td style='padding: 8px;'>- Provides a comprehensive guide for integrating Progressive Web App (PWA) features into various pages, enabling offline support, smart caching, and real-time sync status indicators<br>- Facilitates seamless data fetching, offline data display, and user notifications, ensuring enhanced user experience through reliable offline capabilities and efficient data management across the application’s architecture.</td>
+					<td style='padding: 8px;'>- Provides a comprehensive guide for integrating Progressive Web App (PWA) features into various pages, enabling offline support, smart caching, and real-time sync indicators<br>- It simplifies data management by offering reusable hooks and components that enhance user experience through offline accessibility, visual status updates, and automatic data synchronization, ensuring a seamless and resilient application architecture.</td>
 				</tr>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/tailwind.config.js'>tailwind.config.js</a></b></td>
-					<td style='padding: 8px;'>- Defines custom Tailwind CSS configuration to enhance responsive design across diverse devices and orientations<br>- Establishes tailored breakpoints, spacing, font sizes, and sizing constraints, enabling consistent, adaptable UI styling throughout the project<br>- Facilitates a flexible, device-aware frontend architecture optimized for various screen sizes and orientations.</td>
+					<td style='padding: 8px;'>- Defines custom Tailwind CSS configuration to enhance responsive design across diverse devices and orientations<br>- Extends default breakpoints, spacing, font sizes, and border widths, enabling precise styling for ultra-wide, small, and height-constrained screens<br>- Facilitates consistent, adaptable UI layouts tailored to a broad spectrum of user devices and viewing contexts within the project.</td>
 				</tr>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/eslint.config.mjs'>eslint.config.mjs</a></b></td>
-					<td style='padding: 8px;'>- Defines ESLint configuration tailored for the frontend, ensuring code quality and consistency across the project<br>- It extends recommended Next.js and TypeScript rules while customizing specific linting behaviors to accommodate development preferences<br>- This setup supports maintaining a clean, reliable codebase aligned with best practices within the overall architecture.</td>
+					<td style='padding: 8px;'>- Defines ESLint configuration tailored for the frontend, ensuring code quality and consistency across the Next.js project<br>- It extends standard Next.js and TypeScript linting rules while customizing specific rules and ignoring certain directories to streamline development and maintain best practices within the overall architecture.</td>
 				</tr>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/RESPONSIVE_ARCHITECTURE.md'>RESPONSIVE_ARCHITECTURE.md</a></b></td>
-					<td style='padding: 8px;'>- Defines the applications responsive layout architecture, enabling seamless adaptation across mobile, tablet, and desktop devices<br>- Manages device detection, layout adjustments, and component behaviors to ensure optimal user experience, accessibility, and performance<br>- Facilitates consistent responsive patterns for navigation, modals, grids, and content presentation, supporting a cohesive and flexible multi-device interface within the overall codebase.</td>
+					<td style='padding: 8px;'>- Defines the applications responsive layout architecture, enabling seamless adaptation across mobile, tablet, and desktop devices<br>- Manages device detection, layout adjustments, and component behaviors to ensure optimal user experience, interface consistency, and performance<br>- Facilitates responsive navigation, modals, and content presentation, supporting a cohesive multi-device interface aligned with the overall design system.</td>
 				</tr>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/package.json'>package.json</a></b></td>
-					<td style='padding: 8px;'>- Defines the frontend applications configuration, dependencies, and scripts to facilitate development, building, and deployment within the overall system architecture<br>- It ensures seamless integration of UI components, third-party libraries, and development tools, supporting a responsive and interactive user interface that interacts with backend services and data sources.</td>
+					<td style='padding: 8px;'>- Defines the frontend applications configuration, dependencies, and scripts to facilitate development, building, and deployment within the overall system architecture<br>- It ensures seamless integration of UI components, third-party libraries, and development tools, supporting a responsive and interactive user experience aligned with backend services and data management layers.</td>
 				</tr>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/postcss.config.mjs'>postcss.config.mjs</a></b></td>
-					<td style='padding: 8px;'>- Configure PostCSS to integrate Tailwind CSS styles into the frontend build process, enabling utility-first styling across the application<br>- This setup ensures consistent, efficient styling workflows within the overall architecture, facilitating rapid UI development and maintaining design coherence throughout the project.</td>
+					<td style='padding: 8px;'>- Configure PostCSS to integrate Tailwind CSS styles within the frontend architecture, enabling streamlined styling workflows<br>- This setup ensures consistent application of utility-first CSS across the project, supporting scalable and maintainable UI development within the overall frontend framework.</td>
 				</tr>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/next.config.ts'>next.config.ts</a></b></td>
-					<td style='padding: 8px;'>Configure Next.js to route API requests to the backend server and specify remote image sources, enabling seamless integration between frontend and backend services while supporting secure image loading from external domains within the overall application architecture.</td>
+					<td style='padding: 8px;'>- Configure Next.js to route API requests to the backend server and enable secure image loading from specified remote domains, supporting seamless integration between frontend and backend services within the overall architecture<br>- This setup ensures efficient API communication and optimized image handling, contributing to a cohesive and scalable web application environment.</td>
 				</tr>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/tsconfig.json'>tsconfig.json</a></b></td>
-					<td style='padding: 8px;'>- Defines TypeScript compiler options for the frontend project, ensuring consistent, strict, and optimized code compilation aligned with modern JavaScript standards<br>- Facilitates seamless development and integration within the Next.js framework by specifying module resolution, library support, and build behaviors, thereby supporting the overall architectures stability and maintainability.</td>
+					<td style='padding: 8px;'>- Defines TypeScript compiler options for the frontend project, ensuring consistent, type-safe development aligned with modern JavaScript standards<br>- Facilitates smooth integration with Next.js and other dependencies, supporting efficient build processes and maintainability within the overall architecture<br>- This configuration underpins the development environment, enabling reliable and scalable frontend code execution.</td>
 				</tr>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/README.md'>README.md</a></b></td>
-					<td style='padding: 8px;'>- Provides the foundational structure and setup instructions for a Next.js-based web application, enabling developers to run, develop, and deploy the frontend interface efficiently<br>- It guides users through local development, highlights font optimization, and offers resources for further learning, ensuring seamless integration within the overall project architecture.</td>
+					<td style='padding: 8px;'>- Provides the foundational structure for a Next.js web application, enabling rapid development and deployment of a dynamic, optimized frontend interface<br>- Facilitates seamless editing, font optimization, and local testing, serving as the entry point for user interactions and visual presentation within the overall project architecture.</td>
 				</tr>
 			</table>
 			<!-- app Submodule -->
@@ -201,19 +208,19 @@
 					</thead>
 						<tr style='border-bottom: 1px solid #eee;'>
 							<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/AppShell.tsx'>AppShell.tsx</a></b></td>
-							<td style='padding: 8px;'>- Establishes the core application shell by integrating global providers for state management, authentication, and data fetching<br>- Manages Progressive Web App (PWA) behaviors, including custom install prompts and banner suppression, while ensuring service worker registration for offline capabilities<br>- Facilitates consistent user experience and app stability across the entire frontend architecture.</td>
+							<td style='padding: 8px;'>- Establishes the core application shell by integrating global providers for state management, data fetching, and authentication<br>- Manages Progressive Web App (PWA) behaviors, including custom install prompts and banner suppression, while ensuring service worker registration for offline capabilities<br>- Facilitates consistent user experience and app stability across the entire frontend architecture.</td>
 						</tr>
 						<tr style='border-bottom: 1px solid #eee;'>
 							<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/layout.tsx'>layout.tsx</a></b></td>
-							<td style='padding: 8px;'>- Defines the root layout for the Cardiac Delights PWA, establishing global metadata, fonts, and styling<br>- It sets up the foundational structure for the applications responsive, offline-capable interface, integrating essential web app configurations and embedding the main application shell to ensure consistent layout and branding across all pages.</td>
+							<td style='padding: 8px;'>- Defines the root layout for the Cardiac Delights PWA, establishing global metadata, fonts, and styling<br>- Integrates the AppShell component to structure the applications overall interface, ensuring responsiveness, offline capabilities, and consistent theming across the dashboard and management platform<br>- Serves as the foundational entry point for rendering the applications core layout and metadata.</td>
 						</tr>
 						<tr style='border-bottom: 1px solid #eee;'>
 							<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/page.tsx'>page.tsx</a></b></td>
-							<td style='padding: 8px;'>- Facilitates user authentication by providing a login interface integrated with backend API and Supabase services<br>- Manages user credentials, handles login flow, password reset requests, and displays feedback modals<br>- Serves as the primary entry point for user access, ensuring secure session initiation and seamless navigation to the dashboard within the applications architecture.</td>
+							<td style='padding: 8px;'>- Facilitates user authentication by providing a login interface integrated with backend API and Supabase services<br>- Manages user input, handles login flow, displays feedback modals, and supports password reset functionality<br>- Serves as the primary entry point for user access, ensuring secure session initiation and seamless navigation to the dashboard within the overall application architecture.</td>
 						</tr>
 						<tr style='border-bottom: 1px solid #eee;'>
 							<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/loading.tsx'>loading.tsx</a></b></td>
-							<td style='padding: 8px;'>- Provides a full-screen loading indicator to enhance user experience during asynchronous operations or page transitions<br>- It visually communicates ongoing processes, ensuring users remain informed and engaged while the application loads or performs background tasks within the overall frontend architecture.</td>
+							<td style='padding: 8px;'>- Provides a full-screen loading indicator to enhance user experience during asynchronous operations or page transitions<br>- It visually communicates ongoing processes, maintaining engagement and preventing user confusion while the application loads or fetches data within the overall frontend architecture.</td>
 						</tr>
 					</table>
 					<!-- components Submodule -->
@@ -231,15 +238,15 @@
 							</thead>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/components/GlobalLoader.tsx'>GlobalLoader.tsx</a></b></td>
-									<td style='padding: 8px;'>- Provides a global loading overlay that visually indicates ongoing background processes across the application<br>- Integrates with the app’s loading context to display a centered, animated spinner during loading states, ensuring users receive clear feedback during data fetches or operations, thereby enhancing user experience and interface responsiveness within the overall frontend architecture.</td>
+									<td style='padding: 8px;'>- Provides a global loading overlay that visually indicates ongoing background processes across the application<br>- Integrates with the app’s loading context to display a centered, animated spinner during loading states, ensuring users receive clear feedback during asynchronous operations<br>- Enhances user experience by maintaining visual consistency and responsiveness throughout the frontend architecture.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/components/loadingscreen.tsx'>loadingscreen.tsx</a></b></td>
-									<td style='padding: 8px;'>- Provides a full-screen loading indicator featuring the applications logo and a loading message, enhancing user experience during asynchronous operations<br>- Integrates seamlessly into the overall frontend architecture by offering a visually engaging placeholder that maintains user engagement while data or components are being fetched or processed.</td>
+									<td style='padding: 8px;'>- Provides a full-screen loading indicator with branding visuals to enhance user experience during data fetching or page transitions within the frontend application<br>- It ensures users are visually engaged and informed that content is loading, maintaining a polished and cohesive interface aligned with the overall architecture of the Next.js-based project.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/components/ResponsiveMain.tsx'>ResponsiveMain.tsx</a></b></td>
-									<td style='padding: 8px;'>- Provides a responsive layout wrapper that dynamically adjusts main content margins based on device type, screen size, and navigation state<br>- Ensures optimal content presentation across various devices by managing layout shifts and preventing overflow, while handling hydration issues during initial rendering<br>- Integrates seamlessly within the overall architecture to deliver a consistent, adaptable user interface experience.</td>
+									<td style='padding: 8px;'>- Provides a responsive layout wrapper that dynamically adjusts main content margins based on device type, screen size, and menu state<br>- Ensures optimal content presentation across various devices by managing layout shifts and preventing overflow, while delaying rendering until client-side hydration to avoid mismatch issues<br>- Integrates seamlessly within the overall architecture to enhance user experience and layout consistency.</td>
 								</tr>
 							</table>
 							<!-- UI Submodule -->
@@ -257,7 +264,7 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/components/UI/cards.tsx'>cards.tsx</a></b></td>
-											<td style='padding: 8px;'>- Defines a set of reusable, styled React components for building consistent card interfaces within the applications UI<br>- These components facilitate the creation of structured, visually cohesive card layouts, including headers, titles, descriptions, content areas, and footers, supporting a modular and maintainable design system across the frontend.</td>
+											<td style='padding: 8px;'>- Defines a set of reusable, styled React components for building consistent card interfaces within the application<br>- These components facilitate the creation of structured, visually cohesive card layouts, enhancing UI modularity and maintainability across the frontend architecture<br>- They serve as foundational building blocks for presenting grouped content in a clear and organized manner.</td>
 										</tr>
 									</table>
 								</blockquote>
@@ -277,7 +284,7 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/components/navigation/navigation.tsx'>navigation.tsx</a></b></td>
-											<td style='padding: 8px;'>- SummaryThe <code>navigation.tsx</code> component serves as the primary client-side navigation interface within the frontend application<br>- It orchestrates user interactions with the applications menu, manages navigation state, and integrates user authentication and offline capabilities<br>- By providing dynamic routing, responsive UI elements, and real-time notifications, this component ensures a seamless and intuitive user experience across the entire codebase<br>- It acts as a central hub for user navigation, contextual actions, and system status updates, thereby supporting the overall architecture's goal of delivering a robust, user-centric frontend interface.</td>
+											<td style='padding: 8px;'>- Navigation Component (<code>navigation.tsx</code>)This file defines the primary navigation component for the applications frontend<br>- It orchestrates user interface elements such as menus, icons, and routing logic to facilitate seamless user navigation across different sections of the app<br>- By integrating authentication context, routing utilities, and offline capabilities, it ensures a responsive and user-friendly navigation experience<br>- Overall, this component serves as the central hub for user interaction, enabling efficient access to various features and maintaining consistent navigation behavior within the application's architecture.</td>
 										</tr>
 									</table>
 									<!-- hook Submodule -->
@@ -295,7 +302,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/components/navigation/hook/use-navigation.ts'>use-navigation.ts</a></b></td>
-													<td style='padding: 8px;'>- Provides comprehensive management of user navigation and device responsiveness within the application<br>- It detects device type, screen size, orientation, and accessibility preferences, enabling adaptive UI behavior<br>- Additionally, it handles menu state, online status, and PWA mode, ensuring a seamless, accessible, and responsive user experience across diverse devices and environments.</td>
+													<td style='padding: 8px;'>- Provides comprehensive management of navigation and responsive behavior across devices within the application<br>- It detects device type, screen size, orientation, and accessibility preferences, while handling menu state, online status, and PWA mode<br>- Facilitates adaptive UI adjustments and user experience consistency by centralizing navigation-related state and interactions across the entire codebase.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -317,19 +324,19 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/components/PWA/PWAComponents.tsx'>PWAComponents.tsx</a></b></td>
-											<td style='padding: 8px;'>- Provides user interface components to enhance Progressive Web App (PWA) functionality, including an install prompt, network connectivity indicator, and comprehensive PWA status overview<br>- These components facilitate seamless user engagement, offline access, and real-time status updates, integrating core PWA features into the overall application architecture for improved user experience and reliability.</td>
+											<td style='padding: 8px;'>- Provides user interface components to enhance Progressive Web App (PWA) functionality by enabling installation prompts, monitoring network connectivity, and displaying app status<br>- Facilitates offline access, user engagement, and transparency regarding app capabilities, integrating seamlessly into the overall architecture to improve user experience and system awareness within the frontend ecosystem.</td>
 										</tr>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/components/PWA/PWAExampleUsage.tsx'>PWAExampleUsage.tsx</a></b></td>
-											<td style='padding: 8px;'>- Implements comprehensive Progressive Web App (PWA) features within an inventory management context, enabling smart caching, offline data access, real-time sync status, and optimistic updates<br>- Facilitates seamless user experience by ensuring data persistence, visibility of offline and stale states, and automatic synchronization, thereby enhancing reliability and responsiveness across the entire application architecture.</td>
+											<td style='padding: 8px;'>- Implements a comprehensive example of integrating Progressive Web App (PWA) features into an inventory management page<br>- It demonstrates smart caching, offline data handling, sync status updates, and optimistic updates, enabling seamless offline functionality and real-time synchronization<br>- This component serves as a practical template for enhancing user experience through resilient, offline-capable web applications within the overall architecture.</td>
 										</tr>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/components/PWA/PWAStatus.tsx'>PWAStatus.tsx</a></b></td>
-											<td style='padding: 8px;'>- Provides user interface components to monitor and display the status of Progressive Web App (PWA) connectivity, offline data caching, and synchronization processes<br>- Facilitates real-time feedback on online/offline states, cached data freshness, and pending actions, enhancing user awareness of data sync status and offline capabilities within the overall PWA architecture.</td>
+											<td style='padding: 8px;'>- Provides user interface components to monitor and display the status of Progressive Web App (PWA) connectivity, offline data caching, and synchronization processes<br>- Facilitates real-time feedback on online/offline states, pending actions, and cached data freshness, ensuring users are informed about data sync status and offline capabilities within the overall application architecture.</td>
 										</tr>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/components/PWA/PWAExample.tsx'>PWAExample.tsx</a></b></td>
-											<td style='padding: 8px;'>- Provides a comprehensive example of integrating Progressive Web App (PWA) features into a feature page, including offline support, network status monitoring, and notification permissions<br>- Facilitates seamless user experiences by enabling offline data handling, automatic synchronization upon reconnection, and user engagement through notifications, aligning with the overall architectures focus on resilient, user-centric web applications.</td>
+											<td style='padding: 8px;'>- Provides a comprehensive example of integrating Progressive Web App (PWA) features into a feature page, demonstrating offline support, network status handling, notification permissions, and offline data synchronization<br>- It showcases how to enhance user experience and reliability in a web application by leveraging PWA capabilities within the overall architecture.</td>
 										</tr>
 									</table>
 								</blockquote>
@@ -357,7 +364,7 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Report/page.tsx'>page.tsx</a></b></td>
-											<td style='padding: 8px;'>- The <code>page.tsx</code> file within the <code>frontend/app/Features/Report</code> directory serves as the main interface for accessing various analytical reports in the application<br>- It provides users with a centralized dashboard featuring navigational buttons to different report types, such as Sales, Inventory, and User Activity<br>- This component facilitates seamless user interaction by enabling quick navigation to detailed analytics pages, thereby supporting data-driven decision-making across the platform<br>- Overall, it acts as a user-friendly gateway to the reporting features, integrating role-based access and responsive design within the applications architecture.</td>
+											<td style='padding: 8px;'>- The <code>page.tsx</code> file within the <code>frontend/app/Features/Report</code> directory serves as the main interface for accessing various analytical reports in the application<br>- It provides users with a centralized dashboard that facilitates navigation to detailed sales, inventory, and user activity reports<br>- By integrating role-based access and intuitive UI components, this page enhances the user experience in retrieving and visualizing key business metrics, thereby supporting data-driven decision-making across the platform.</td>
 										</tr>
 									</table>
 									<!-- Report_Inventory Submodule -->
@@ -375,7 +382,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Report/Report_Inventory/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- Report Inventory PageThis file defines the main interface for viewing and managing inventory reports within the application<br>- It serves as the central component that orchestrates data fetching, user interactions, and visualization of inventory metrics<br>- The page enables users to search, filter, and analyze inventory data, providing insights into stock levels, wastage, and trends over time<br>- It integrates various UI elements such as charts, icons, and filters to facilitate an intuitive and comprehensive reporting experience, supporting informed decision-making across the inventory management system.</td>
+													<td style='padding: 8px;'>- Report Inventory PageThis file defines the main interface for the Inventory Report feature within the application<br>- It serves as the central component responsible for displaying, filtering, and exporting inventory data, providing users with insights into stock levels, wastage, and other key metrics<br>- The page integrates various UI elements such as search, filters, and charts to facilitate comprehensive analysis of inventory status<br>- It also supports data export functionalities like CSV or Excel downloads, enabling users to efficiently manage and share inventory reports<br>- Overall, this component plays a crucial role in delivering a user-friendly, data-driven overview of inventory health within the broader application architecture.</td>
 												</tr>
 											</table>
 											<!-- hook Submodule -->
@@ -393,7 +400,7 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Report/Report_Inventory/hook/use-inventoryreport.ts'>use-inventoryreport.ts</a></b></td>
-															<td style='padding: 8px;'>- Provides an API hook for managing inventory logs within the frontend application<br>- Facilitates fetching inventory history, optionally filtered by date range, and saving new log entries<br>- Integrates seamlessly with backend endpoints to support inventory tracking, enabling real-time updates and historical data retrieval essential for inventory management workflows.</td>
+															<td style='padding: 8px;'>- Provides an API hook for managing inventory logs within the application, enabling retrieval and storage of inventory actions such as stock changes and wastage<br>- Integrates seamlessly with backend endpoints to facilitate data synchronization, supporting features like date-range filtering and log updates, thereby ensuring accurate and up-to-date inventory reporting across the system.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -415,7 +422,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Report/Report_Sales/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- Report_Sales PageThis file serves as the main interface for the sales reporting feature within the application<br>- It orchestrates the display, filtering, and export of sales data, providing users with an interactive dashboard to analyze sales performance<br>- The page integrates Google Sheets for data import, enabling seamless data synchronization, and offers visualization tools such as charts and tables to facilitate insights<br>- Overall, it acts as the central hub for sales data exploration, supporting decision-making and reporting workflows in the broader application architecture.</td>
+													<td style='padding: 8px;'>- Report_Sales PageThis file defines the main interface for the Sales Report feature within the application<br>- It orchestrates user interactions, data fetching, and visualization of sales data, providing users with insights into sales performance through charts, filters, and downloadable reports<br>- The page integrates with Google Sheets for data import, enabling seamless data updates, and leverages various UI components to deliver an interactive and responsive reporting experience<br>- Overall, it serves as the central hub for viewing, analyzing, and exporting sales metrics, aligning with the applications broader architecture of modular, data-driven reporting.</td>
 												</tr>
 											</table>
 											<!-- hooks Submodule -->
@@ -433,15 +440,15 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Report/Report_Sales/hooks/index.ts'>index.ts</a></b></td>
-															<td style='padding: 8px;'>- Provides centralized access to comprehensive and simplified sales reporting hooks, enabling seamless integration of sales data insights within the application<br>- Facilitates retrieval of detailed sales metrics, performance summaries, and comparative analyses, supporting data-driven decision-making across the sales feature set in the frontend architecture.</td>
+															<td style='padding: 8px;'>- Provides centralized access to sales reporting functionalities within the frontend architecture, enabling comprehensive and simplified retrieval of sales data, performance metrics, and comparisons<br>- Facilitates consistent integration of sales insights across the application, supporting data-driven decision-making and user-facing reporting features in the overall project.</td>
 														</tr>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Report/Report_Sales/hooks/useSimpleSalesReport.ts'>useSimpleSalesReport.ts</a></b></td>
-															<td style='padding: 8px;'>- Provides a custom React hook for fetching and managing simplified sales report data across various timeframes<br>- It consolidates key sales metrics, top items, and daily sales trends, enabling seamless integration of sales insights into the user interface<br>- This hook supports dynamic data retrieval, error handling, and state management, facilitating real-time reporting within the applications sales analytics architecture.</td>
+															<td style='padding: 8px;'>- Provides a hook to fetch and manage simplified sales report data across various timeframes, integrating summary metrics, top-selling items, and daily sales trends<br>- Facilitates seamless data retrieval and state management for sales analytics within the frontend, supporting dynamic reporting and visualization in the overall application architecture.</td>
 														</tr>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Report/Report_Sales/hooks/useSalesReport.ts'>useSalesReport.ts</a></b></td>
-															<td style='padding: 8px;'>- Provides a comprehensive hook for fetching, managing, and formatting sales report data within the frontend application<br>- Facilitates retrieval of sales summaries, itemized sales, time-based data, top performers, hourly trends, and period comparisons, enabling dynamic and responsive sales analytics<br>- Integrates error handling and utility functions to streamline data presentation aligned with the overall reporting architecture.</td>
+															<td style='padding: 8px;'>- Provides a comprehensive hook for managing sales report data within the frontend architecture<br>- Facilitates fetching, state management, and formatting of various sales metrics, enabling seamless integration of sales analytics features<br>- Supports dynamic data retrieval for summaries, item performance, time-based trends, hourly insights, and comparative analysis, thereby empowering data-driven decision-making across the application.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -463,7 +470,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Report/Report_UserActivity/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- Report_UserActivity PageThis file implements the user activity reporting interface within the application<br>- It provides users with a comprehensive view of user engagement and activity data, featuring functionalities such as data filtering, visualization, and export<br>- The page integrates with Google OAuth for authentication and supports exporting reports to Excel, enabling stakeholders to analyze user behavior effectively<br>- Overall, it serves as the central component for accessing, visualizing, and exporting user activity insights, aligning with the broader data-driven architecture of the platform.</td>
+													<td style='padding: 8px;'>- Report_UserActivity PageThis file implements the user activity reporting interface within the application<br>- Its primary purpose is to enable users to view, filter, and analyze user activity data through an interactive dashboard<br>- The page facilitates data retrieval from backend APIs, supports exporting reports to Excel, and integrates Google OAuth for seamless data import from Google Sheets<br>- Overall, it serves as the central component for visualizing and managing user activity insights, contributing to the broader analytics and reporting architecture of the project.</td>
 												</tr>
 											</table>
 											<!-- hook Submodule -->
@@ -481,7 +488,7 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Report/Report_UserActivity/hook/use-userActivityLogAPI.ts'>use-userActivityLogAPI.ts</a></b></td>
-															<td style='padding: 8px;'>- Provides a React hook for managing user activity logs within the application<br>- Facilitates fetching and creating activity records via API interactions, supporting features like filtering by user, action type, and date ranges<br>- Integrates seamlessly into the reporting architecture to enable real-time tracking and analysis of user actions, enhancing auditability and user behavior insights across the platform.</td>
+															<td style='padding: 8px;'>- Provides a hook for managing user activity logs within the application, enabling fetching and creating activity records through API interactions<br>- Facilitates tracking user actions, roles, and timestamps, supporting auditability and user behavior analysis across the platform<br>- Integrates seamlessly into the frontend architecture to ensure real-time updates and error handling for user activity data.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -505,7 +512,7 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Menu/page.tsx'>page.tsx</a></b></td>
-											<td style='padding: 8px;'>- Menu PageThis file defines the main user interface for managing menu items within the application<br>- It provides a comprehensive view of the menu, allowing users to browse, search, sort, and perform actions such as editing or deleting dishes<br>- The page integrates with backend APIs to fetch and manipulate menu data, ensuring real-time updates and a responsive experience<br>- It serves as a central component in the applications architecture for menu management, supporting different user roles and maintaining a consistent, interactive layout for efficient menu administration.</td>
+											<td style='padding: 8px;'>- Menu Page ComponentThis file defines the main user interface for managing menu items within the application<br>- It serves as the central hub for displaying, sorting, and performing actions on menu entries, integrating authentication context and responsive design to ensure a seamless user experience<br>- The component interacts with backend APIs to fetch, update, and delete menu data, enabling authorized users to efficiently manage the menu offerings<br>- Overall, it plays a crucial role in the applications architecture by providing a dynamic, interactive interface for menu administration, supporting the broader goal of streamlined content management within the system.</td>
 										</tr>
 									</table>
 									<!-- hook Submodule -->
@@ -523,7 +530,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Menu/hook/use-menu.ts'>use-menu.ts</a></b></td>
-													<td style='padding: 8px;'>- Provides an abstraction layer for managing menu items within the application, enabling seamless retrieval, creation, updating, and deletion of menu data, including images and ingredients<br>- Facilitates communication with backend APIs to maintain menu consistency and supports stock status recalculations, integrating menu management into the overall architecture of the frontend feature set.</td>
+													<td style='padding: 8px;'>- Provides an abstraction layer for interacting with the menu management API, enabling seamless retrieval, creation, updating, and deletion of menu items and ingredients<br>- Facilitates synchronization of menu data, including images and stock status, supporting dynamic menu operations within the applications architecture<br>- Enhances maintainability and scalability of menu-related functionalities across the frontend.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -543,11 +550,11 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Menu/Update_Menu/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- The <code>page.tsx</code> file in the <code>frontend/app/Features/Menu/Update_Menu</code> directory serves as the main interface for editing a specific menu item within the application<br>- It provides users with the ability to view, modify, and manage menu details, including images and ingredients<br>- This component integrates with backend APIs to fetch existing menu data, handle updates, and delete ingredients, ensuring a seamless and interactive editing experience<br>- Overall, it plays a crucial role in the menu management workflow, enabling dynamic and user-friendly updates within the broader restaurant or food service platform architecture.</td>
+													<td style='padding: 8px;'>- The <code>page.tsx</code> file in the <code>frontend/app/Features/Menu/Update_Menu</code> directory serves as the main interface for editing menu items within the application<br>- It provides users with the ability to view, modify, and manage menu details, including images and ingredients<br>- This component integrates with the applications API layer to fetch existing menu data, handle updates, and facilitate deletions, ensuring a seamless user experience for menu management<br>- Overall, it plays a crucial role in the menu feature by enabling dynamic, real-time editing capabilities within the broader frontend architecture.</td>
 												</tr>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Menu/Update_Menu/loading.tsx'>loading.tsx</a></b></td>
-													<td style='padding: 8px;'>- Provides a visual indicator during menu update operations within the frontend application<br>- It ensures users receive immediate feedback while the system processes changes, enhancing user experience and interface responsiveness<br>- As part of the overall architecture, it supports seamless interactions during asynchronous menu modifications, contributing to a smooth and intuitive administrative workflow.</td>
+													<td style='padding: 8px;'>- Provides a visual indicator during menu update operations within the frontend application<br>- It ensures users receive immediate feedback while the system processes changes, enhancing user experience and interface responsiveness<br>- As part of the loading states in the menu feature, it supports seamless interaction flow during asynchronous data fetching or updates in the overall architecture.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -567,11 +574,11 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Menu/View_Menu/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- ViewMenu ComponentThis <code>ViewMenu</code> component serves as the primary interface for displaying detailed information about a specific menu within the application<br>- It integrates user authentication context, routing, and API interactions to fetch and present menu data dynamically<br>- Positioned within the frontend architecture, it functions as a dedicated page that enables users to view comprehensive menu details, supporting features like navigation and role-based access<br>- Overall, it facilitates an intuitive and responsive user experience for menu management and review within the larger application ecosystem.</td>
+													<td style='padding: 8px;'>- ViewMenu ComponentThis component serves as the primary interface for viewing detailed information about a specific menu within the application<br>- It integrates user authentication, routing, and API data fetching to present a comprehensive view of menu data, tailored to the users role<br>- The component ensures a responsive and user-friendly experience, enabling users to access menu details seamlessly and navigate back or perform related actions as needed<br>- Overall, it acts as the central presentation layer for menu visualization within the larger frontend architecture.</td>
 												</tr>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Menu/View_Menu/loading.tsx'>loading.tsx</a></b></td>
-													<td style='padding: 8px;'>- Provides a placeholder component for the menu loading state within the frontend application<br>- It ensures a seamless user experience by maintaining layout consistency during data fetches or asynchronous operations related to menu display, supporting smooth navigation and interaction within the overall feature architecture.</td>
+													<td style='padding: 8px;'>- Provides a placeholder component for the menu loading state within the frontend application<br>- It integrates into the overall architecture by managing user experience during data fetches or asynchronous operations, ensuring a seamless transition while menu content loads<br>- This minimalistic approach maintains interface consistency without rendering any visual elements during the loading phase.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -591,7 +598,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Menu/Add_Menu/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- Add_Menu PageThis component provides the user interface for adding a new menu item within the application<br>- It enables users to input dish details, upload images, and submit new menu entries, integrating seamlessly into the overall menu management architecture<br>- The page manages form state, handles image previews, and interacts with backend APIs to create new menu items, supporting a smooth and intuitive user experience for menu administration.</td>
+													<td style='padding: 8px;'>- Add_Menu PageThis component provides the user interface for adding a new menu item within the application<br>- It enables users to input dish details, upload images, and submit new menu entries, integrating seamlessly into the overall menu management architecture<br>- The page manages form state, handles image previews, and coordinates with backend APIs to create new menu items, supporting a smooth and intuitive user experience for menu administration.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -613,7 +620,7 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/page.tsx'>page.tsx</a></b></td>
-											<td style='padding: 8px;'>- The <code>page.tsx</code> file within the Settings feature of the frontend application serves as the central hub for user configuration and administrative options<br>- It provides a user interface that allows authenticated users to navigate to various settings pages, such as user management, notifications, inventory, and backup/restore functionalities<br>- By organizing these options into a cohesive layout, this component facilitates streamlined access to key administrative features, supporting the overall architectures goal of modular, role-based management within the application.</td>
+											<td style='padding: 8px;'>- The <code>page.tsx</code> file within the Settings feature serves as the central user interface for managing application configurations<br>- It provides a navigable settings dashboard that allows users to access and modify key system areas such as user management, notifications, inventory, and backup/restore options<br>- By integrating role-based access and intuitive navigation, this component facilitates seamless configuration management, contributing to the overall modular and user-centric architecture of the application.</td>
 										</tr>
 									</table>
 									<!-- notification Submodule -->
@@ -631,7 +638,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/notification/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- Notification Settings PageThis code defines the <strong>Notification Settings</strong> page within the frontend application, serving as the user interface for managing notification preferences<br>- It integrates with backend services to fetch and update user-specific notification configurations, providing a seamless and interactive experience<br>- The page includes features such as saving changes, handling unsaved modifications, and navigation controls, ensuring users can customize their notification preferences efficiently while safeguarding against accidental data loss<br>- Overall, it plays a crucial role in the user personalization aspect of the applications architecture, enabling tailored communication settings aligned with user needs.</td>
+													<td style='padding: 8px;'>- NotificationSettings PageThis file implements the user interface for managing notification preferences within the applications settings section<br>- It provides users with the ability to view, modify, and save their notification configurations, ensuring a personalized and responsive experience<br>- The component integrates with backend services to fetch and persist user-specific notification settings, facilitating seamless synchronization between the frontend and backend systems<br>- Overall, it plays a crucial role in enabling users to control their notification preferences, contributing to the application's customizable and user-centric architecture.</td>
 												</tr>
 											</table>
 											<!-- hook Submodule -->
@@ -649,7 +656,7 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/notification/hook/use-NotificationSettingsAPI.ts'>use-NotificationSettingsAPI.ts</a></b></td>
-															<td style='padding: 8px;'>- Provides a hook to manage user notification preferences by fetching, updating, and maintaining notification settings state within the frontend application<br>- Facilitates seamless synchronization with backend APIs, enabling dynamic configuration of notification triggers such as low stock alerts and expiration warnings, thereby supporting personalized user notification management in the overall architecture.</td>
+															<td style='padding: 8px;'>- Provides a React hook for managing user notification preferences, enabling fetching, updating, and reloading notification settings from the backend API<br>- Facilitates seamless synchronization of notification configurations, ensuring users can customize alerts related to stock levels and expiration dates within the applications settings architecture<br>- Enhances user experience by maintaining consistent notification state across the frontend.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -671,7 +678,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/inventory/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- Inventory Settings PageThis code defines the Inventory Settings page within the applications frontend, serving as a centralized interface for managing inventory categories and their configurations<br>- It enables users to view, create, update, and delete inventory settings, facilitating dynamic and flexible inventory management<br>- The page integrates with backend APIs to synchronize changes and provides a user-friendly interface with navigation and responsive design elements<br>- Overall, it plays a crucial role in maintaining accurate and organized inventory data, supporting the broader architecture's goal of efficient resource management.</td>
+													<td style='padding: 8px;'>- Inventory Settings PageThis code defines the Inventory Settings page within the applications frontend, serving as a central interface for managing inventory categories and their configurations<br>- It enables users to view, create, update, and delete inventory settings, facilitating dynamic and flexible inventory management<br>- The page integrates with backend APIs to synchronize changes and provides a user-friendly interface with navigation and responsive design elements<br>- Overall, it plays a crucial role in maintaining accurate and organized inventory data, supporting the broader architecture's goal of efficient resource management and operational consistency.</td>
 												</tr>
 											</table>
 											<!-- hook Submodule -->
@@ -689,7 +696,7 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/inventory/hook/use-InventorySettingsAPI.ts'>use-InventorySettingsAPI.ts</a></b></td>
-															<td style='padding: 8px;'>- Provides a custom React hook for managing inventory settings via API interactions, enabling fetching, creating, updating, and deleting inventory configuration data<br>- Facilitates seamless integration of inventory management functionalities within the frontend, supporting dynamic updates and error handling to maintain data consistency and user experience across the applications inventory features.</td>
+															<td style='padding: 8px;'>- Provides a custom React hook for managing inventory settings via API interactions, enabling fetching, creating, updating, and deleting inventory configuration data<br>- Integrates seamlessly within the frontend architecture to facilitate dynamic inventory management, ensuring consistent state handling and error management across the applications inventory settings feature.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -711,7 +718,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/userManagement/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- The <code>page.tsx</code> file in the <code>frontend/app/Features/Settings/userManagement</code> directory serves as the main interface for managing user accounts within the application<br>- It provides a comprehensive view of user data, including identifiers, names, roles, and statuses, and facilitates user administration tasks such as viewing, editing, deleting, and password management<br>- This component integrates navigation and responsive design elements to ensure a seamless user experience across devices<br>- Overall, it acts as the central hub for user management functionalities, supporting administrative workflows within the applications architecture.</td>
+													<td style='padding: 8px;'>- The <code>page.tsx</code> file in the <code>frontend/app/Features/Settings/userManagement</code> directory serves as the main interface for managing user accounts within the application<br>- It provides a comprehensive view of user data, including identifiers, names, roles, and statuses, and facilitates key user management actions such as editing, deleting, and password changes<br>- This component integrates navigation and responsive design elements to ensure a seamless user experience across devices<br>- Overall, it acts as the central hub for administrators to oversee and maintain user information, supporting the broader architectures focus on secure and efficient user management.</td>
 												</tr>
 											</table>
 											<!-- Add_Users Submodule -->
@@ -729,7 +736,7 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/userManagement/Add_Users/page.tsx'>page.tsx</a></b></td>
-															<td style='padding: 8px;'>- AddUsers PageThis component provides the user interface for adding new users within the applications settings section<br>- It facilitates user creation by capturing relevant details, managing user roles, and handling form interactions<br>- The page integrates with backend services to persist new user data and ensures a smooth user experience through modals and navigation safeguards<br>- Overall, it plays a crucial role in the user management workflow, enabling administrators to efficiently onboard new users while maintaining data integrity and usability within the larger application architecture.</td>
+															<td style='padding: 8px;'>- AddUsers PageThis component provides the user interface for adding new users within the applications settings section<br>- It facilitates user creation by capturing relevant details, managing user roles, and handling form interactions<br>- The page integrates with backend services to persist new user data and ensures a smooth user experience through modals and navigation safeguards<br>- Overall, it plays a crucial role in the user management workflow, enabling administrators to efficiently onboard new users while maintaining data integrity and usability within the broader application architecture.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -749,11 +756,11 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/userManagement/Update_Users/page.tsx'>page.tsx</a></b></td>
-															<td style='padding: 8px;'>- SummaryThe <code>page.tsx</code> file in the <code>frontend/app/Features/Settings/userManagement/Update_Users</code> directory serves as the main interface for editing user details within the applications user management system<br>- It provides a user-friendly form that allows administrators to view, modify, and update user information such as roles and statuses<br>- This component integrates with backend APIs to fetch existing user data, submit updates, and handle password changes, ensuring seamless user management workflows<br>- Overall, it plays a critical role in maintaining accurate and up-to-date user profiles, supporting the broader architecture of secure and efficient user administration across the application.</td>
+															<td style='padding: 8px;'>- SummaryThe <code>page.tsx</code> file in the <code>frontend/app/Features/Settings/userManagement/Update_Users</code> directory serves as the main interface for editing user details within the applications user management system<br>- It provides a user-friendly form that allows administrators to view and modify user information, such as roles and status, and to update user credentials like passwords<br>- This component integrates with backend APIs to fetch existing user data, submit updates, and handle password changes, ensuring seamless synchronization between the user interface and the server<br>- Overall, it plays a critical role in the user management workflow by enabling efficient and secure user updates within the application's architecture.</td>
 														</tr>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/userManagement/Update_Users/loading.tsx'>loading.tsx</a></b></td>
-															<td style='padding: 8px;'>- Provides a visual indicator during user management updates within the settings feature, signaling ongoing loading processes<br>- It enhances user experience by clearly communicating system activity during asynchronous operations, ensuring users are informed while data is being fetched or processed in the context of updating user information in the application.</td>
+															<td style='padding: 8px;'>- Provides a visual indicator of ongoing processes during user management updates within the settings interface<br>- It ensures users receive immediate feedback while data is loading, enhancing the overall user experience by clearly communicating system activity during asynchronous operations in the frontend application.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -773,7 +780,7 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/userManagement/hook/use-user.ts'>use-user.ts</a></b></td>
-															<td style='padding: 8px;'>- Provides an abstraction layer for user management operations within the frontend, enabling seamless interaction with the backend API<br>- Facilitates listing, retrieving, creating, updating, deleting, and password-changing functionalities for users, supporting administrative and user-related workflows<br>- Integrates with the overall architecture to ensure consistent user data handling across the application.</td>
+															<td style='padding: 8px;'>- Provides a set of React hooks for managing user data within the application, enabling seamless integration with backend APIs for listing, retrieving, creating, updating, deleting, and password management of users<br>- Facilitates user administration workflows, ensuring secure and efficient user account operations aligned with the overall system architecture.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -793,11 +800,11 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/userManagement/View_Users/page.tsx'>page.tsx</a></b></td>
-															<td style='padding: 8px;'>- The <code>page.tsx</code> file in the <code>frontend/app/Features/Settings/userManagement/View_Users</code> directory serves as the main interface for viewing detailed user information within the applications user management feature<br>- It functions as a dedicated page that retrieves and displays individual user data, integrating navigation and responsive design elements to ensure a seamless user experience across devices<br>- This component plays a crucial role in the overall architecture by enabling administrators or authorized users to access, review, and potentially manage user profiles, thereby supporting the applications broader user management and settings functionalities.</td>
+															<td style='padding: 8px;'>- The <code>page.tsx</code> file in <code>frontend/app/Features/Settings/userManagement/View_Users/</code> serves as the main interface for viewing detailed user information within the applications user management module<br>- It functions as a dedicated page that retrieves and displays individual user data, integrating navigation and responsive design elements to ensure a seamless user experience across devices<br>- This component plays a crucial role in the overall architecture by enabling administrators or authorized users to access, review, and potentially manage user profiles, thereby supporting the applications broader user management and settings functionalities.</td>
 														</tr>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/userManagement/View_Users/loading.tsx'>loading.tsx</a></b></td>
-															<td style='padding: 8px;'>- Provides a placeholder component for the user management interfaces loading state within the settings feature<br>- It ensures a seamless user experience by maintaining layout consistency during data fetches or transitions, supporting the overall architectures focus on modular, responsive, and user-centric design in the frontend application.</td>
+															<td style='padding: 8px;'>- Provides a placeholder component for the user management interface within the settings feature, ensuring a seamless user experience during data loading states<br>- Integrates into the overall frontend architecture by maintaining UI consistency and responsiveness while user data is fetched or processed, supporting smooth navigation and interaction in the user management workflow.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -819,7 +826,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/backup_restore/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- This code file defines the Backup & Restore page within the application's settings, serving as a central interface for managing data backup and restoration processes<br>- It facilitates user interactions for scheduling backups, initiating manual backups, restoring data from backups, and integrating with external storage providers like Google Drive<br>- Overall, it enhances data resilience and user control over data management by providing a cohesive, user-friendly interface for backup operations within the application's architecture.</td>
+													<td style='padding: 8px;'>- This code file implements the user interface for the backup and restore functionality within the applications settings section<br>- It provides users with options to manage data backups, including scheduling, manual backups to Google Drive, and restoring data<br>- By integrating with external services like Google Drive and handling sensitive operations such as encryption, this component ensures a secure and user-friendly experience for data management, aligning with the overall architectures focus on reliable, accessible, and secure data handling workflows.</td>
 												</tr>
 											</table>
 											<!-- hook Submodule -->
@@ -837,11 +844,11 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/backup_restore/hook/use-BackupRestoreAPI.ts'>use-BackupRestoreAPI.ts</a></b></td>
-															<td style='padding: 8px;'>- Provides core functionalities for backing up and restoring application data within the frontend architecture<br>- Facilitates downloading encrypted or unencrypted backups, restoring data from local files, and integrating with cloud storage services like Google Drive<br>- Ensures secure data handling through encryption and seamless communication with backend APIs, supporting data integrity and user convenience across the applications settings management.</td>
+															<td style='padding: 8px;'>- Provides core functionalities for backing up and restoring application data, including local file downloads, encryption/decryption, and cloud integration via Google Drive<br>- Facilitates secure data management by enabling users to export, import, and synchronize backups seamlessly, ensuring data integrity and security within the overall architecture of the applications settings and data persistence layer.</td>
 														</tr>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Settings/backup_restore/hook/useBackupSchedule.ts'>useBackupSchedule.ts</a></b></td>
-															<td style='padding: 8px;'>- Provides mechanisms to retrieve and update backup scheduling configurations within the application<br>- Facilitates seamless management of backup frequency and timing, integrating with backend APIs to ensure data consistency<br>- Supports the overall architecture by enabling user-specific backup preferences, contributing to reliable data protection and restore workflows across the platform.</td>
+															<td style='padding: 8px;'>- Provides mechanisms to retrieve and update backup scheduling configurations within the application<br>- Facilitates seamless management of backup frequency and timing, integrating with backend APIs to ensure data consistency<br>- Supports the overall data protection architecture by enabling user-specific backup preferences to be dynamically fetched and modified, contributing to reliable and customizable backup workflows.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -865,7 +872,7 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Supplier/page.tsx'>page.tsx</a></b></td>
-											<td style='padding: 8px;'>- The <code>frontend/app/Features/Supplier/page.tsx</code> file serves as the main interface for managing supplier data within the application<br>- It provides a user-centric view that enables users to view, search, edit, and delete supplier records<br>- This component integrates with the applications authentication context to tailor functionality based on user roles and leverages API hooks to fetch and manipulate supplier information efficiently<br>- Overall, it acts as the central hub for supplier-related operations, seamlessly connecting the user interface with backend data services to support supplier management workflows within the broader application architecture.</td>
+											<td style='padding: 8px;'>- The <code>frontend/app/Features/Supplier/page.tsx</code> file serves as the main interface for managing supplier data within the application<br>- It provides a user-centric view that enables users to view, search, edit, and delete supplier records<br>- This component integrates with backend APIs to fetch and manipulate supplier information, ensuring real-time updates and data consistency<br>- Overall, it acts as the central hub for supplier-related operations, supporting the broader architecture by facilitating seamless data interaction and user engagement in the supplier management workflow.</td>
 										</tr>
 									</table>
 									<!-- View_Supplier Submodule -->
@@ -883,11 +890,11 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Supplier/View_Supplier/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- Provides a detailed view of supplier information within the application, enabling users to access, review, and update supplier details seamlessly<br>- Integrates data fetching, formatting, and presentation components to ensure a comprehensive and user-friendly display of supplier data, supporting efficient management and navigation within the broader supply chain management architecture.</td>
+													<td style='padding: 8px;'>- Displays detailed information about a specific supplier, including contact details, supplies, and timestamps, within the applications supplier management architecture<br>- Facilitates viewing, editing, and navigation actions, integrating seamlessly with the overall supplier data flow and user interface for comprehensive supplier profile management.</td>
 												</tr>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Supplier/View_Supplier/loading.tsx'>loading.tsx</a></b></td>
-													<td style='padding: 8px;'>- Provides a placeholder component for the supplier view loading state within the frontend application<br>- It integrates into the overall architecture by managing user experience during data fetches or component transitions, ensuring a seamless interface flow without displaying any visual content during loading periods<br>- This minimal implementation supports the applications responsiveness and user engagement strategies.</td>
+													<td style='padding: 8px;'>- Provides a placeholder component for the supplier view loading state within the frontend application<br>- It ensures a seamless user experience during data fetching or component loading phases by maintaining layout consistency without displaying any visual content<br>- This minimal implementation supports the overall architecture by managing asynchronous UI states efficiently in the supplier management workflow.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -907,7 +914,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Supplier/hook/useSupplierAPI.ts'>useSupplierAPI.ts</a></b></td>
-													<td style='padding: 8px;'>- Provides a set of React hooks for managing supplier data through API interactions, enabling seamless retrieval, creation, updating, deletion, and listing of suppliers within the application<br>- Facilitates efficient integration of supplier management functionalities into the frontend architecture, supporting dynamic and responsive user experiences related to supplier information.</td>
+													<td style='padding: 8px;'>- Provides a set of React hooks for managing supplier data through API interactions, enabling seamless retrieval, creation, updating, deletion, and listing of suppliers within the application<br>- Facilitates integration with backend services to maintain up-to-date supplier information, supporting the overall architectures data consistency and user interface responsiveness.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -927,11 +934,11 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Supplier/Update_Supplier/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- This code file defines the EditSupplier component within the frontend application's supplier management feature<br>- Its primary purpose is to facilitate the editing of supplier details by fetching existing supplier data, presenting it in an interactive form, and handling updates<br>- As part of the overall architecture, it enables seamless supplier data modification, integrating with backend APIs and ensuring a responsive user experience across devices<br>- This component plays a crucial role in maintaining accurate supplier information within the broader supply chain or vendor management system.</td>
+													<td style='padding: 8px;'>- This code file defines the EditSupplier component within the frontend application's supplier management feature<br>- Its primary purpose is to facilitate the editing of supplier details by fetching existing supplier data, presenting it in an interactive form, and handling updates<br>- As part of the overall architecture, it enables seamless user interactions for supplier data modification, integrating with backend APIs and maintaining consistent navigation and responsive design<br>- This component plays a crucial role in the supplier management workflow, ensuring users can efficiently update supplier information within the larger system.</td>
 												</tr>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Supplier/Update_Supplier/loading.tsx'>loading.tsx</a></b></td>
-													<td style='padding: 8px;'>- Provides a visual indicator during the supplier update process within the frontend application<br>- It ensures users receive immediate feedback while data is loading, enhancing user experience and maintaining interface responsiveness during asynchronous operations in the supplier management workflow.</td>
+													<td style='padding: 8px;'>- Provides a visual indicator during the supplier update process within the frontend application<br>- It ensures users receive immediate feedback while data is loading, enhancing the overall user experience<br>- As part of the supplier management feature, it supports seamless interactions by signaling ongoing operations during supplier data updates.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -951,7 +958,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Supplier/Add_Supplier/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- AddSupplier PageThis code file implements the user interface and logic for adding a new supplier within the applications supplier management module<br>- It provides a form-driven experience that allows users to input supplier details, validate the data, and submit the information to the backend API<br>- The page integrates with the overall application architecture by utilizing shared components, routing, and API hooks, ensuring consistency and seamless navigation across the platform<br>- Its primary role is to facilitate the creation of supplier records, contributing to the broader supply chain and vendor management workflows within the system.</td>
+													<td style='padding: 8px;'>- This code file defines the Add Supplier page within the frontend application, serving as the user interface for creating new supplier entries<br>- It facilitates capturing supplier details through a form, managing user input, validation, and submission processes<br>- Overall, it enables users to seamlessly add new suppliers to the system, integrating with backend APIs to update the application's supplier data repository<br>- This component plays a crucial role in the supplier management workflow, ensuring data consistency and user-friendly interaction within the larger architecture.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -973,7 +980,7 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/page.tsx'>page.tsx</a></b></td>
-											<td style='padding: 8px;'>- Provides the main interface for inventory management within the application, enabling users to navigate between master, daily, and surplus inventory views<br>- It presents a visually engaging dashboard with interactive cards that facilitate quick access to different inventory sections, supporting real-time tracking and streamlined operational oversight for restaurant stock management.</td>
+											<td style='padding: 8px;'>- Provides the main interface for inventory management within the application, enabling users to navigate between different inventory views such as master, daily, and surplus stock<br>- It offers a visually engaging dashboard with quick access buttons, facilitating efficient oversight and operational control over various inventory categories in the overall architecture.</td>
 										</tr>
 									</table>
 									<!-- Master_Inventory Submodule -->
@@ -991,7 +998,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Master_Inventory/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- The <code>page.tsx</code> file in the <code>frontend/app/Features/Inventory/Master_Inventory</code> directory serves as the main interface for managing and viewing inventory data within the application<br>- It provides a comprehensive inventory dashboard that enables users to visualize, search, filter, and perform actions on inventory items<br>- This component integrates various hooks and APIs to fetch inventory settings and data, ensuring real-time updates and interactivity<br>- Overall, it facilitates efficient inventory oversight, supporting tasks such as stock monitoring, categorization, and status management, thereby forming a critical part of the applications inventory management architecture.</td>
+													<td style='padding: 8px;'>- Inventory Master PageThis file defines the main interface for managing inventory items within the application<br>- It provides users with a comprehensive view of the inventory, including functionalities for searching, filtering, sorting, and performing actions such as editing or deleting inventory records<br>- The page integrates various UI components and hooks to fetch and display inventory data, ensuring a responsive and user-friendly experience<br>- Overall, it serves as the central hub for inventory management, enabling efficient oversight and updates of stock information within the broader system architecture.</td>
 												</tr>
 											</table>
 											<!-- Add_Inventory Submodule -->
@@ -1009,7 +1016,7 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Master_Inventory/Add_Inventory/page.tsx'>page.tsx</a></b></td>
-															<td style='padding: 8px;'>- The <code>page.tsx</code> file in the <code>Add_Inventory</code> feature serves as the main interface for adding new inventory items within the applications inventory management system<br>- It provides users with a form-driven UI to input detailed information about inventory products, such as categories, quantities, and other relevant attributes<br>- This component integrates with backend APIs to fetch necessary settings and submit new inventory data, ensuring seamless synchronization with the overall inventory data store<br>- Overall, it facilitates efficient inventory entry, supporting the broader architectures goal of maintaining accurate, up-to-date inventory records across the system.</td>
+															<td style='padding: 8px;'>- Add Inventory Item PageThis code file defines the Add Inventory Item" page within the inventory management feature of the application<br>- Its primary purpose is to facilitate the creation of new inventory entries by providing a user interface for inputting item details, managing form state, and handling user interactions<br>- As part of the larger architecture, it integrates with inventory and settings APIs to fetch necessary data and submit new inventory records, ensuring seamless data flow within the inventory management system<br>- This page serves as a critical component for users to efficiently add and categorize inventory items, supporting the overall goal of maintaining an organized and up-to-date inventory database.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -1029,11 +1036,11 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Master_Inventory/View_Inventory/page.tsx'>page.tsx</a></b></td>
-															<td style='padding: 8px;'>- Overview of <code>page.tsx</code> in Inventory ViewThis file serves as the main interface for viewing detailed information about a specific inventory item within the applications inventory management module<br>- It integrates user authentication, routing, and API interactions to fetch and display comprehensive inventory data, facilitating users' ability to review item details efficiently<br>- Positioned within the larger architecture, it functions as a client-side component that dynamically renders inventory information, supporting seamless navigation and user experience in the inventory feature set.</td>
+															<td style='padding: 8px;'>- This code file defines the ViewInventoryItem component, which serves as the primary interface for viewing detailed information about a specific inventory item within the application's inventory management module<br>- Positioned within the frontend's feature architecture, it facilitates user interaction by fetching and displaying comprehensive inventory data, enabling users to review item details seamlessly<br>- This component integrates with authentication, routing, and API layers to ensure secure and dynamic data presentation, thereby supporting the overall architecture's goal of providing an intuitive and responsive inventory management experience.</td>
 														</tr>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Master_Inventory/View_Inventory/loading.tsx'>loading.tsx</a></b></td>
-															<td style='padding: 8px;'>- Provides a placeholder component for the inventory views loading state within the Master Inventory feature<br>- It integrates into the overall frontend architecture, ensuring a seamless user experience during data fetches or processing delays by maintaining layout consistency without displaying any visual content<br>- This supports smooth navigation and interaction flow in the inventory management interface.</td>
+															<td style='padding: 8px;'>- Provides a placeholder component for the inventory views loading state within the Master Inventory feature<br>- It ensures a seamless user experience by maintaining layout consistency during data fetching or processing, supporting the overall architectures focus on modular, responsive, and user-friendly inventory management workflows.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -1053,11 +1060,11 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Master_Inventory/Update_Inventory/page.tsx'>page.tsx</a></b></td>
-															<td style='padding: 8px;'>- This code file defines the user interface for editing inventory items within the applications inventory management feature<br>- It facilitates the retrieval, display, and updating of specific inventory data, enabling users to modify item details efficiently<br>- As part of the larger architecture, it supports seamless inventory data management by providing a dedicated, interactive page that integrates with backend APIs, ensuring data consistency and user-friendly interactions in the inventory workflow.</td>
+															<td style='padding: 8px;'>- This code file defines the user interface for editing inventory items within the applications inventory management feature<br>- It provides a dedicated page that enables users to view, modify, and save details of individual inventory entries, facilitating efficient inventory updates<br>- Positioned within the larger architecture, it integrates seamlessly with the inventory API layer to fetch existing item data and persist changes, supporting the overall goal of maintaining accurate and up-to-date inventory records across the system.</td>
 														</tr>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Master_Inventory/Update_Inventory/loading.tsx'>loading.tsx</a></b></td>
-															<td style='padding: 8px;'>- Provides a visual indicator during inventory update processes within the Master Inventory feature<br>- It ensures users are informed of ongoing loading states, enhancing user experience by signaling that data is being processed or fetched<br>- Integrates seamlessly into the inventory management workflow, maintaining clarity and responsiveness during asynchronous operations in the frontend application.</td>
+															<td style='padding: 8px;'>- Provides a visual indicator during inventory update processes within the Master Inventory feature, enhancing user experience by signaling ongoing loading states<br>- Integrates seamlessly into the frontend architecture, ensuring consistent feedback during asynchronous operations in the inventory management workflow<br>- This component helps maintain user engagement and clarity while data is being fetched or processed.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -1079,7 +1086,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/hook/use-inventoryAPI.ts'>use-inventoryAPI.ts</a></b></td>
-													<td style='padding: 8px;'>- Provides a comprehensive hook for managing inventory data across multiple categories, including current stock, todays inventory, and surplus items<br>- Facilitates CRUD operations and transfers between categories, enabling seamless synchronization with backend APIs<br>- Integrates inventory workflows into the overall architecture, supporting real-time updates and efficient inventory control within the application.</td>
+													<td style='padding: 8px;'>- Provides a comprehensive hook for managing inventory data across multiple categories, including current stock, todays inventory, and surplus items<br>- Facilitates CRUD operations and transfers between categories, enabling seamless synchronization with backend APIs<br>- Integrates inventory workflows into the frontend architecture, supporting real-time updates and efficient inventory management within the overall system.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -1099,7 +1106,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Today_Inventory/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- This code file defines the Today Inventory page within the inventory management feature of the application<br>- Its primary purpose is to present users with a comprehensive, interactive view of the current day's inventory status<br>- It enables users to efficiently view, filter, sort, and manage inventory items, facilitating real-time decision-making and operational oversight<br>- By integrating various hooks and UI components, the page ensures a dynamic and responsive user experience aligned with the overall architecture of the inventory system.</td>
+													<td style='padding: 8px;'>- This code file defines the Today Inventory page within the inventory management feature of the application<br>- Its primary purpose is to display, manage, and interact with the current day's inventory data, providing users with real-time insights and control over inventory items<br>- It integrates various UI components, icons, and hooks to facilitate functionalities such as searching, filtering, sorting, and editing inventory records<br>- Overall, this page serves as a centralized interface for users to monitor and perform actions on today's inventory, seamlessly connecting to backend APIs and maintaining state to ensure an up-to-date and user-friendly experience within the broader inventory management architecture.</td>
 												</tr>
 											</table>
 											<!-- Update_Today_Inventory Submodule -->
@@ -1117,11 +1124,11 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Today_Inventory/Update_Today_Inventory/page.tsx'>page.tsx</a></b></td>
-															<td style='padding: 8px;'>- OverviewThis code file defines the EditTodayInventoryItem" component, a key part of the inventory management feature within the application<br>- Its primary purpose is to enable users to view and update the inventory data for the current day, facilitating real-time inventory tracking and adjustments<br>- Positioned within the Today_Inventory section of the frontend architecture, it supports the broader goal of maintaining accurate, up-to-date inventory records, which are essential for operational decision-making and inventory control<br>- The component interacts with backend APIs to fetch and persist inventory data, ensuring seamless synchronization between the user interface and the underlying data store.</td>
+															<td style='padding: 8px;'>- Page.tsx`-Today Inventory Item Update PageThis component serves as the main interface for viewing and editing inventory data specific to the current day within the applications inventory management system<br>- It provides users with a streamlined, interactive experience to update today's inventory items, ensuring real-time accuracy and consistency across the platform<br>- By integrating navigation, API interactions, and user feedback mechanisms, this page plays a crucial role in maintaining up-to-date inventory records, supporting the broader architecture's goal of efficient stock management and operational visibility.</td>
 														</tr>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Today_Inventory/Update_Today_Inventory/loading.tsx'>loading.tsx</a></b></td>
-															<td style='padding: 8px;'>- Provides a visual indicator during data fetching or processing within the Today Inventory update feature<br>- It ensures users are informed of ongoing loading operations, enhancing user experience by maintaining clarity and responsiveness during inventory management tasks in the frontend application.</td>
+															<td style='padding: 8px;'>- Provides a visual indicator during data loading processes within the Inventory management feature<br>- It ensures users receive immediate feedback while inventory data for the current day is being fetched or updated, enhancing user experience by signaling ongoing background operations in the inventory update workflow.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -1141,11 +1148,11 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Today_Inventory/View_Today_Inventory/page.tsx'>page.tsx</a></b></td>
-															<td style='padding: 8px;'>- Page.tsx<code> in </code>View_Today_Inventory`This component serves as the main interface for viewing todays inventory within the application<br>- It orchestrates the retrieval and display of inventory data specific to the current day, providing users with an organized and accessible view of inventory items<br>- By integrating authentication context, navigation hooks, and inventory API calls, it ensures that users can seamlessly access up-to-date inventory information tailored to their roles and device types<br>- Overall, this file is pivotal in delivering a real-time, user-specific snapshot of inventory status, supporting efficient inventory management workflows within the broader application architecture.</td>
+															<td style='padding: 8px;'>- Page.tsx<code> in </code>View_Today_Inventory`This component serves as the main interface for viewing todays inventory within the application<br>- It orchestrates the display of inventory data specific to the current day, integrating user authentication, navigation, and responsive layout components<br>- By leveraging custom hooks and context, it ensures that users can seamlessly access and interact with up-to-date inventory information, tailored to their roles and device types<br>- Overall, this file acts as the central hub for presenting real-time inventory insights, supporting efficient inventory management workflows within the broader architecture.</td>
 														</tr>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Today_Inventory/View_Today_Inventory/loading.tsx'>loading.tsx</a></b></td>
-															<td style='padding: 8px;'>- Provides a placeholder component for the Today Inventory view during loading states, ensuring a seamless user experience by maintaining layout consistency while inventory data is being fetched<br>- Integrates into the overall inventory management interface within the frontend architecture, supporting smooth transitions and improved responsiveness during data retrieval processes.</td>
+															<td style='padding: 8px;'>- Provides a placeholder component for the Today Inventory view during loading states, ensuring a seamless user experience by maintaining layout consistency while inventory data is being fetched<br>- Integrates into the overall inventory management interface within the frontend application, supporting smooth transitions and improved responsiveness during data retrieval processes.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -1167,7 +1174,7 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Surplus_Inventory/page.tsx'>page.tsx</a></b></td>
-													<td style='padding: 8px;'>- Surplus Inventory PageThis file defines the Surplus Inventory page within the Inventory feature of the application<br>- Its primary purpose is to provide a user interface for viewing, managing, and interacting with surplus inventory data<br>- It integrates various UI components, icons, and hooks to facilitate features such as searching, filtering, sorting, and performing actions (e.g., editing or deleting surplus inventory items)<br>- Overall, it serves as the central interface for users to monitor and manage surplus inventory efficiently, fitting into the broader inventory management architecture by enabling real-time data interaction and user-driven operations.</td>
+													<td style='padding: 8px;'>- Surplus Inventory PageThis file defines the Surplus Inventory page within the Inventory feature of the application<br>- Its primary purpose is to provide a comprehensive interface for viewing, managing, and interacting with surplus inventory data<br>- The page integrates various UI components, icons, and hooks to facilitate functionalities such as searching, filtering, sorting, and performing actions (e.g., editing or deleting surplus inventory items)<br>- It acts as a central hub for users to efficiently oversee surplus stock, ensuring smooth inventory management workflows within the broader application architecture.</td>
 												</tr>
 											</table>
 											<!-- View_Surplus_Inventory Submodule -->
@@ -1185,11 +1192,11 @@
 													</thead>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Surplus_Inventory/View_Surplus_Inventory/page.tsx'>page.tsx</a></b></td>
-															<td style='padding: 8px;'>- Provides a detailed view of individual surplus inventory items, enabling users to access comprehensive information such as item ID, name, category, stock status, dates, and last updates<br>- Facilitates navigation back to the inventory list and ensures seamless data fetching and presentation, supporting inventory management and decision-making within the broader supply chain architecture.</td>
+															<td style='padding: 8px;'>- Provides a detailed view of individual surplus inventory items, enabling users to access comprehensive information such as item details, stock status, and timestamps<br>- Integrates data fetching, formatting, and user navigation to support inventory management workflows within the broader application architecture<br>- Enhances user experience by presenting organized, real-time inventory insights and facilitating seamless navigation.</td>
 														</tr>
 														<tr style='border-bottom: 1px solid #eee;'>
 															<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Inventory/Surplus_Inventory/View_Surplus_Inventory/loading.tsx'>loading.tsx</a></b></td>
-															<td style='padding: 8px;'>- Provides a placeholder component for the surplus inventory view during loading states, ensuring a seamless user experience by maintaining layout consistency while data is being fetched<br>- Integrates into the overall inventory management interface, supporting smooth transitions and improved responsiveness within the frontend architecture.</td>
+															<td style='padding: 8px;'>- Provides a placeholder component for the surplus inventory view, ensuring a seamless user experience during data loading states within the inventory management feature<br>- It integrates into the overall frontend architecture, supporting smooth transitions and maintaining interface consistency while inventory data is fetched or processed.</td>
 														</tr>
 													</table>
 												</blockquote>
@@ -1213,7 +1220,7 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Dashboard/page.tsx'>page.tsx</a></b></td>
-											<td style='padding: 8px;'>- Dashboard PageThis file defines the main dashboard interface within the frontend application, serving as the central hub for visualizing key business metrics<br>- It integrates various data sources and visual components to provide users with real-time insights into sales performance, inventory status, and operational alerts<br>- The dashboard facilitates interactive data exploration through filters and dynamic charts, supporting informed decision-making across the platforms architecture.</td>
+											<td style='padding: 8px;'>- The <code>page.tsx</code> file in the Dashboard feature serves as the central component for rendering the user’s dashboard interface<br>- It orchestrates the display of key business metrics, including sales trends, inventory status, and product performance, by integrating various data sources and visualizations<br>- This component provides users with an at-a-glance overview of sales predictions, stock levels, and operational alerts, facilitating informed decision-making<br>- Overall, it acts as the primary user interface for monitoring and analyzing critical business data within the applications architecture.</td>
 										</tr>
 									</table>
 									<!-- hook Submodule -->
@@ -1231,15 +1238,15 @@
 											</thead>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Dashboard/hook/useMultiSalesPrediction.ts'>useMultiSalesPrediction.ts</a></b></td>
-													<td style='padding: 8px;'>- Provides a custom React hook to fetch and manage multi-timeframe sales prediction data, including daily, weekly, and monthly forecasts<br>- Facilitates asynchronous data retrieval, loading state management, and error handling, enabling seamless integration of predictive sales insights into the dashboard component of the application’s architecture.</td>
+													<td style='padding: 8px;'>- Provides a custom React hook for fetching and managing multi-timeframe sales prediction data, including daily, weekly, and monthly forecasts<br>- Facilitates asynchronous data retrieval, state management, and error handling to support dynamic sales insights within the dashboard, enabling users to visualize top sales predictions across different periods seamlessly.</td>
 												</tr>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Dashboard/hook/use-dashboardAPI.ts'>use-dashboardAPI.ts</a></b></td>
-													<td style='padding: 8px;'>- Provides a set of hooks for fetching key inventory insights—low stock, expiring, and surplus ingredients—within the dashboard feature<br>- These functions enable real-time data retrieval to support inventory management and decision-making, integrating seamlessly with the overall architecture to enhance user visibility into stock status and facilitate proactive inventory control.</td>
+													<td style='padding: 8px;'>- Provides custom hooks for fetching key inventory insights, including low stock, expiring, and surplus ingredients, from the backend API<br>- These hooks streamline data retrieval for the dashboard, enabling real-time monitoring and management of inventory levels within the applications architecture<br>- They facilitate seamless integration of inventory status updates into the user interface.</td>
 												</tr>
 												<tr style='border-bottom: 1px solid #eee;'>
 													<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/Features/Dashboard/hook/useSalesPrediction.ts'>useSalesPrediction.ts</a></b></td>
-													<td style='padding: 8px;'>- Provides a React hook for fetching and managing sales prediction data from an API, enabling dynamic updates of sales forecasts within the dashboard<br>- Facilitates seamless integration of predictive insights into the user interface, supporting data-driven decision-making and enhancing the overall analytics capabilities of the application.</td>
+													<td style='padding: 8px;'>- Provides a React hook for fetching and managing weekly or top sales prediction data from an API, enabling dynamic updates and error handling within the dashboard<br>- It facilitates seamless integration of sales forecasts into the user interface, supporting data-driven decision-making and enhancing the overall analytics capabilities of the application.</td>
 												</tr>
 											</table>
 										</blockquote>
@@ -1263,7 +1270,7 @@
 							</thead>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/routes/routes.ts'>routes.ts</a></b></td>
-									<td style='padding: 8px;'>- Defines centralized route mappings for the applications navigation structure, enabling consistent URL referencing across the frontend<br>- Facilitates seamless routing to core features such as inventory management, reports, user settings, and other modules, supporting maintainability and scalability within the overall architecture.</td>
+									<td style='padding: 8px;'>- Defines centralized URL routes for the applications navigation, enabling consistent and maintainable access to various features and pages within the frontend architecture<br>- Facilitates seamless routing management across inventory, reports, user management, and settings modules, supporting scalable and organized navigation flow throughout the project.</td>
 								</tr>
 							</table>
 						</blockquote>
@@ -1283,15 +1290,15 @@
 							</thead>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/lib/loadingSetter.ts'>loadingSetter.ts</a></b></td>
-									<td style='padding: 8px;'>- Facilitates centralized management of loading state within the frontend application by allowing registration of a loading setter function and providing a mechanism to toggle loading indicators<br>- This setup enables consistent visual feedback during asynchronous operations, ensuring seamless user experience across different components and parts of the application.</td>
+									<td style='padding: 8px;'>- Facilitates centralized management of loading state within the frontend application by allowing registration of a loading setter function and enabling other components to trigger loading state updates<br>- This approach ensures consistent user experience during asynchronous operations, integrating seamlessly into the overall architecture to coordinate UI feedback across different parts of the application.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/lib/index.ts'>index.ts</a></b></td>
-									<td style='padding: 8px;'>- Facilitates consistent class name management across the frontend application by re-exporting a utility function from the utils module<br>- Integrates seamlessly into the project’s architecture, promoting maintainability and streamlined styling practices within the app’s component library.</td>
+									<td style='padding: 8px;'>- Facilitates consistent class name management across the frontend application by re-exporting a utility function from the utils module<br>- Integrates seamlessly into the project’s architecture, promoting cleaner code and easier styling practices within the app’s component structure<br>- Enhances maintainability and readability by centralizing class name handling in the app’s core library.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/lib/utils.ts'>utils.ts</a></b></td>
-									<td style='padding: 8px;'>- Provides a utility function to concatenate multiple class names into a single string, filtering out falsy values<br>- It streamlines dynamic styling within the frontend application, ensuring clean and efficient class management across components<br>- This enhances the maintainability and consistency of the user interface by simplifying conditional class application.</td>
+									<td style='padding: 8px;'>- Provides a utility function to concatenate multiple class names into a single string, filtering out falsy values<br>- It streamlines dynamic styling within the frontend application, supporting consistent and conditional class application across components<br>- This enhances the maintainability and readability of styling logic within the overall frontend architecture.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/lib/axios.ts'>axios.ts</a></b></td>
@@ -1299,7 +1306,7 @@
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/lib/loadingHandler.ts'>loadingHandler.ts</a></b></td>
-									<td style='padding: 8px;'>- Facilitates global management of loading states within the frontend application, enabling seamless control over user interface feedback during asynchronous operations<br>- Integrates with the centralized loadingSetter to toggle loading indicators, thereby enhancing user experience and maintaining consistent state handling across various components in the overall architecture.</td>
+									<td style='padding: 8px;'>- Facilitates global management of loading states within the frontend application, enabling seamless user experience during asynchronous operations<br>- Integrates with the centralized loadingSetter to toggle loading indicators, supporting consistent visual feedback across various components<br>- Enhances the overall architecture by providing a unified interface for handling loading status, ensuring smooth interactions and improved responsiveness throughout the user interface.</td>
 								</tr>
 							</table>
 						</blockquote>
@@ -1319,11 +1326,11 @@
 							</thead>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/hooks/usePWA.ts'>usePWA.ts</a></b></td>
-									<td style='padding: 8px;'>- Provides comprehensive hooks for managing Progressive Web App (PWA) features, including installation, offline actions, network status, and notifications<br>- Facilitates seamless PWA integration within the application, enabling offline support, push notifications, and install prompts, thereby enhancing user engagement and resilience across varying network conditions<br>- Serves as a core utility layer for PWA capabilities within the overall architecture.</td>
+									<td style='padding: 8px;'>- Provides comprehensive hooks for managing Progressive Web App (PWA) features, including installation, offline actions, network status, and push notifications<br>- Facilitates seamless PWA integration within the application, enabling users to install the app, handle offline data synchronization, and receive notifications, thereby enhancing user engagement and resilience in varying network conditions.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/hooks/usePWAData.ts'>usePWAData.ts</a></b></td>
-									<td style='padding: 8px;'>- Provides a comprehensive React hook for managing Progressive Web App (PWA) data, enabling seamless offline caching, automatic synchronization, and real-time updates<br>- It simplifies data fetching, caching, and offline handling, ensuring resilient user experiences across network conditions<br>- The hook supports optimistic updates, cache invalidation, and background sync, integrating tightly with the overall PWA architecture to enhance data reliability and performance.</td>
+									<td style='padding: 8px;'>- Provides a comprehensive React hook for managing Progressive Web App data, enabling seamless caching, offline support, and synchronization<br>- It automates data fetching, caching, and updates while handling offline actions and stale data alerts, ensuring reliable user experiences across online and offline states within the applications architecture.</td>
 								</tr>
 							</table>
 						</blockquote>
@@ -1343,7 +1350,7 @@
 							</thead>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/resetPassword/page.tsx'>page.tsx</a></b></td>
-									<td style='padding: 8px;'>- Facilitates user password recovery by providing a form to request a reset link via email<br>- Integrates with Supabase authentication to trigger password reset workflows and guides users to update their password securely<br>- Enhances overall authentication flow within the application, ensuring a seamless and user-friendly experience for account recovery.</td>
+									<td style='padding: 8px;'>- Facilitates user password recovery by providing a user interface for submitting email addresses to trigger password reset links via Supabase authentication<br>- Integrates seamlessly into the authentication flow, enabling users to initiate password resets and receive instructions, thereby enhancing account security and user experience within the overall application architecture.</td>
 								</tr>
 							</table>
 						</blockquote>
@@ -1367,7 +1374,7 @@
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/context/AuthContext.tsx'>AuthContext.tsx</a></b></td>
-									<td style='padding: 8px;'>- Provides user authentication management within the application by maintaining session state, handling login status, and role-based access control<br>- Integrates with Supabase for session validation and synchronizes user data with backend APIs, ensuring secure and seamless user experience across the app<br>- Acts as a central context for authentication status, enabling consistent access control throughout the codebase.</td>
+									<td style='padding: 8px;'>- Provides user authentication management within the application by maintaining session state, handling login status, and role-based access control<br>- Integrates with Supabase for session validation and synchronizes user data with backend APIs, ensuring secure and seamless user experiences across the apps architecture<br>- Acts as a central context for authentication state, enabling consistent access control throughout the frontend.</td>
 								</tr>
 							</table>
 						</blockquote>
@@ -1387,15 +1394,15 @@
 							</thead>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/utils/pwa.ts'>pwa.ts</a></b></td>
-									<td style='padding: 8px;'>- Provides core utilities for Progressive Web App (PWA) functionality within Cardiac Delights, enabling seamless installation, offline support, network status monitoring, background synchronization, and push notifications<br>- These utilities facilitate enhanced user engagement and reliability by managing PWA lifecycle events, offline actions, and real-time communication, integrating essential PWA features into the overall application architecture.</td>
+									<td style='padding: 8px;'>- Provides core Progressive Web App (PWA) functionalities, including installation prompts, offline support, network status monitoring, background synchronization, and push notifications<br>- These utilities enable the application to deliver a seamless, resilient user experience across various devices and network conditions, integrating essential PWA features into the overall architecture of Cardiac Delights.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/utils/_app.tsx'>_app.tsx</a></b></td>
-									<td style='padding: 8px;'>- Establishes the global application structure by integrating authentication context across all pages<br>- Facilitates user state management and access control throughout the frontend, ensuring consistent authentication handling<br>- Serves as the foundational entry point for initializing app-wide providers, enabling seamless user experience and secure interactions within the overall architecture.</td>
+									<td style='padding: 8px;'>- Establishes the global application structure by integrating authentication context across all pages, ensuring consistent user state management throughout the frontend<br>- Facilitates seamless access to authentication data and functions, supporting secure and cohesive user experiences within the overall architecture of the Next.js application.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/utils/pwaCache.ts'>pwaCache.ts</a></b></td>
-									<td style='padding: 8px;'>- Provides a comprehensive utility for managing Progressive Web App (PWA) caching strategies, enabling efficient storage, retrieval, and invalidation of various data types in local storage<br>- Facilitates optimized data freshness and performance by implementing tailored cache durations, supporting the overall architectures goal of delivering a responsive, offline-capable user experience.</td>
+									<td style='padding: 8px;'>- Provides a comprehensive utility for managing Progressive Web App (PWA) caching strategies, enabling efficient storage, retrieval, and invalidation of various data types in local storage<br>- Facilitates optimized data freshness and performance by implementing configurable cache durations tailored to different data categories, supporting seamless offline access and improved user experience within the overall application architecture.</td>
 								</tr>
 							</table>
 							<!-- API Submodule -->
@@ -1413,7 +1420,7 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/utils/API/LoginAPI.ts'>LoginAPI.ts</a></b></td>
-											<td style='padding: 8px;'>- Facilitates user authentication workflows within the frontend application by handling login and logout processes<br>- Integrates with backend API endpoints to authenticate users, manage access tokens, and maintain session state through local storage<br>- Supports secure user session management, contributing to the overall architectures focus on seamless and protected user access across the platform.</td>
+											<td style='padding: 8px;'>- Provides authentication functionalities by managing user login and logout processes through API interactions<br>- Facilitates secure token handling and session management within the frontend application, supporting seamless user authentication flow as part of the overall architecture<br>- Ensures reliable communication with backend authentication endpoints, maintaining consistent user state across the application.</td>
 										</tr>
 									</table>
 								</blockquote>
@@ -1433,7 +1440,7 @@
 									</thead>
 										<tr style='border-bottom: 1px solid #eee;'>
 											<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/frontend/app/utils/Server/supabaseClient.js'>supabaseClient.js</a></b></td>
-											<td style='padding: 8px;'>- Establishes a centralized Supabase client for seamless backend communication within the frontend application<br>- Facilitates secure and efficient interactions with the database and authentication services, supporting core functionalities such as user management, data retrieval, and real-time updates<br>- Integrates environment variables for flexible configuration, ensuring consistency across different deployment environments within the overall project architecture.</td>
+											<td style='padding: 8px;'>- Establishes a centralized Supabase client for seamless backend communication within the frontend application<br>- Facilitates secure data operations, authentication, and real-time updates by connecting to the Supabase backend service<br>- Integrates environment variables to ensure configuration flexibility across different deployment environments, supporting the overall architectures modular and scalable design.</td>
 										</tr>
 									</table>
 								</blockquote>
@@ -1459,7 +1466,7 @@
 			</thead>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/requirements.txt'>requirements.txt</a></b></td>
-					<td style='padding: 8px;'>- Defines project dependencies and environment configurations essential for backend operations<br>- Ensures consistent setup of libraries and tools required for API handling, authentication, data processing, and performance optimization, supporting the overall architectures stability and scalability<br>- Facilitates seamless development, testing, and deployment workflows across the backend ecosystem.</td>
+					<td style='padding: 8px;'>- Defines project dependencies and environment configurations essential for backend operations<br>- Ensures consistent setup across development and deployment environments, supporting core functionalities such as API interactions, authentication, data processing, and third-party integrations<br>- Serves as the foundation for maintaining stability and compatibility within the overall architecture.</td>
 				</tr>
 			</table>
 			<!-- app Submodule -->
@@ -1477,15 +1484,15 @@
 					</thead>
 						<tr style='border-bottom: 1px solid #eee;'>
 							<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/credentials.json'>credentials.json</a></b></td>
-							<td style='padding: 8px;'>- Facilitates secure OAuth 2.0 authentication with Google, enabling user login and authorization within the application<br>- Integrates Googles identity services into the overall architecture, supporting user management and access control for the platform<br>- Ensures seamless and protected interactions between users and backend services, forming a critical component of the system’s authentication framework.</td>
+							<td style='padding: 8px;'>- Facilitates secure OAuth 2.0 authentication with Google, enabling user login and authorization within the application<br>- Integrates Google’s authentication services into the overall architecture, supporting user identity management and access control for the platform<br>- Ensures seamless and secure user onboarding by leveraging Google credentials as part of the system’s authentication flow.</td>
 						</tr>
 						<tr style='border-bottom: 1px solid #eee;'>
 							<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/main.py'>main.py</a></b></td>
-							<td style='padding: 8px;'>- Defines the core FastAPI application, orchestrating API routes for inventory management, sales analytics, user authentication, notifications, and system maintenance<br>- Integrates background scheduling for inventory alerts and configures middleware for CORS<br>- Serves as the central hub connecting various modules, ensuring seamless communication and operational stability within the overall system architecture.</td>
+							<td style='padding: 8px;'>- Establishes the core API infrastructure for the inventory management system, integrating various functional modules such as sales, inventory, user management, and reporting<br>- Sets up routing, middleware, scheduled background tasks, and error handling to ensure seamless, secure, and reliable communication between clients and backend services, supporting overall system stability and operational automation.</td>
 						</tr>
 						<tr style='border-bottom: 1px solid #eee;'>
 							<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/supabase.py'>supabase.py</a></b></td>
-							<td style='padding: 8px;'>- Establishes core backend integrations by configuring the Supabase client for external service interactions and setting up asynchronous access to the PostgreSQL database<br>- Facilitates seamless data operations and external API communication within the applications architecture, supporting efficient data management and third-party service integration across the codebase.</td>
+							<td style='padding: 8px;'>- Establishes core backend integrations by configuring the Supabase client for external service interactions and setting up asynchronous access to the PostgreSQL database<br>- Facilitates seamless data operations and external API communication, serving as a foundational component that supports data management, authentication, and real-time features within the overall architecture.</td>
 						</tr>
 					</table>
 					<!-- routes Submodule -->
@@ -1503,51 +1510,51 @@
 							</thead>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/users.py'>users.py</a></b></td>
-									<td style='padding: 8px;'>- Provides RESTful API endpoints for managing user data within the application, including retrieval, creation, updating, deletion, and password resets<br>- Integrates with Supabase for database and authentication operations, while maintaining activity logs for audit purposes<br>- Ensures role-based access control and handles user lifecycle events, supporting comprehensive user management within the overall system architecture.</td>
+									<td style='padding: 8px;'>- Provides comprehensive user management functionalities within the backend architecture, including retrieving, creating, updating, deleting, and resetting passwords for users<br>- Integrates with Supabase for data storage and authentication, while maintaining activity logs for audit purposes<br>- Ensures role-based access control and synchronization between user data and authentication records, supporting secure and organized user lifecycle operations across the system.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/rolebasedAccess.py'>rolebasedAccess.py</a></b></td>
-									<td style='padding: 8px;'>- Defines role-based access control routes for managing inventory, menu, suppliers, reports, settings, and user sessions within the application<br>- Enforces permissions based on user roles, ensuring appropriate access levels across various functionalities<br>- Serves as a central authorization layer, maintaining security and role-specific operations throughout the backend architecture.</td>
+									<td style='padding: 8px;'>- Defines role-based access control endpoints for managing inventory, menu, suppliers, reports, settings, and user sessions within the application<br>- Enforces permissions based on user roles, ensuring secure and appropriate access to various functionalities across the system<br>- Serves as a central authorization layer, maintaining security and operational integrity in the overall architecture.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/userActivity.py'>userActivity.py</a></b></td>
-									<td style='padding: 8px;'>- Defines API endpoints for managing user activity logs within the backend architecture<br>- Facilitates creation and retrieval of user actions, supporting activity tracking and auditing<br>- Integrates with the database to store detailed activity records, enabling insights into user behavior and system usage patterns across the application.</td>
+									<td style='padding: 8px;'>- Defines API endpoints for recording and retrieving user activity logs within the backend architecture<br>- Facilitates tracking user actions, storing activity details, and enabling filtered retrieval by user ID, supporting auditability and user behavior analysis across the system<br>- Integrates with the database layer to ensure persistent, organized activity data management.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/menu.py'>menu.py</a></b></td>
-									<td style='padding: 8px;'>- This code file defines API routes for managing menu items within the applications backend architecture<br>- Its primary purpose is to facilitate the creation of new menu entries, including uploading associated images and specifying ingredients, in a single, streamlined request<br>- By integrating role-based access control, it ensures that only authorized users such as Owners, General Managers, or Store Managers can perform these operations<br>- Overall, this module plays a crucial role in enabling dynamic menu management, supporting the broader systems functionality for inventory and content updates in a secure and efficient manner.</td>
+									<td style='padding: 8px;'>- This code file defines API routes for managing menu items within the applications backend architecture<br>- Its primary purpose is to facilitate the creation of new menu entries, including uploading associated images and specifying ingredients, in a single, streamlined request<br>- By integrating role-based access control, it ensures that only authorized users such as Owners, General Managers, or Store Managers can perform these operations<br>- Overall, this module plays a crucial role in enabling dynamic menu management and content updates, supporting the broader systems goal of flexible and secure restaurant or store menu administration.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/auth_routes.py'>auth_routes.py</a></b></td>
-									<td style='padding: 8px;'>- Defines authentication endpoints for user login, session validation, and logout, integrating Supabase for user management and activity logging<br>- Facilitates secure token validation, user data retrieval, and activity tracking, ensuring seamless user authentication flow within the applications architecture<br>- Enhances security, user experience, and auditability across the systems authentication processes.</td>
+									<td style='padding: 8px;'>- Defines authentication endpoints for user login, session validation, and logout, integrating Supabase for user data management and activity logging<br>- Facilitates secure token validation, user information retrieval, and activity tracking, ensuring seamless user authentication flow within the applications architecture<br>- Enhances security, user experience, and auditability across the system.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/automaticbackup.py'>automaticbackup.py</a></b></td>
-									<td style='padding: 8px;'>- Implements automated backup scheduling for the application, enabling users to configure regular database backups at specified intervals and times<br>- Facilitates local database dumps and uploads to Google Drive, ensuring data safety and recovery<br>- Integrates with FastAPI endpoints for schedule management and employs background job scheduling to execute backups seamlessly within the overall system architecture.</td>
+									<td style='padding: 8px;'>- Implements automated backup scheduling for the application, enabling users to configure periodic database backups stored locally and uploaded to Google Drive<br>- Manages schedule creation, updates, and execution through API endpoints, integrating time format conversions and leveraging a background scheduler to ensure reliable, customizable backup routines aligned with user preferences.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/inventory.py'>inventory.py</a></b></td>
-									<td style='padding: 8px;'>- Inventory Management APIThis module provides core endpoints for managing and monitoring inventory items within the application<br>- It enables retrieval and updating of stock levels, ensuring real-time visibility into inventory status<br>- The code facilitates dynamic stock threshold configurations, allowing the system to categorize inventory health (e.g., Out Of Stock", Critical, Low, Normal) based on current quantities and customizable thresholds<br>- Overall, it plays a vital role in maintaining accurate inventory tracking, supporting operational decision-making, and ensuring stock levels are proactively managed across the platform.</td>
+									<td style='padding: 8px;'>- The <code>inventory.py</code> file serves as the core API layer for managing inventory items within the application<br>- Its primary purpose is to facilitate the retrieval, creation, updating, and status assessment of inventory data, ensuring that stock levels are accurately monitored and maintained<br>- This module integrates with the broader system to support inventory oversight, trigger stock status recalculations, and enforce role-based access controls, thereby maintaining data integrity and operational efficiency across the platform.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/inventory_settings.py'>inventory_settings.py</a></b></td>
-									<td style='padding: 8px;'>- Defines API endpoints for managing inventory settings, enabling retrieval, creation, updating, and deletion within the applications backend<br>- Integrates role-based access control and logs user activities for audit purposes, ensuring consistent inventory configuration management aligned with user permissions across the system architecture.</td>
+									<td style='padding: 8px;'>- Manages CRUD operations for inventory settings within the application, enabling authorized users to create, retrieve, update, and delete inventory configuration data<br>- Integrates activity logging to track user actions, supporting auditability and accountability<br>- Serves as a core component for maintaining consistent inventory parameters across the system, facilitating effective inventory management and operational oversight.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/supplier.py'>supplier.py</a></b></td>
-									<td style='padding: 8px;'>- Manages supplier data operations within the backend architecture, enabling creation, retrieval, updating, and deletion of supplier records<br>- Integrates role-based access control and activity logging to ensure secure, auditable interactions<br>- Serves as a core component for maintaining supplier information, supporting supply chain management, and facilitating administrative oversight across the system.</td>
+									<td style='padding: 8px;'>- Defines API endpoints for managing supplier data within the application, enabling creation, retrieval, updating, and deletion of supplier records<br>- Integrates role-based access control and activity logging to ensure secure operations and maintain audit trails, supporting the broader system architectures focus on supplier management and user accountability.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/inventory_log.py'>inventory_log.py</a></b></td>
-									<td style='padding: 8px;'>- Facilitates recording and retrieving inventory log entries within the applications backend<br>- Supports bulk insertion of stock updates, capturing details like item ID, stock levels, action date, user, status, and wastage<br>- Enables querying logs filtered by date ranges, ensuring accurate inventory tracking and historical analysis aligned with the overall data architecture.</td>
+									<td style='padding: 8px;'>- Provides API endpoints for managing inventory logs, enabling insertion of new log entries and retrieval of existing logs within specified date ranges<br>- Facilitates tracking inventory changes, recording stock adjustments, and querying historical data to support inventory management and reporting within the broader system architecture.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/notification.py'>notification.py</a></b></td>
-									<td style='padding: 8px;'>- Manages user notifications and alert settings within the application, enabling retrieval, updates, and creation of notifications related to inventory status, low stock, and expiration alerts<br>- Integrates with user activity logging and enforces role-based access, supporting proactive communication to users about inventory conditions and system events across the platform.</td>
+									<td style='padding: 8px;'>- Manages user notifications and alert settings within the application, enabling retrieval, updates, and creation of notifications related to inventory status such as low stock and expiring items<br>- Facilitates automated and manual inventory checks, ensuring users receive timely alerts through preferred methods, and maintains notification history to support effective inventory management and user engagement.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/dashboard.py'>dashboard.py</a></b></td>
-									<td style='padding: 8px;'>- Provides API endpoints for dashboard metrics, including low stock inventory, expiring ingredients within a configurable timeframe, and surplus ingredients<br>- Facilitates real-time inventory monitoring and alerts, supporting inventory management and decision-making processes within the broader application architecture.</td>
+									<td style='padding: 8px;'>- Provides API endpoints for dashboard metrics, including low stock inventory, expiring ingredients within a configurable timeframe, and surplus ingredients<br>- Facilitates real-time inventory monitoring and alerts, supporting efficient stock management and decision-making within the overall application architecture.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/sales_report.py'>sales_report.py</a></b></td>
@@ -1555,15 +1562,15 @@
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/backup_restore.py'>backup_restore.py</a></b></td>
-									<td style='padding: 8px;'>- This code file defines the core backend routes responsible for managing data backup and restoration processes within the application<br>- It facilitates comprehensive data management by enabling users to back up critical database tables and restore data as needed<br>- Additionally, it integrates with Google Drive to securely store backups, ensuring data persistence and recoverability<br>- Overall, this module plays a pivotal role in maintaining data integrity, supporting disaster recovery, and enabling seamless data migration across the applications architecture.</td>
+									<td style='padding: 8px;'>- This code file serves as the core module for managing data backup and restoration within the applications architecture<br>- It facilitates secure, automated backups of critical database tables and application data, integrating with Google Drive for cloud storage<br>- Additionally, it provides mechanisms for restoring data from backups, ensuring data integrity and continuity<br>- By orchestrating interactions between the database, cloud storage, and user activity logging, this module plays a pivotal role in maintaining data resilience and supporting operational recovery processes across the entire system.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/sales_prediction.py'>sales_prediction.py</a></b></td>
-									<td style='padding: 8px;'>- Provides an API endpoint for forecasting top-selling items based on recent sales data<br>- It aggregates sales over a specified period, identifies leading products, and generates short-term sales predictions using Prophet<br>- This functionality supports inventory planning and demand forecasting within the overall sales analytics architecture.</td>
+									<td style='padding: 8px;'>- Provides an API endpoint for predicting top-selling items based on recent sales data<br>- Utilizes historical order data to identify leading products and forecasts future sales using Prophet, enabling data-driven inventory and sales planning within the applications architecture.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/routes/resetpass.py'>resetpass.py</a></b></td>
-									<td style='padding: 8px;'>- Facilitates password reset requests by providing an API endpoint that triggers email notifications with reset links<br>- Integrates email delivery via SMTP, enabling users to securely initiate password recovery<br>- Serves as a critical component within the authentication flow, ensuring seamless user account management and enhancing overall security within the application architecture.</td>
+									<td style='padding: 8px;'>- Facilitates password reset functionality by handling user requests to initiate password recovery<br>- It generates reset links and dispatches email notifications through SMTP, integrating seamlessly into the authentication flow of the overall application architecture<br>- This component ensures users can securely request password resets, supporting user account management and security protocols within the system.</td>
 								</tr>
 							</table>
 						</blockquote>
@@ -1583,7 +1590,7 @@
 							</thead>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/models/base.py'>base.py</a></b></td>
-									<td style='padding: 8px;'>- Defines the foundational ORM model class for the applications database layer, establishing a common base for all database models within the backend architecture<br>- Facilitates consistent mapping of Python classes to database tables, enabling seamless data persistence and retrieval across the entire codebase<br>- Serves as the core component for ORM interactions in the backends data management system.</td>
+									<td style='padding: 8px;'>- Defines the foundational ORM model class for the applications database layer, establishing a common base for all database models within the backend architecture<br>- Facilitates consistent schema definitions and interactions with the database through SQLAlchemy, supporting the overall modular and scalable design of the backend system.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/models/userModal.py'>userModal.py</a></b></td>
@@ -1607,15 +1614,15 @@
 							</thead>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/services/auth_service.py'>auth_service.py</a></b></td>
-									<td style='padding: 8px;'>- Facilitates user authentication by interfacing with Supabases authentication API, enabling secure login functionality within the backend service<br>- Integrates environment variables for configuration, manages asynchronous HTTP requests, and handles credential validation, forming a core component of the applications user management and access control architecture.</td>
+									<td style='padding: 8px;'>- Facilitates user authentication by interfacing with Supabases authentication API, enabling secure login functionality within the backend architecture<br>- Integrates seamlessly with the overall system to verify user credentials, supporting the applications authentication flow and ensuring protected access to resources<br>- Serves as a core component for managing user sessions and maintaining security standards across the platform.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/services/user_activity_log_service.py'>user_activity_log_service.py</a></b></td>
-									<td style='padding: 8px;'>- Facilitates logging and retrieval of user activity data within the application, supporting audit trails and user behavior analysis<br>- Provides mechanisms to record user actions with contextual details and query logs based on various filters such as user ID, action type, role, and date ranges<br>- Integrates seamlessly into the overall architecture to ensure comprehensive activity tracking and reporting.</td>
+									<td style='padding: 8px;'>- Facilitates logging and retrieval of user activity data within the application, supporting audit trails and user behavior analysis<br>- Integrates with the database to record user actions, filter logs based on various criteria, and ensure accurate activity tracking aligned with the overall system architecture<br>- Enhances transparency and accountability across user interactions.</td>
 								</tr>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/services/example_service.py'>example_service.py</a></b></td>
-									<td style='padding: 8px;'>- Provides an asynchronous service function that retrieves example data within the backend architecture, facilitating data fetching operations for the application<br>- It supports the overall system by enabling efficient, non-blocking access to sample information, which can be integrated into larger workflows or API responses to demonstrate or test core functionalities of the FastAPI-based backend.</td>
+									<td style='padding: 8px;'>- Provides an asynchronous service function to retrieve example data within the backend architecture<br>- It facilitates data fetching operations, supporting the overall API functionality by delivering a simple message endpoint<br>- This component integrates into the larger FastAPI application, enabling modular and scalable data access for client interactions.</td>
 								</tr>
 							</table>
 						</blockquote>
@@ -1635,7 +1642,7 @@
 							</thead>
 								<tr style='border-bottom: 1px solid #eee;'>
 									<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/backend/app/utils/rbac.py'>rbac.py</a></b></td>
-									<td style='padding: 8px;'>- Implements role-based access control (RBAC) by authenticating users through JWT tokens and verifying their roles against database records<br>- Facilitates secure authorization for API endpoints within the backend architecture, ensuring that only users with appropriate permissions can access protected resources<br>- Integrates seamlessly with FastAPIs dependency injection system to enforce security policies across the application.</td>
+									<td style='padding: 8px;'>- Implements role-based access control (RBAC) by authenticating users through JWT tokens and verifying their permissions against stored user roles in the database<br>- Facilitates secure endpoint protection within the application, ensuring only authorized users with appropriate roles can access specific resources, thereby maintaining the overall security and integrity of the system.</td>
 								</tr>
 							</table>
 						</blockquote>
@@ -1659,7 +1666,7 @@
 			</thead>
 				<tr style='border-bottom: 1px solid #eee;'>
 					<td style='padding: 8px;'><b><a href='https://github.com/AcsOfficial/Capstone-Project/blob/master/Database/schema.sql'>schema.sql</a></b></td>
-					<td style='padding: 8px;'>- Defines the database schema for managing core entities such as users, inventory, orders, menus, ingredients, food trends, and backup history<br>- Facilitates data organization, relationships, and constraints essential for supporting restaurant operations, inventory tracking, trend analysis, and user activity logging within the overall system architecture<br>- Ensures data integrity and streamlined interactions across various modules.</td>
+					<td style='padding: 8px;'>- Defines the database schema for managing core entities such as users, inventory, orders, menus, ingredients, food trends, and backup history<br>- Facilitates data organization, relationships, and constraints essential for supporting restaurant operations, inventory tracking, trend analysis, and user activity logging within the overall system architecture.</td>
 				</tr>
 			</table>
 		</blockquote>
