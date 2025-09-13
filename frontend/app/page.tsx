@@ -270,43 +270,26 @@ const Login = () => {
         {showResetModal && (
           <Modal
             message={
-              <>
-                <div>
-                  <h3 className="text-xl font-semibold mb-2 text-white">
-                    Reset Password
-                  </h3>
-                  <form onSubmit={handleSendReset} className="space-y-4">
-                    <input
-                      type="email"
-                      placeholder="Enter your email"
-                      value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      required
-                      className="w-full bg-gray-900/80 border-2 border-yellow-400 text-white placeholder-gray-400 px-3 py-2 rounded-lg shadow focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-400 transition-all mb-2"
-                    />
-                    <button
-                      type="submit"
-                      className="bg-yellow-400 hover:bg-yellow-500 text-black font-medium px-5 py-2 rounded-full transition duration-300 w-full"
-                    >
-                      Send Reset Link
-                    </button>
-                  </form>
-                  {resetStatus && (
-                    <div className="mt-3 text-yellow-200">{resetStatus}</div>
-                  )}
-                  <button
-                    onClick={handleCloseResetModal}
-                    className="mt-4 bg-black border border-yellow-400 text-yellow-400 px-4 py-2 rounded-full hover:bg-yellow-400 hover:text-black transition"
-                  >
-                    Close
-                  </button>
-                </div>
-              </>
+              <div>
+                <h3 className="text-xl font-semibold mb-2 text-white">
+                  Reset Password
+                </h3>
+                <p className="text-yellow-200 mb-4">
+                  Please contact the Owner to change your password.
+                </p>
+                <button
+                  onClick={handleCloseResetModal}
+                  className="mt-4 bg-black border border-yellow-400 text-yellow-400 px-4 py-2 rounded-full hover:bg-yellow-400 hover:text-black transition"
+                >
+                  Close
+                </button>
+              </div>
             }
             onClose={handleCloseResetModal}
           />
         )}
       </section>
+
       {isModalOpen && (
         <Modal message="Logged in successfully!" onClose={handleModalClose} />
       )}

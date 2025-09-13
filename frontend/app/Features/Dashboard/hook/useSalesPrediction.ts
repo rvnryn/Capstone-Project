@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import axiosInstance from "@/app/lib/axios"; // Add this import
 
 export interface SalesPrediction {
   name: string;
@@ -17,16 +18,19 @@ export function useSalesPrediction() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(
+        // Use axiosInstance instead of fetch
+        const res = await axiosInstance.get(
           `/api/predict_top_sales?timeframe=${timeframe}&top_n=${top_n}`
         );
-        if (!res.ok) throw new Error("Failed to fetch sales prediction");
-        const result = await res.json();
-        console.log("[DEBUG] Frontend received:", result);
-        setData(result);
+        setData(res.data);
       } catch (err: any) {
-        console.error("[DEBUG] Frontend error:", err);
-        setError(err.message || "Unknown error");
+        console.error("Sales prediction fetch error:", err);
+        setError(
+          err?.response?.data?.detail ||
+            err.message ||
+            "Failed to fetch sales prediction"
+        );
+        setData([]);
       } finally {
         setLoading(false);
       }
