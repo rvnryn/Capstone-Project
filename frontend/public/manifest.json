@@ -32,7 +32,7 @@
     },
     {
       "name": "Inventory",
-      "short_name": "Inventory", 
+      "short_name": "Inventory",
       "description": "Manage inventory and stock levels",
       "url": "/inventory",
       "icons": [
@@ -47,7 +47,7 @@
       "name": "Menu",
       "short_name": "Menu",
       "description": "Update menu items and pricing",
-      "url": "/menu", 
+      "url": "/menu",
       "icons": [
         {
           "src": "/Menu.png",
@@ -81,50 +81,36 @@
     "client_mode": ["navigate-existing", "auto"]
   },
   "icons": [
+    { "src": "/icons/icon-72x72.png", "sizes": "72x72", "type": "image/png" },
+    { "src": "/icons/icon-96x96.png", "sizes": "96x96", "type": "image/png" },
     {
-      "src": "/logo2.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/logo2.png",
-      "sizes": "96x96", 
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/logo2.png",
+      "src": "/icons/icon-128x128.png",
       "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any"
+      "type": "image/png"
     },
     {
-      "src": "/logo2.png",
+      "src": "/icons/icon-144x144.png",
       "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any"
+      "type": "image/png"
     },
     {
-      "src": "/logo2.png",
+      "src": "/icons/icon-152x152.png",
       "sizes": "152x152",
-      "type": "image/png", 
-      "purpose": "any"
+      "type": "image/png"
     },
     {
-      "src": "/logo2.png",
+      "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/logo2.png",
+      "src": "/icons/icon-384x384.png",
       "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any"
+      "type": "image/png"
     },
     {
-      "src": "/logo2.png",
+      "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -132,32 +118,18 @@
   ],
   "screenshots": [
     {
-      "src": "/Dashboard.png",
+      "src": "/screenshots/dashboard-wide.png",
       "sizes": "1280x720",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Dashboard Overview - Business analytics and key metrics"
+      "label": "Dashboard Overview"
     },
     {
-      "src": "/Inventory.png", 
-      "sizes": "1280x720",
+      "src": "/screenshots/dashboard-narrow.png",
+      "sizes": "360x720",
       "type": "image/png",
-      "form_factor": "wide",
-      "label": "Inventory Management - Track stock levels and supplies"
-    },
-    {
-      "src": "/Menu.png",
-      "sizes": "1280x720", 
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Menu Management - Update items and pricing"
-    },
-    {
-      "src": "/Report.png",
-      "sizes": "1280x720",
-      "type": "image/png", 
-      "form_factor": "wide",
-      "label": "Reports & Analytics - Sales and business insights"
+      "form_factor": "narrow",
+      "label": "Dashboard Mobile"
     }
   ]
 }
