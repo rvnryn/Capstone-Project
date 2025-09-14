@@ -9,6 +9,7 @@ import Image from "next/image";
 import { supabase } from "./utils/Server/supabaseClient";
 import { ReactNode } from "react";
 import { useAuth } from "@/app/context/AuthContext";
+import { FaSpinner } from "react-icons/fa";
 
 interface ModalProps {
   message: ReactNode;
@@ -94,19 +95,21 @@ const Login = () => {
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetStatus, setResetStatus] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { refreshSession } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true); // <-- Show loading
     let loginEmail = email;
 
-    // 1. Call backend login API (handles username/email)
     let backendResponse;
     try {
-      backendResponse = await loginUser(email, password); // returns { access_token, email, ... }
+      backendResponse = await loginUser(email, password);
       loginEmail = backendResponse.email;
     } catch (err) {
+      setLoading(false); // <-- Hide loading on error
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -115,17 +118,16 @@ const Login = () => {
       return;
     }
 
-    // 2. Supabase client login (must use email)
     const { data, error } = await supabase.auth.signInWithPassword({
       email: loginEmail,
       password,
     });
+    setLoading(false);
     if (error) {
       setError(error.message);
       return;
     }
 
-    // 3. Refresh context/session
     await refreshSession();
     setIsModalOpen(true);
   };
@@ -254,6 +256,16 @@ const Login = () => {
           </button>
         </form>
       </section>
+
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <FaSpinner className="animate-spin text-yellow-400 text-5xl" />
+          <span className="ml-4 text-yellow-200 text-xl font-semibold">
+            Logging in...
+          </span>
+        </div>
+      )}
 
       {isModalOpen && (
         <Modal message="Logged in successfully!" onClose={handleModalClose} />
