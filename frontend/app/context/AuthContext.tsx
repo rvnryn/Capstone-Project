@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import React, {
   createContext,
@@ -9,7 +8,7 @@ import React, {
   JSX,
 } from "react";
 import { supabase } from "@/app/utils/Server/supabaseClient";
-import axios from "@/app/lib/axios";
+import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 // --- Types ---
 export type UserRole =
@@ -55,11 +54,40 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [role, setRole] = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Persistent session: load from localStorage if available
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const cachedUser = localStorage.getItem("cachedUser");
+      const cachedRole = localStorage.getItem("cachedRole");
+      if (cachedUser && cachedRole) {
+        setUser(JSON.parse(cachedUser));
+        setRole(cachedRole as UserRole);
+      }
+    }
+  }, []);
   console.log("AuthProvider mounted");
 
   const refreshSession = async () => {
     if (refreshing) return;
     setRefreshing(true);
+    // If offline, try to load from cache
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      const cachedUser = localStorage.getItem("cachedUser");
+      const cachedRole = localStorage.getItem("cachedRole");
+      if (cachedUser && cachedRole) {
+        setUser(JSON.parse(cachedUser));
+        setRole(cachedRole as UserRole);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      } else {
+        setUser(null);
+        setRole(null);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+    }
     const { data, error } = await supabase.auth.getSession();
     console.log("Supabase session:", data.session, "Error:", error);
 
@@ -76,34 +104,54 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       setLoading(false);
       if (typeof window !== "undefined") {
         localStorage.removeItem("token");
+        localStorage.removeItem("cachedUser");
+        localStorage.removeItem("cachedRole");
       }
       setRefreshing(false);
       return;
     }
 
     const supabaseUser = session.user;
-    setUser({
+    const newUser = {
       id: supabaseUser.id,
       email: supabaseUser.email,
       ...supabaseUser.user_metadata,
-    });
+    };
+    setUser(newUser);
 
     try {
-      const res = await axios.get("/api/auth/session", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      const res = await offlineAxiosRequest(
+        {
+          method: "GET",
+          url: "/api/auth/session",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        },
+        {
+          cacheKey: `auth-session-${newUser.id}`,
+          cacheHours: 12,
+        }
+      );
       setRole(res.data.role);
       setUser((prev) => ({
         ...prev,
         ...res.data.user,
       }));
+      // Cache user and role for offline login
+      if (typeof window !== "undefined") {
+        localStorage.setItem(
+          "cachedUser",
+          JSON.stringify({ ...newUser, ...res.data.user })
+        );
+        localStorage.setItem("cachedRole", res.data.role);
+      }
     } catch (err) {
-
       setUser(null);
       setRole(null);
       setLoading(false);
       if (typeof window !== "undefined") {
         localStorage.removeItem("token");
+        localStorage.removeItem("cachedUser");
+        localStorage.removeItem("cachedRole");
       }
       await supabase.auth.signOut();
       setRefreshing(false);
@@ -116,7 +164,6 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-
         if (
           session &&
           session.user &&
@@ -143,7 +190,14 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   return (
     <AuthContext.Provider value={{ user, role, loading, refreshSession }}>
       {loading ? (
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           <span style={{ color: "#facc15", fontSize: 24 }}>Loading...</span>
         </div>
       ) : (

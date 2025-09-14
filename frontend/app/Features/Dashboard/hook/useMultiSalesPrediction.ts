@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 export interface SalesPrediction {
   name: string;
@@ -19,15 +20,43 @@ export function useMultiSalesPrediction() {
     setError(null);
     try {
       const [dailyRes, weeklyRes, monthlyRes] = await Promise.all([
-        fetch(`/api/predict_top_sales?timeframe=daily&top_n=${top_n}`),
-        fetch(`/api/predict_top_sales?timeframe=weekly&top_n=${top_n}`),
-        fetch(`/api/predict_top_sales?timeframe=monthly&top_n=${top_n}`),
+        offlineAxiosRequest<SalesPrediction[]>(
+          {
+            method: "GET",
+            url: `/api/predict_top_sales?timeframe=daily&top_n=${top_n}`,
+          },
+          {
+            cacheKey: `predict_top_sales-daily-${top_n}`,
+            cacheHours: 6,
+            showErrorToast: false,
+          }
+        ),
+        offlineAxiosRequest<SalesPrediction[]>(
+          {
+            method: "GET",
+            url: `/api/predict_top_sales?timeframe=weekly&top_n=${top_n}`,
+          },
+          {
+            cacheKey: `predict_top_sales-weekly-${top_n}`,
+            cacheHours: 6,
+            showErrorToast: false,
+          }
+        ),
+        offlineAxiosRequest<SalesPrediction[]>(
+          {
+            method: "GET",
+            url: `/api/predict_top_sales?timeframe=monthly&top_n=${top_n}`,
+          },
+          {
+            cacheKey: `predict_top_sales-monthly-${top_n}`,
+            cacheHours: 6,
+            showErrorToast: false,
+          }
+        ),
       ]);
-      if (!dailyRes.ok || !weeklyRes.ok || !monthlyRes.ok)
-        throw new Error("Failed to fetch one or more predictions");
-      setDaily(await dailyRes.json());
-      setWeekly(await weeklyRes.json());
-      setMonthly(await monthlyRes.json());
+      setDaily(dailyRes.data);
+      setWeekly(weeklyRes.data);
+      setMonthly(monthlyRes.data);
     } catch (err: any) {
       setError(err.message || "Unknown error");
     } finally {

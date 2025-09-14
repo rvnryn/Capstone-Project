@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import axiosInstance from "@/app/lib/axios";
+import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 export interface SalesPrediction {
   name: string;
@@ -50,18 +51,32 @@ export function useSalesHistory() {
       setLoading(true);
       setError(null);
       try {
-        const res = await axiosInstance.get(
-          `/api/predict_top_sales?timeframe=${timeframe}&top_n=${top_n}`
+        const response = await offlineAxiosRequest(
+          {
+            method: "GET",
+            url: `/api/predict_top_sales?timeframe=${timeframe}&top_n=${top_n}`,
+          },
+          {
+            cacheKey: `sales-history-${timeframe}-${top_n}`,
+            cacheHours: 6, // Sales data can be cached for 6 hours
+            showErrorToast: true,
+            fallbackData: [], // Return empty array as fallback
+          }
         );
-        setData(res.data);
+        setData(response.data);
       } catch (err: any) {
         console.error("Sales history fetch error:", err);
-        setError(
-          err?.response?.data?.detail ||
-            err.message ||
-            "Failed to fetch sales history"
-        );
-        setData([]);
+        if (err.isOfflineError) {
+          setError("Sales history not available offline");
+          setData([]); // Set empty data for offline
+        } else {
+          setError(
+            err?.response?.data?.detail ||
+              err.message ||
+              "Failed to fetch sales history"
+          );
+          setData([]);
+        }
       } finally {
         setLoading(false);
       }
@@ -81,18 +96,32 @@ export function useHistoricalAnalysis() {
     setLoading(true);
     setError(null);
     try {
-      const res = await axiosInstance.get(
-        `/api/historical_analysis?days=${days}`
+      const response = await offlineAxiosRequest(
+        {
+          method: "GET",
+          url: `/api/historical_analysis?days=${days}`,
+        },
+        {
+          cacheKey: `historical-analysis-${days}`,
+          cacheHours: 12, // Historical analysis can be cached for 12 hours
+          showErrorToast: true,
+          fallbackData: null, // Return null as fallback
+        }
       );
-      setData(res.data);
+      setData(response.data);
     } catch (err: any) {
       console.error("Historical analysis fetch error:", err);
-      setError(
-        err?.response?.data?.detail ||
-          err.message ||
-          "Failed to fetch historical analysis"
-      );
-      setData(null);
+      if (err.isOfflineError) {
+        setError("Historical analysis not available offline");
+        setData(null); // Set null data for offline
+      } else {
+        setError(
+          err?.response?.data?.detail ||
+            err.message ||
+            "Failed to fetch historical analysis"
+        );
+        setData(null);
+      }
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import axiosInstance from "@/app/lib/axios";
+import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 export interface BackupSchedule {
   id: number;
@@ -22,7 +22,17 @@ export function useBackupSchedule() {
   const { data, error, mutate, isLoading } = useSWR<BackupSchedule>(
     "/api/backup/schedule",
     async (url: string) => {
-      const res = await axiosInstance.get(url);
+      const res = await offlineAxiosRequest(
+        {
+          method: "GET",
+          url,
+        },
+        {
+          cacheKey: "backup-schedule",
+          cacheHours: 24,
+          showErrorToast: true,
+        }
+      );
       return res.data;
     }
   );
@@ -36,6 +46,15 @@ export function useBackupSchedule() {
 
 // Update the backup schedule
 export async function updateBackupSchedule(settings: BackupScheduleSettings) {
-  const res = await axiosInstance.post("/api/backup/schedule", settings);
+  const res = await offlineAxiosRequest(
+    {
+      method: "POST",
+      url: "/api/backup/schedule",
+      data: settings,
+    },
+    {
+      showErrorToast: true,
+    }
+  );
   return res.data;
 }

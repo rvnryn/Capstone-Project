@@ -1,4 +1,8 @@
 import axiosInstance from "@/app/lib/axios";
+import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
+import { useOfflineQueue } from "@/app/hooks/usePWA";
+import { useCallback } from "react";
+import { toast } from "react-toastify";
 
 export interface MenuItem {
   menu_id: number;
@@ -21,10 +25,61 @@ export interface MenuIngredient {
 }
 
 export function useMenuAPI() {
+  // Get offline queue functions
+  const { addOfflineAction, isOnline } = useOfflineQueue();
+
+  // Helper function to handle offline write operations
+  const handleOfflineWriteOperation = useCallback(
+    async (
+      operation: () => Promise<any>,
+      offlineAction: {
+        action: string;
+        endpoint: string;
+        method: string;
+        payload: any;
+      }
+    ) => {
+      if (isOnline) {
+        // Online: Execute the operation immediately
+        return await operation();
+      } else {
+        // Offline: Queue the action and show user feedback
+        addOfflineAction(offlineAction.action, {
+          endpoint: offlineAction.endpoint,
+          method: offlineAction.method,
+          payload: offlineAction.payload,
+        });
+        toast.info("📱 Action queued for when you're back online!", {
+          position: "top-right",
+          autoClose: 3000,
+          theme: "colored",
+        });
+        // Return a mock response to keep UI working
+        return { success: true, queued: true };
+      }
+    },
+    [isOnline, addOfflineAction]
+  );
   // Menu endpoints
   const fetchMenu = async (): Promise<MenuItem[]> => {
-    const res = await axiosInstance.get("/api/menu");
-    return res.data;
+    try {
+      const response = await offlineAxiosRequest(
+        {
+          method: "GET",
+          url: "/api/menu",
+        },
+        {
+          cacheKey: "menu-list",
+          cacheHours: 12, // Menu items change less frequently
+          showErrorToast: true,
+          fallbackData: [], // Return empty array as fallback
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error("Failed to fetch menu:", error);
+      return []; // Return empty array instead of throwing
+    }
   };
 
   // PATCH menu (JSON, no image)
@@ -32,8 +87,25 @@ export function useMenuAPI() {
     menu_id: number,
     data: Partial<MenuItem> & { ingredients?: MenuIngredient[] }
   ) => {
-    const res = await axiosInstance.patch(`/api/menu/${menu_id}`, data);
-    return res.data;
+    return handleOfflineWriteOperation(
+      () =>
+        offlineAxiosRequest(
+          {
+            method: "PATCH",
+            url: `/api/menu/${menu_id}`,
+            data,
+          },
+          {
+            showErrorToast: true,
+          }
+        ),
+      {
+        action: "update-menu-item",
+        endpoint: `/api/menu/${menu_id}`,
+        method: "PATCH",
+        payload: data,
+      }
+    );
   };
 
   // PATCH menu with image and ingredients (FormData)
@@ -41,36 +113,85 @@ export function useMenuAPI() {
     menu_id: number,
     form: FormData
   ) => {
-    const res = await axiosInstance.patch(
-      `/api/menu/${menu_id}/update-with-image-and-ingredients`,
-      form,
+    return handleOfflineWriteOperation(
+      () =>
+        offlineAxiosRequest(
+          {
+            method: "PATCH",
+            url: `/api/menu/${menu_id}/update-with-image-and-ingredients`,
+            data: form,
+            headers: { "Content-Type": "multipart/form-data" },
+          },
+          {
+            showErrorToast: true,
+          }
+        ),
       {
-        headers: { "Content-Type": "multipart/form-data" },
+        action: "update-menu-with-image",
+        endpoint: `/api/menu/${menu_id}/update-with-image-and-ingredients`,
+        method: "PATCH",
+        payload: form, // Note: FormData will be serialized for queue
       }
     );
-    return res.data;
   };
 
   const deleteMenu = async (menu_id: number) => {
-    const res = await axiosInstance.delete(`/api/menu/${menu_id}`);
-    return res.data;
+    return handleOfflineWriteOperation(
+      () =>
+        offlineAxiosRequest(
+          {
+            method: "DELETE",
+            url: `/api/menu/${menu_id}`,
+          },
+          {
+            showErrorToast: true,
+          }
+        ),
+      {
+        action: "delete-menu-item",
+        endpoint: `/api/menu/${menu_id}`,
+        method: "DELETE",
+        payload: { menu_id },
+      }
+    );
   };
 
   // Add menu with image and ingredients (FormData)
   const addMenuWithImageAndIngredients = async (form: FormData) => {
-    const res = await axiosInstance.post(
-      "/api/menu/create-with-image-and-ingredients",
-      form,
+    return handleOfflineWriteOperation(
+      () =>
+        offlineAxiosRequest(
+          {
+            method: "POST",
+            url: "/api/menu/create-with-image-and-ingredients",
+            data: form,
+            headers: { "Content-Type": "multipart/form-data" },
+          },
+          {
+            showErrorToast: true,
+          }
+        ),
       {
-        headers: { "Content-Type": "multipart/form-data" },
+        action: "add-menu-with-image",
+        endpoint: "/api/menu/create-with-image-and-ingredients",
+        method: "POST",
+        payload: form,
       }
     );
-    return res.data;
   };
 
   const fetchMenuById = async (menu_id: number) => {
-    const res = await axiosInstance.get(`/api/menu/${menu_id}`);
-
+    const res = await offlineAxiosRequest(
+      {
+        method: "GET",
+        url: `/api/menu/${menu_id}`,
+      },
+      {
+        cacheKey: `menu-item-${menu_id}`,
+        cacheHours: 12,
+        showErrorToast: true,
+      }
+    );
     return res.data;
   };
 
@@ -78,15 +199,45 @@ export function useMenuAPI() {
     menu_id: number,
     ingredient_id: string
   ) => {
-    const res = await axiosInstance.delete(
-      `/api/menu/${menu_id}/ingredient/${ingredient_id}`
+    return handleOfflineWriteOperation(
+      () =>
+        offlineAxiosRequest(
+          {
+            method: "DELETE",
+            url: `/api/menu/${menu_id}/ingredient/${ingredient_id}`,
+          },
+          {
+            showErrorToast: true,
+          }
+        ),
+      {
+        action: "delete-menu-ingredient",
+        endpoint: `/api/menu/${menu_id}/ingredient/${ingredient_id}`,
+        method: "DELETE",
+        payload: { menu_id, ingredient_id },
+      }
     );
-    return res.data;
   };
 
   const recalculateStockStatus = async () => {
-    const res = await axiosInstance.post("/api/menu/recalculate-stock-status");
-    return res.data;
+    return handleOfflineWriteOperation(
+      () =>
+        offlineAxiosRequest(
+          {
+            method: "POST",
+            url: "/api/menu/recalculate-stock-status",
+          },
+          {
+            showErrorToast: true,
+          }
+        ),
+      {
+        action: "recalculate-menu-stock",
+        endpoint: "/api/menu/recalculate-stock-status",
+        method: "POST",
+        payload: {},
+      }
+    );
   };
 
   return {

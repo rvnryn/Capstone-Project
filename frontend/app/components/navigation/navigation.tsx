@@ -30,7 +30,8 @@ import { supabase } from "@/app/utils/Server/supabaseClient";
 import { useAuth } from "@/app/context/AuthContext";
 import { useNavigation, navigationUtils } from "./hook/use-navigation";
 import { usePWA, useOfflineQueue } from "@/app/hooks/usePWA";
-import axios from "@/app/lib/axios";
+import { OfflineStatusIndicator } from "@/app/components/OfflineComponents";
+import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 type Notification = {
   id: number;
@@ -353,13 +354,25 @@ const NavigationBar = ({
   }, [isMobile, isMenuOpen, closeMenu]);
 
   // Notifications handling
-  const fetchNotifications = React.useCallback(() => {
+
+  const fetchNotifications = React.useCallback(async () => {
     const userId = user?.user_id || user?.id;
     if (userId && typeof userId === "number") {
-      axios
-        .get(`/api/notifications?user_id=${userId}`)
-        .then((res) => setNotifications(res.data.notifications || []))
-        .catch(() => setNotifications([]));
+      try {
+        const res = await offlineAxiosRequest(
+          {
+            method: "GET",
+            url: `/api/notifications?user_id=${userId}`,
+          },
+          {
+            cacheKey: `notifications-${userId}`,
+            cacheHours: 2,
+          }
+        );
+        setNotifications(res.data.notifications || []);
+      } catch {
+        setNotifications([]);
+      }
     } else {
       setNotifications([]);
     }
@@ -506,55 +519,58 @@ const NavigationBar = ({
     }
   }
 
-  function handleNotificationClick(n: Notification): void {
+  async function handleNotificationClick(n: Notification) {
     setNotificationModal(n); // This sets notificationModalState
     setBellOpen(false);
     const userId = user?.user_id || user?.id;
     if (userId && typeof userId === "number") {
-      axios
-        .post(
-          `/api/notifications/mark-read?user_id=${userId}&notification_id=${n.id}`
-        )
-        .then(() => fetchNotifications())
-        .catch(() => {});
+      try {
+        await offlineAxiosRequest({
+          method: "POST",
+          url: `/api/notifications/mark-read?user_id=${userId}&notification_id=${n.id}`,
+        });
+        fetchNotifications();
+      } catch {}
     }
   }
 
-  function handleRemoveNotification(
+  async function handleRemoveNotification(
     n: Notification,
     event: React.MouseEvent
-  ): void {
+  ) {
     event.stopPropagation(); // Prevent triggering the notification click
     const userId = user?.user_id || user?.id;
     if (userId && typeof userId === "number") {
-      axios
-        .delete(`/api/notifications?user_id=${userId}&notification_id=${n.id}`)
-        .then(() => {
-          fetchNotifications();
-          // If the removed notification was open in modal, close it
-          if (notificationModalState?.id === n.id) {
-            setNotificationModal(null);
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to remove notification:", error);
+      try {
+        await offlineAxiosRequest({
+          method: "DELETE",
+          url: `/api/notifications?user_id=${userId}&notification_id=${n.id}`,
         });
+        fetchNotifications();
+        // If the removed notification was open in modal, close it
+        if (notificationModalState?.id === n.id) {
+          setNotificationModal(null);
+        }
+      } catch (error) {
+        console.error("Failed to remove notification:", error);
+      }
     }
   }
 
-  function handleClearAllNotifications(): void {
+  async function handleClearAllNotifications() {
     const userId = user?.user_id || user?.id;
     if (userId && typeof userId === "number") {
-      axios
-        .delete(`/api/notifications/clear-all?user_id=${userId}`)
-        .then(() => {
-          fetchNotifications();
-          setNotificationModal(null); // Close any open notification modal
-          setBellOpen(false); // Close the notification dropdown
-        })
-        .catch((error) => {
-          console.error("Failed to clear all notifications:", error);
+      try {
+        await offlineAxiosRequest({
+          method: "DELETE",
+          url: `/api/notifications/clear-all?user_id=${userId}`,
         });
+        fetchNotifications();
+        setNotificationModal(null); // Close any open notification modal
+        setBellOpen(false); // Close the notification dropdown
+      } catch (error) {
+        console.error("Failed to clear all notifications:", error);
+      }
     }
   }
 
@@ -1344,6 +1360,7 @@ const NavigationBar = ({
 
               {/* Enhanced Responsive Status Indicators */}
               <div className="flex flex-col gap-1.5">
+                {/* Network Status */}
                 <span
                   className={`px-2.5 py-1 rounded-full font-medium flex items-center transition-all duration-300 backdrop-blur-sm ${getTextSize(
                     "small"

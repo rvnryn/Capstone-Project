@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState, useCallback } from "react";
+import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 export interface NotificationSettings {
   user_id: number;
@@ -28,14 +28,30 @@ export function useNotificationSettingsAPI(userId: number) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/notification-settings?user_id=${userId}`);
-      if (!res.ok) throw new Error("Failed to fetch notification settings");
-      const data = await res.json();
-      setSettings(data);
+      const cacheKey = `notification-settings-${userId}`;
+      const response = await offlineAxiosRequest(
+        {
+          method: "GET",
+          url: `/api/notification-settings?user_id=${userId}`,
+        },
+        {
+          cacheKey,
+          cacheHours: 2, // Settings can be cached longer
+          showErrorToast: true,
+          fallbackData: null,
+        }
+      );
+
+      setSettings(response.data);
       setLoading(false);
-      return data;
+      return response.data;
     } catch (err: any) {
-      setError(err.message || "Unknown error");
+      if (err.isOfflineError) {
+        setSettings(null);
+        setError("Settings not available offline");
+      } else {
+        setError(err.message || "Unknown error");
+      }
       setLoading(false);
       return null;
     }
@@ -52,15 +68,20 @@ export function useNotificationSettingsAPI(userId: number) {
       setError(null);
       try {
         const token = getToken();
-        const res = await fetch("/api/notification-settings", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        const res = await offlineAxiosRequest(
+          {
+            method: "POST",
+            url: "/api/notification-settings",
+            data: newSettings,
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
           },
-          body: JSON.stringify(newSettings),
-        });
-        if (!res.ok) throw new Error("Failed to update notification settings");
+          {
+            showErrorToast: true,
+          }
+        );
         // Refetch to get the latest settings from backend
         const latest = await fetchSettings();
         setSettings(latest);

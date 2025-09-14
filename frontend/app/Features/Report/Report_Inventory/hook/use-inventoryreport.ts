@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import axiosInstance from "@/app/lib/axios";
+import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 import { useCallback } from "react";
 
 export interface InventoryLogEntry {
@@ -22,21 +22,31 @@ export function useInventoryReportAPI() {
       if (end_date) params.end_date = end_date;
       try {
         console.debug("[fetchLogs] params:", params);
-        const res = await axiosInstance.get<InventoryLogEntry[]>(
-          "/api/inventory-log",
-          { params }
+
+        const cacheKey = `inventory-logs-${start_date || "all"}-${
+          end_date || "all"
+        }`;
+        const response = await offlineAxiosRequest(
+          {
+            method: "GET",
+            url: "/api/inventory-log",
+            params,
+          },
+          {
+            cacheKey,
+            cacheHours: 1, // Reports are time-sensitive
+            showErrorToast: true,
+            fallbackData: [],
+          }
         );
-        console.debug("[fetchLogs] response:", res.data);
-        return res.data;
+
+        console.debug("[fetchLogs] response:", response.data);
+        return response.data;
       } catch (err: any) {
-        if (err.response) {
-          console.error(
-            "[fetchLogs] error:",
-            err.response.data,
-            err.response.status
-          );
-        } else {
-          console.error("[fetchLogs] error:", err);
+        console.error("[fetchLogs] error:", err);
+        if (err.isOfflineError) {
+          // Return empty array for offline errors instead of throwing
+          return [];
         }
         throw err;
       }
@@ -47,7 +57,16 @@ export function useInventoryReportAPI() {
   const saveLogs = useCallback(async (entries: InventoryLogEntry[]) => {
     try {
       console.debug("[saveLogs] entries:", entries);
-      const res = await axiosInstance.put("/api/inventory-log", entries);
+      const res = await offlineAxiosRequest(
+        {
+          method: "PUT",
+          url: "/api/inventory-log",
+          data: entries,
+        },
+        {
+          showErrorToast: true,
+        }
+      );
       console.debug("[saveLogs] response:", res.data);
       return res.data;
     } catch (err: any) {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import axios from "@/app/lib/axios";
+import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 export interface UserActivityLog {
   activity_id?: number;
@@ -21,7 +22,6 @@ export function useUserActivityLogAPI() {
   const fetchLogs = async (params?: {
     user_id?: number;
     action_type?: string;
-
     role?: string;
     start_date?: string;
     end_date?: string;
@@ -31,12 +31,28 @@ export function useUserActivityLogAPI() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get("/api/user-activity", {
-        params,
-      });
+      const cacheKey = `user-activity-${JSON.stringify(params || {})}`;
+      const response = await offlineAxiosRequest(
+        {
+          method: "GET",
+          url: "/api/user-activity",
+          params,
+        },
+        {
+          cacheKey,
+          cacheHours: 1, // User activity is time-sensitive
+          showErrorToast: true,
+          fallbackData: [],
+        }
+      );
       setLogs(response.data || []);
     } catch (err: any) {
-      setError(err.message || "Failed to fetch logs");
+      if (err.isOfflineError) {
+        setLogs([]); // Set empty array for offline errors
+        setError("Data not available offline");
+      } else {
+        setError(err.message || "Failed to fetch logs");
+      }
     } finally {
       setLoading(false);
     }
@@ -46,7 +62,16 @@ export function useUserActivityLogAPI() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.post("/api/user-activity", log);
+      const response = await offlineAxiosRequest(
+        {
+          method: "POST",
+          url: "/api/user-activity",
+          data: log,
+        },
+        {
+          showErrorToast: true,
+        }
+      );
       return response.data;
     } catch (err: any) {
       setError(err.message || "Failed to create log");

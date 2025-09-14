@@ -10,6 +10,14 @@ import Chart from "chart.js/auto";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { usePWA } from "@/app/hooks/usePWA";
+import { useOfflineDataManager } from "@/app/hooks/useOfflineDataManager";
+import {
+  OfflineDataBanner,
+  OfflineCard,
+  OfflineLoading,
+  OfflineError,
+  SyncButton,
+} from "@/app/components/OfflineComponents";
 import {
   FaChartLine,
   FaExclamationTriangle,
@@ -43,11 +51,73 @@ export default function Dashboard() {
 
   const { isOnline } = usePWA();
 
+  // Offline functionality
+  const {
+    getDashboardStats,
+    getInventoryData,
+    isLoading: offlineLoading,
+    syncCriticalData,
+    smartRefresh,
+  } = useOfflineDataManager();
+
+  const [dashboardFromCache, setDashboardFromCache] = useState(false);
+  const [inventoryFromCache, setInventoryFromCache] = useState(false);
+  const [lastDataUpdate, setLastDataUpdate] = useState<string | null>(null);
+
   // Fetch analytics data with historical analysis
   useEffect(() => {
     fetchAll(filterType, topItemsCount, 90); // 90 days of historical data
+
+    // Fetch offline-capable dashboard data
+    const fetchOfflineData = async () => {
+      try {
+        const [dashResult, inventoryResult] = await Promise.all([
+          getDashboardStats(),
+          getInventoryData(),
+        ]);
+
+        if (dashResult.data) {
+          setDashboardFromCache(dashResult.fromCache);
+          if (dashResult.fromCache) {
+            setLastDataUpdate(new Date().toISOString());
+          }
+        }
+
+        if (inventoryResult.data) {
+          setInventoryFromCache(inventoryResult.fromCache);
+          // Process inventory data for low stock, expiring, surplus
+          const inventory = inventoryResult.data;
+          setLowStockIngredients(
+            inventory.filter(
+              (item: any) => item.current_stock <= item.min_threshold
+            )
+          );
+          setExpiringIngredients(
+            inventory.filter(
+              (item: any) =>
+                item.batch_date &&
+                new Date(item.batch_date) <=
+                  new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+            )
+          );
+          setSurplusIngredients(
+            inventory.filter(
+              (item: any) => item.current_stock >= item.max_threshold
+            )
+          );
+        }
+      } catch (error) {
+        console.error("Failed to fetch offline dashboard data:", error);
+      }
+    };
+
+    fetchOfflineData();
+
     const interval = setInterval(() => {
       fetchAll(filterType, topItemsCount, 90);
+      if (isOnline) {
+        smartRefresh(); // Smart refresh offline data when online
+      }
     }, 60000); // 60 seconds
     return () => clearInterval(interval);
   }, [filterType, topItemsCount, fetchAll]);
@@ -588,7 +658,25 @@ export default function Dashboard() {
                   Dashboard
                 </h1>
                 <HiSparkles className="text-black text-xl sm:text-2xl lg:text-3xl animate-pulse" />
+
+                {/* Sync Button */}
+                <div className="ml-auto hidden sm:block">
+                  <SyncButton
+                    onSync={syncCriticalData}
+                    isLoading={offlineLoading}
+                    className="text-sm"
+                  />
+                </div>
               </div>
+
+              {/* Offline Data Banner */}
+              {(dashboardFromCache || inventoryFromCache) && (
+                <OfflineDataBanner
+                  dataType="dashboard and inventory"
+                  isFromCache={dashboardFromCache || inventoryFromCache}
+                  className="mb-4"
+                />
+              )}
 
               {!isOnline && (
                 <aside
@@ -620,31 +708,51 @@ export default function Dashboard() {
               aria-label="Inventory Stats"
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8"
             >
-              <StatCard
-                icon={
-                  <FaExclamationTriangle className="text-orange-400 text-lg sm:text-xl" />
-                }
-                title="Low Stock Items"
-                count={lowStockIngredients.length}
-                color="border-l-orange-500"
-                bgColor="bg-black/75"
-              />
-              <StatCard
-                icon={<FaClock className="text-red-400 text-lg sm:text-xl" />}
-                title="Expiring Soon"
-                count={expiringIngredients.length}
-                color="border-l-red-500"
-                bgColor="bg-black/75"
-              />
-              <StatCard
-                icon={
-                  <FaWarehouse className="text-yellow-400 text-lg sm:text-xl" />
-                }
-                title="Surplus Items"
-                count={surplusIngredients.length}
-                color="border-l-yellow-500"
-                bgColor="bg-black/75"
-              />
+              <OfflineCard
+                isFromCache={inventoryFromCache}
+                lastUpdated={lastDataUpdate || undefined}
+                dataType="inventory"
+              >
+                <StatCard
+                  icon={
+                    <FaExclamationTriangle className="text-orange-400 text-lg sm:text-xl" />
+                  }
+                  title="Low Stock Items"
+                  count={lowStockIngredients.length}
+                  color="border-l-orange-500"
+                  bgColor="bg-black/75"
+                />
+              </OfflineCard>
+
+              <OfflineCard
+                isFromCache={inventoryFromCache}
+                lastUpdated={lastDataUpdate || undefined}
+                dataType="inventory"
+              >
+                <StatCard
+                  icon={<FaClock className="text-red-400 text-lg sm:text-xl" />}
+                  title="Expiring Soon"
+                  count={expiringIngredients.length}
+                  color="border-l-red-500"
+                  bgColor="bg-black/75"
+                />
+              </OfflineCard>
+
+              <OfflineCard
+                isFromCache={inventoryFromCache}
+                lastUpdated={lastDataUpdate || undefined}
+                dataType="inventory"
+              >
+                <StatCard
+                  icon={
+                    <FaWarehouse className="text-yellow-400 text-lg sm:text-xl" />
+                  }
+                  title="Surplus Items"
+                  count={surplusIngredients.length}
+                  color="border-l-yellow-500"
+                  bgColor="bg-black/75"
+                />
+              </OfflineCard>
             </section>
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">

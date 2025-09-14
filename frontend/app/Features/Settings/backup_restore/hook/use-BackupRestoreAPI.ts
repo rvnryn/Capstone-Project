@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import CryptoJS from "crypto-js";
 import axiosInstance from "@/app/lib/axios";
+import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 export function useBackupRestoreAPI() {
   // Download backup from FastAPI, encrypt if password provided
@@ -8,15 +8,30 @@ export function useBackupRestoreAPI() {
     typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
   const backup = async (password: string = ""): Promise<void> => {
-    // Use axios for GET request, get raw gzip backup
-    const response = await axiosInstance.get("/api/backup", {
-      responseType: "blob",
-    });
+    // Use offline-aware axios for GET request, get raw gzip backup
+    const response = await offlineAxiosRequest(
+      {
+        method: "GET",
+        url: "/api/backup",
+        responseType: "blob",
+      },
+      {
+        cacheKey: "backup-data",
+        cacheHours: 0, // Backups should not be cached
+        showErrorToast: true,
+        fallbackData: null,
+      }
+    );
+
+    if (!response.data) {
+      throw new Error("Backup not available offline");
+    }
+
     let blob: Blob;
     let filename: string;
     if (password) {
       // Read the blob as ArrayBuffer, then encrypt as base64 string
-      const arrayBuffer = await response.data.arrayBuffer();
+      const arrayBuffer = await (response.data as Blob).arrayBuffer();
       const wordArray = CryptoJS.lib.WordArray.create(
         new Uint8Array(arrayBuffer)
       );
@@ -97,12 +112,20 @@ export function useBackupRestoreAPI() {
     formData.append("file", blob, "restore.json");
     const token = getToken(); // <-- Add this line
     try {
-      await axiosInstance.post("/api/restore", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}), // <-- Add this line
+      await offlineAxiosRequest(
+        {
+          method: "POST",
+          url: "/api/restore",
+          data: formData,
+          headers: {
+            "Content-Type": "multipart/form-data",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
         },
-      });
+        {
+          showErrorToast: true,
+        }
+      );
     } catch (error: any) {
       const errData = error?.response?.data;
       throw new Error((errData && errData.detail) || "Restore failed");
@@ -116,14 +139,18 @@ export function useBackupRestoreAPI() {
   ): Promise<string> => {
     try {
       const token = getToken();
-      const response = await axiosInstance.post(
-        "/api/backup_drive",
-        { access_token },
+      const response = await offlineAxiosRequest(
         {
+          method: "POST",
+          url: "/api/backup_drive",
+          data: { access_token },
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
+        },
+        {
+          showErrorToast: true,
         }
       );
       return response.data.file_id;
@@ -144,14 +171,18 @@ export function useBackupRestoreAPI() {
   ): Promise<boolean> => {
     try {
       const token = getToken();
-      await axiosInstance.post(
-        "/api/restore_drive",
-        { access_token, file_id },
+      await offlineAxiosRequest(
         {
+          method: "POST",
+          url: "/api/restore_drive",
+          data: { access_token, file_id },
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
+        },
+        {
+          showErrorToast: true,
         }
       );
       return true;
