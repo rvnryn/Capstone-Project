@@ -858,15 +858,12 @@ export default function ReportInventory() {
                           aria-label="Filter by category"
                         >
                           <option value="">All Categories</option>
-                          <option value="Beverages">Beverages</option>
-                          <option value="Dairy">Dairy</option>
-                          <option value="Meat">Meat</option>
-                          <option value="Vegetables">Vegetables</option>
-                          <option value="Fruits">Fruits</option>
-                          <option value="Grains">Grains</option>
-                          <option value="Spices">Spices</option>
-                          <option value="Frozen">Frozen</option>
-                          <option value="Other">Other</option>
+                          <option value="Meats">Beverages</option>
+                          <option value="Vegetables & Fruits">Dairy</option>
+                          <option value="Seasonings & Condiments">Meat</option>
+                          <option value="Rice & Noodles">Vegetables</option>
+                          <option value="Cooking Oils">Fruits</option>
+                          <option value="Beverage">Grains</option>
                         </select>
                       </div>
 
