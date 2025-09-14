@@ -1,39 +1,36 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useAuth } from "@/app/context/AuthContext";
-import { useRouter, usePathname } from "next/navigation";
-import { routes } from "@/app/routes/routes";
-import Image from "next/image";
-import { supabase } from "@/app/utils/Server/supabaseClient";
-import { usePWA, useOfflineQueue } from "@/app/hooks/usePWA";
+import React, { useState, useRef, useEffect } from "react";
 import {
-  FaBars,
-  FaTimes,
-  FaChevronRight,
-  FaAngleLeft,
-  FaAngleRight,
-  FaSignOutAlt,
   FaTachometerAlt,
   FaBoxes,
   FaChartBar,
   FaUtensils,
   FaTruck,
   FaCog,
+  FaSignOutAlt,
   FaBell,
+  FaUser,
+  FaTimes,
+  FaChevronRight,
   FaWifi,
+  FaAngleLeft,
 } from "react-icons/fa";
+import { GiHamburgerMenu } from "react-icons/gi";
 import {
-  MdPhoneIphone,
   MdFullscreen,
   MdFullscreenExit,
   MdSignalWifiOff,
 } from "react-icons/md";
-import { GiHamburgerMenu } from "react-icons/gi";
-import axios from "@/app/lib/axios";
-import React from "react";
-import { useNavigation, navigationUtils } from "./hook/use-navigation";
+import Image from "next/image";
+import { useRouter, usePathname } from "next/navigation";
+import { routes } from "@/app/routes/routes";
 import { logoutUser } from "@/app/utils/API/LoginAPI";
+import { supabase } from "@/app/utils/Server/supabaseClient";
+import { useAuth } from "@/app/context/AuthContext";
+import { useNavigation, navigationUtils } from "./hook/use-navigation";
+import { usePWA, useOfflineQueue } from "@/app/hooks/usePWA";
+import axios from "@/app/lib/axios";
 
 type Notification = {
   id: number;
@@ -47,7 +44,7 @@ type Notification = {
 const allSidebarItems = [
   {
     name: "Dashboard",
-    icon: <FaTachometerAlt size={24} />,
+    icon: <FaTachometerAlt />,
     path: routes.dashboard,
     roles: [
       "Owner",
@@ -58,7 +55,7 @@ const allSidebarItems = [
   },
   {
     name: "Inventory",
-    icon: <FaBoxes size={24} />,
+    icon: <FaBoxes />,
     path: routes.inventory,
     roles: [
       "Owner",
@@ -69,7 +66,7 @@ const allSidebarItems = [
   },
   {
     name: "Report",
-    icon: <FaChartBar size={24} />,
+    icon: <FaChartBar />,
     path: routes.report,
     roles: [
       "Owner",
@@ -80,7 +77,7 @@ const allSidebarItems = [
   },
   {
     name: "Menu",
-    icon: <FaUtensils size={24} />,
+    icon: <FaUtensils />,
     path: routes.menu,
     roles: [
       "Owner",
@@ -91,7 +88,7 @@ const allSidebarItems = [
   },
   {
     name: "Supplier",
-    icon: <FaTruck size={24} />,
+    icon: <FaTruck />,
     path: routes.supplier,
     roles: [
       "Owner",
@@ -102,7 +99,7 @@ const allSidebarItems = [
   },
   {
     name: "Settings",
-    icon: <FaCog size={24} />,
+    icon: <FaCog />,
     path: routes.settings,
     roles: ["Owner", "General Manager", "Store Manager"],
   },
@@ -201,6 +198,118 @@ const NavigationBar = ({
   const { user, role } = useAuth();
   console.log("User:", user, "Role:", role);
 
+  // Enhanced responsive calculations
+  const getSidebarWidth = () => {
+    // Ultra small devices (xs: <480px)
+    if (screenSize === "xs") return isMenuOpen ? "100vw" : "0";
+    // Small devices (sm: 480-640px)
+    if (screenSize === "sm") return isMenuOpen ? "100vw" : "0";
+    // Medium devices (md: 640-768px)
+    if (screenSize === "md") return isMenuOpen ? "20rem" : "4rem";
+    // Large devices (lg: 768-1024px)
+    if (screenSize === "lg") return isMenuOpen ? "22rem" : "4.5rem";
+    // Extra large devices (xl: 1024-1280px)
+    if (screenSize === "xl") return isMenuOpen ? "24rem" : "5rem";
+    // 2XL and above (>1280px)
+    return isMenuOpen ? "26rem" : "5rem";
+  };
+
+  const getHeaderLeftOffset = () => {
+    // Full width header on mobile
+    if (screenSize === "xs" || screenSize === "sm") return "0";
+    // Offset by sidebar width on larger screens
+    if (screenSize === "md") return isMenuOpen ? "20rem" : "4rem";
+    if (screenSize === "lg") return isMenuOpen ? "22rem" : "4.5rem";
+    if (screenSize === "xl") return isMenuOpen ? "24rem" : "5rem";
+    return isMenuOpen ? "26rem" : "5rem";
+  };
+
+  const getIconSize = () => {
+    if (screenSize === "xs") return 18;
+    if (screenSize === "sm") return 19;
+    if (screenSize === "md") return 20;
+    if (screenSize === "lg") return 22;
+    return 24;
+  };
+
+  const getHeaderHeight = () => {
+    if (screenSize === "xs") return "3.5rem"; // 56px
+    if (screenSize === "sm") return "4rem"; // 64px
+    return "4rem"; // 64px for md and above
+  };
+
+  // Enhanced padding and spacing calculations
+  const getPadding = (base: string) => {
+    const paddingMap: Record<string, Record<string, string>> = {
+      xs: { small: "p-2", medium: "p-3", large: "p-4" },
+      sm: { small: "p-2", medium: "p-3", large: "p-4" },
+      md: { small: "p-3", medium: "p-4", large: "p-5" },
+      lg: { small: "p-4", medium: "p-5", large: "p-6" },
+      xl: { small: "p-5", medium: "p-6", large: "p-8" },
+      "2xl": { small: "p-6", medium: "p-8", large: "p-10" },
+    };
+    return paddingMap[screenSize]?.[base] || paddingMap.md[base];
+  };
+
+  const getTextSize = (variant: "small" | "medium" | "large" | "xlarge") => {
+    const textMap: Record<string, Record<string, string>> = {
+      xs: {
+        small: "text-xs",
+        medium: "text-sm",
+        large: "text-base",
+        xlarge: "text-lg",
+      },
+      sm: {
+        small: "text-xs",
+        medium: "text-sm",
+        large: "text-base",
+        xlarge: "text-lg",
+      },
+      md: {
+        small: "text-sm",
+        medium: "text-base",
+        large: "text-lg",
+        xlarge: "text-xl",
+      },
+      lg: {
+        small: "text-sm",
+        medium: "text-base",
+        large: "text-lg",
+        xlarge: "text-xl",
+      },
+      xl: {
+        small: "text-base",
+        medium: "text-lg",
+        large: "text-xl",
+        xlarge: "text-2xl",
+      },
+      "2xl": {
+        small: "text-base",
+        medium: "text-lg",
+        large: "text-xl",
+        xlarge: "text-2xl",
+      },
+    };
+    return textMap[screenSize]?.[variant] || textMap.md[variant];
+  };
+
+  const getSpacing = (variant: "small" | "medium" | "large") => {
+    const spacingMap: Record<string, Record<string, string>> = {
+      xs: { small: "gap-1", medium: "gap-2", large: "gap-3" },
+      sm: { small: "gap-2", medium: "gap-3", large: "gap-4" },
+      md: { small: "gap-2", medium: "gap-3", large: "gap-4" },
+      lg: { small: "gap-3", medium: "gap-4", large: "gap-5" },
+      xl: { small: "gap-3", medium: "gap-4", large: "gap-6" },
+      "2xl": { small: "gap-4", medium: "gap-5", large: "gap-6" },
+    };
+    return spacingMap[screenSize]?.[variant] || spacingMap.md[variant];
+  };
+
+  // Mobile overlay detection - should show on xs and sm screens
+  const shouldShowMobileOverlay = () => {
+    return (screenSize === "xs" || screenSize === "sm") && isMenuOpen;
+  };
+
   // PWA Installation handling with enhanced hooks
   useEffect(() => {
     // Custom banner removed - using browser's default install prompt
@@ -286,32 +395,6 @@ const NavigationBar = ({
     } catch (error) {
       console.error("Fullscreen toggle failed:", error);
     }
-  };
-
-  // Responsive calculations using deviceType and screenSize
-  const getSidebarWidth = () => {
-    if (deviceType === "mobile") return isMenuOpen ? "100vw" : "0";
-    if (deviceType === "tablet" && orientation === "portrait")
-      return isMenuOpen ? "20rem" : "4rem";
-    if (screenSize === "xs" || screenSize === "sm")
-      return isMenuOpen ? "100vw" : "0";
-    if (screenSize === "md") return isMenuOpen ? "16rem" : "4rem";
-    if (screenSize === "lg") return isMenuOpen ? "18rem" : "4rem";
-    if (screenSize === "xl" || screenSize === "2xl" || screenSize === "3xl")
-      return isMenuOpen ? "20rem" : "4rem";
-    return isMenuOpen ? "18rem" : "4rem";
-  };
-
-  const getHeaderLeftOffset = () => {
-    if (deviceType === "mobile") return 0;
-    if (deviceType === "tablet" && orientation === "portrait")
-      return isMenuOpen ? "20rem" : "4rem";
-    if (screenSize === "xs" || screenSize === "sm") return 0;
-    if (screenSize === "md") return isMenuOpen ? "16rem" : "4rem";
-    if (screenSize === "lg") return isMenuOpen ? "18rem" : "4rem";
-    if (screenSize === "xl" || screenSize === "2xl" || screenSize === "3xl")
-      return isMenuOpen ? "20rem" : "4rem";
-    return isMenuOpen ? "18rem" : "4rem";
   };
 
   const getAnimationDuration = () =>
@@ -549,21 +632,24 @@ const NavigationBar = ({
       )}
 
       {/* Mobile Overlay */}
-      {(isMobile || screenSize === "xs" || screenSize === "sm") &&
-        isMenuOpen && (
-          <div
-            className="fixed inset-0 bg-gradient-to-br from-black/80 via-black/70 to-black/60 backdrop-blur-md z-40"
-            onClick={closeMenu}
-            style={{
-              transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-            }}
-          />
-        )}
+      {shouldShowMobileOverlay() && (
+        <div
+          className="fixed inset-0 bg-gradient-to-br from-black/80 via-black/70 to-black/60 backdrop-blur-md z-40"
+          onClick={closeMenu}
+          style={{
+            transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
+          }}
+        />
+      )}
 
-      {/* Sidebar */}
+      {/* Enhanced Responsive Sidebar */}
       <aside
         className={`fixed top-0 left-0 h-screen bg-gradient-to-b from-gray-950/98 via-black/98 to-gray-950/98 backdrop-blur-xl text-yellow-100 flex flex-col shadow-2xl border-r border-yellow-400/20 transition-all overflow-hidden group
-          ${!isMenuOpen && !isMobile ? "hover:border-yellow-400/40" : ""}`}
+          ${
+            !isMenuOpen && screenSize !== "xs" && screenSize !== "sm"
+              ? "hover:border-yellow-400/40"
+              : ""
+          }`}
         role="navigation"
         style={{
           position: "fixed",
@@ -571,49 +657,45 @@ const NavigationBar = ({
           left: 0,
           width: getSidebarWidth(),
           height: "100vh",
-          // On small screens, sidebar slides in/out with transform
-          // On larger screens, it stays in place and just changes width
+          // Enhanced responsive transform behavior
           transform:
-            (isMobile || screenSize === "xs" || screenSize === "sm") &&
-            !isMenuOpen
+            (screenSize === "xs" || screenSize === "sm") && !isMenuOpen
               ? "translateX(-100%)"
               : "translateX(0)",
           transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-          zIndex:
-            isMobile || screenSize === "xs" || screenSize === "sm" ? 50 : 50,
-          // Enhanced glass-morphism effect with collapsed state improvements
+          zIndex: screenSize === "xs" || screenSize === "sm" ? 50 : 50,
+          // Enhanced responsive shadows
           boxShadow: isMenuOpen
             ? "4px 0 32px rgba(0, 0, 0, 0.5), inset -1px 0 0 rgba(251, 191, 36, 0.1)"
-            : !isMobile
+            : screenSize !== "xs" && screenSize !== "sm"
             ? "2px 0 20px rgba(0, 0, 0, 0.4), inset -1px 0 0 rgba(251, 191, 36, 0.15)"
             : "2px 0 16px rgba(0, 0, 0, 0.3)",
         }}
       >
-        {/* Sidebar Header */}
+        {/* Enhanced Responsive Sidebar Header */}
         <header
-          className={
-            navigationUtils.getResponsiveClass(
-              {
-                xs: "flex items-center justify-between p-3 h-16",
-                sm: "flex items-center justify-between p-3 h-16",
-                md: "flex items-center justify-between p-4 h-16",
-                lg: "flex items-center justify-between p-4 h-16",
-                xl: "flex items-center justify-between p-5 h-16",
-              },
-              screenSize
-            ) +
-            " border-b border-yellow-400/20 bg-gradient-to-r from-black/60 via-black/50 to-black/60 backdrop-blur-xl relative group"
-          }
+          className={`flex items-center justify-between ${getPadding(
+            "medium"
+          )} ${getSpacing(
+            "medium"
+          )} border-b border-yellow-400/20 bg-gradient-to-r from-black/60 via-black/50 to-black/60 backdrop-blur-xl relative group`}
+          style={{ height: getHeaderHeight() }}
         >
-          {/* Collapsed state - Center logo with better styling */}
-          {!isMenuOpen && !isMobile && (
+          {/* Collapsed state - Centered logo with enhanced responsive styling */}
+          {!isMenuOpen && screenSize !== "xs" && screenSize !== "sm" && (
             <div className="w-full flex justify-center">
-              <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-lg border border-yellow-400/20 bg-gradient-to-br from-yellow-400/5 via-transparent to-yellow-300/3 group-hover:border-yellow-400/30 group-hover:shadow-yellow-400/15 transition-all duration-300 group-hover:scale-105">
+              <div
+                className="relative rounded-xl overflow-hidden shadow-lg border border-yellow-400/20 bg-gradient-to-br from-yellow-400/5 via-transparent to-yellow-300/3 group-hover:border-yellow-400/30 group-hover:shadow-yellow-400/15 transition-all duration-300 group-hover:scale-105"
+                style={{
+                  width: getIconSize() + 16,
+                  height: getIconSize() + 16,
+                }}
+              >
                 <Image
                   src="/logo.png"
                   alt="Logo"
-                  width={40}
-                  height={40}
+                  width={getIconSize() + 16}
+                  height={getIconSize() + 16}
                   className="w-full h-full object-contain relative z-10"
                   priority
                 />
@@ -623,25 +705,40 @@ const NavigationBar = ({
             </div>
           )}
 
-          {/* Expanded state - Normal layout */}
-          {(isMenuOpen || isMobile) && (
+          {/* Expanded state - Enhanced responsive layout */}
+          {(isMenuOpen || screenSize === "xs" || screenSize === "sm") && (
             <>
-              <div className="flex items-center min-w-0" style={{ height: 40 }}>
+              <div
+                className={`flex items-center min-w-0 ${getSpacing("small")}`}
+                style={{ height: getIconSize() + 16 }}
+              >
                 <div
                   className="flex-shrink-0 transition-all"
                   style={{
-                    opacity: isMenuOpen || isMobile ? 1 : 0,
-                    width: isMenuOpen || isMobile ? 40 : 0,
+                    opacity:
+                      isMenuOpen || screenSize === "xs" || screenSize === "sm"
+                        ? 1
+                        : 0,
+                    width:
+                      isMenuOpen || screenSize === "xs" || screenSize === "sm"
+                        ? getIconSize() + 16
+                        : 0,
                     overflow: "hidden",
                     transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
                   }}
                 >
-                  <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-lg border border-yellow-400/20">
+                  <div
+                    className="relative rounded-xl overflow-hidden shadow-lg border border-yellow-400/20"
+                    style={{
+                      width: getIconSize() + 16,
+                      height: getIconSize() + 16,
+                    }}
+                  >
                     <Image
                       src="/logo.png"
                       alt="Logo"
-                      width={40}
-                      height={40}
+                      width={getIconSize() + 16}
+                      height={getIconSize() + 16}
                       className="w-full h-full object-contain"
                       priority
                     />
@@ -649,19 +746,31 @@ const NavigationBar = ({
                   </div>
                 </div>
                 <div
-                  style={{
-                    width: isMenuOpen || isMobile ? 16 : 0,
-                    transition: `width ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-                  }}
-                />
-                <div
                   className="transition-all flex items-center group relative"
                   style={{
-                    maxWidth: isMenuOpen || isMobile ? (isPWA ? 180 : 220) : 0,
+                    maxWidth:
+                      isMenuOpen || screenSize === "xs" || screenSize === "sm"
+                        ? isPWA
+                          ? 180
+                          : screenSize === "xs"
+                          ? 140
+                          : screenSize === "sm"
+                          ? 160
+                          : 220
+                        : 0,
                     overflow: "hidden",
-                    opacity: isMenuOpen || isMobile ? 1 : 0,
-                    height: 40,
+                    opacity:
+                      isMenuOpen || screenSize === "xs" || screenSize === "sm"
+                        ? 1
+                        : 0,
+                    height: getIconSize() + 16,
                     transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
+                    marginLeft:
+                      getSpacing("small") === "gap-1"
+                        ? "0.25rem"
+                        : getSpacing("small") === "gap-2"
+                        ? "0.5rem"
+                        : "0.75rem",
                   }}
                 >
                   <div className="flex flex-col">
@@ -981,39 +1090,44 @@ const NavigationBar = ({
         </footer>
       </aside>
 
-      {/* Header */}
+      {/* Enhanced Responsive Header */}
       <header
-        className={`fixed bg-gradient-to-r from-black/95 via-black/90 to-black/95 backdrop-blur-xl text-yellow-100 z-40 h-16 flex items-center shadow-2xl px-4 border-b border-yellow-400/20
+        className={`fixed bg-gradient-to-r from-black/95 via-black/90 to-black/95 backdrop-blur-xl text-yellow-100 z-40 flex items-center shadow-2xl border-b border-yellow-400/20 ${getPadding(
+          "medium"
+        )}
           ${
-            isMobile
+            screenSize === "xs" || screenSize === "sm"
               ? "justify-center left-0 right-0"
               : "justify-between right-0"
           }`}
         style={{
           transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
           top: "0",
-          left: isMobile ? 0 : getHeaderLeftOffset(),
-          borderLeft: isMobile ? "none" : "1px solid rgb(251 191 36 / 0.2)",
+          height: getHeaderHeight(),
+          left:
+            screenSize === "xs" || screenSize === "sm"
+              ? 0
+              : getHeaderLeftOffset(),
+          borderLeft:
+            screenSize === "xs" || screenSize === "sm"
+              ? "none"
+              : "1px solid rgb(251 191 36 / 0.2)",
           boxShadow:
             "0 4px 20px rgba(0, 0, 0, 0.3), inset 0 -1px 0 rgba(251, 191, 36, 0.1)",
         }}
       >
-        {/* Date display */}
+        {/* Enhanced Responsive Date Display */}
         <section
           className={`flex items-center ${
-            isMobile ? "justify-center w-full" : ""
+            screenSize === "xs" || screenSize === "sm"
+              ? "justify-center w-full"
+              : ""
           }`}
         >
           <div className="relative">
             <span
-              className={`font-medium whitespace-nowrap overflow-hidden text-ellipsis bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent drop-shadow-sm
-              ${navigationUtils.getResponsiveClass(
-                {
-                  xs: "text-sm",
-                  md: "text-base",
-                  lg: "text-lg",
-                },
-                screenSize
+              className={`font-medium whitespace-nowrap overflow-hidden text-ellipsis bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent drop-shadow-sm ${getTextSize(
+                "medium"
               )}`}
             >
               {clientDate}
@@ -1022,10 +1136,10 @@ const NavigationBar = ({
           </div>
         </section>
 
-        {/* User profile and controls */}
-        {(!isMobile || !isMenuOpen) && (
-          <div className="flex items-center gap-3 md:gap-4">
-            {/* Notification Bell */}
+        {/* Enhanced Responsive User Profile and Controls */}
+        {(!(screenSize === "xs" || screenSize === "sm") || !isMenuOpen) && (
+          <div className={`flex items-center ${getSpacing("medium")}`}>
+            {/* Enhanced Responsive Notification Bell */}
             <div className="relative" ref={bellRef}>
               <button
                 className="relative p-2.5 rounded-xl hover:bg-gradient-to-br hover:from-yellow-400/10 hover:to-yellow-300/5 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 group"
@@ -1034,7 +1148,7 @@ const NavigationBar = ({
               >
                 <FaBell
                   className="text-yellow-300 group-hover:text-yellow-200 transition-colors duration-300"
-                  size={isMobile ? 16 : 18}
+                  size={getIconSize()}
                 />
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-red-500 to-red-600 text-white text-xs rounded-full flex items-center justify-center font-bold shadow-lg animate-pulse">
@@ -1044,11 +1158,17 @@ const NavigationBar = ({
                 <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-yellow-400/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               </button>
 
-              {/* Notification Dropdown */}
+              {/* Enhanced Responsive Notification Dropdown */}
               {bellOpen && (
                 <div
                   className={`absolute right-0 mt-3 bg-gradient-to-br from-black/98 via-gray-900/98 to-black/98 backdrop-blur-xl text-yellow-100 rounded-2xl shadow-2xl z-50 border border-yellow-400/20
-                ${isMobile ? "w-80 max-w-[calc(100vw-2rem)]" : "w-80"}`}
+                ${
+                  screenSize === "xs"
+                    ? "w-72 max-w-[calc(100vw-1rem)]"
+                    : screenSize === "sm"
+                    ? "w-80 max-w-[calc(100vw-2rem)]"
+                    : "w-80"
+                }`}
                   style={{
                     boxShadow:
                       "0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(251, 191, 36, 0.1)",
@@ -1192,31 +1312,42 @@ const NavigationBar = ({
               )}
             </div>
 
-            {/* User Profile */}
+            {/* Enhanced Responsive User Profile */}
             <div
-              className={`flex items-center gap-3 border border-yellow-400/30 rounded-xl px-3 py-2 
-              bg-gradient-to-r from-black/60 via-black/40 to-black/60 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-yellow-400/40 transition-all duration-300 min-w-0 group
-              ${isMobile ? "max-w-[200px]" : "max-w-xs"}`}
+              className={`flex items-center border border-yellow-400/30 rounded-xl bg-gradient-to-r from-black/60 via-black/40 to-black/60 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-yellow-400/40 transition-all duration-300 min-w-0 group ${getPadding(
+                "small"
+              )} ${getSpacing("small")}
+              ${
+                screenSize === "xs"
+                  ? "max-w-[180px]"
+                  : screenSize === "sm"
+                  ? "max-w-[200px]"
+                  : "max-w-xs"
+              }`}
             >
               <div className="flex flex-col min-w-0 max-w-full">
                 <span
-                  className={`font-bold bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent leading-tight font-poppins truncate drop-shadow-sm
-                  ${isMobile ? "text-xs" : "text-sm"}`}
+                  className={`font-bold bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent leading-tight font-poppins truncate drop-shadow-sm ${getTextSize(
+                    "small"
+                  )}`}
                 >
                   {user?.name || "User"}
                 </span>
                 <span
-                  className={`text-yellow-100/80 leading-tight font-inter truncate transition-colors duration-300 group-hover:text-yellow-200
-                  ${isMobile ? "text-xs" : "text-xs"}`}
+                  className={`text-yellow-100/80 leading-tight font-inter truncate transition-colors duration-300 group-hover:text-yellow-200 ${getTextSize(
+                    "small"
+                  )}`}
                 >
                   {role || "Role"}
                 </span>
               </div>
 
-              {/* Status indicators */}
+              {/* Enhanced Responsive Status Indicators */}
               <div className="flex flex-col gap-1.5">
                 <span
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all duration-300 backdrop-blur-sm
+                  className={`px-2.5 py-1 rounded-full font-medium flex items-center transition-all duration-300 backdrop-blur-sm ${getTextSize(
+                    "small"
+                  )} ${getSpacing("small")}
                     ${
                       isActuallyOnline
                         ? "bg-gradient-to-r from-green-500/20 to-green-600/20 text-green-300 border border-green-400/40 shadow-green-400/20"
@@ -1224,15 +1355,16 @@ const NavigationBar = ({
                     }`}
                 >
                   {isActuallyOnline ? (
-                    <FaWifi size={8} />
+                    <FaWifi size={Math.max(8, getIconSize() - 8)} />
                   ) : (
-                    <MdSignalWifiOff size={8} />
+                    <MdSignalWifiOff size={Math.max(8, getIconSize() - 8)} />
                   )}
-                  {!isMobile && (isActuallyOnline ? "Online" : "Offline")}
+                  {!(screenSize === "xs" || screenSize === "sm") &&
+                    (isActuallyOnline ? "Online" : "Offline")}
                   {/* Show offline queue count when offline */}
                   {!isActuallyOnline &&
                     offlineActionsCount > 0 &&
-                    !isMobile && (
+                    !(screenSize === "xs" || screenSize === "sm") && (
                       <span className="ml-1 px-1.5 py-0.5 bg-gradient-to-r from-orange-500/30 to-orange-600/30 text-orange-200 rounded-full text-xs border border-orange-400/30">
                         {offlineActionsCount}
                       </span>
