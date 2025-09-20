@@ -576,7 +576,7 @@ export default function Dashboard() {
 
     // Determine how many top performers to show based on topItemsCount
     const count = topItemsCount;
-    let performers = historicalData.top_performers.by_total_sales;
+    const performers = historicalData.top_performers.by_total_sales;
 
     return (
       <section className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 rounded-xl p-4 mb-6 border border-blue-500/30">
