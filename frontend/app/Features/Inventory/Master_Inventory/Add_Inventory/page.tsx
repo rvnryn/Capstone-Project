@@ -120,11 +120,18 @@ export default function AddInventoryItem() {
     }
 
     // Stock validation
-    if (data.stock === 0 || data.stock === null || data.stock === undefined) {
+    if (
+      data.stock === null ||
+      data.stock === undefined
+    ) {
       newErrors.stock = "Quantity in stock is required.";
-    } else if (!Number.isInteger(data.stock) || data.stock < 1) {
+    } else if (
+      !Number.isInteger(data.stock) ||
+      data.stock < 1
+    ) {
       newErrors.stock = "Quantity must be a positive integer.";
     }
+
 
     // Expiration date validation (required)
     if (!data.expiration_date) {
