@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
@@ -85,7 +84,6 @@ export default function SurplusInventoryPage() {
         return response.data;
       },
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [selectedCategory, setSelectedCategory] = useState("");

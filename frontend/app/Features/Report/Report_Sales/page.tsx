@@ -162,7 +162,7 @@ export default function ReportSales() {
         allWeeksMap.set(f.week_start, f);
       }
     });
-    let allWeeks = Array.from(allWeeksMap.values()).sort((a, b) =>
+    const allWeeks = Array.from(allWeeksMap.values()).sort((a, b) =>
       a.week_start.localeCompare(b.week_start)
     );
     if (holidayTypeFilter === "all") return allWeeks;

@@ -63,7 +63,6 @@ export default function InventorySettings() {
       setInitialSettings(data);
       setLoading(false); // <-- Set loading to false after fetch
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const handleUnitChange = (id: number, value: string) => {
     setPendingIngredients((prev) =>
