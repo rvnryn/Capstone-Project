@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import axios from "@/app/lib/axios";
+import axiosInstance from "@/app/lib/axios";
 
 interface WeeklyForecast {
   week_start: string;
@@ -64,10 +64,12 @@ export function useSimpleSalesReport() {
 
         // Fetch all required data in parallel using axios
         const [summaryRes, itemsRes, dateRes, forecastRes] = await Promise.all([
-          axios.get(`/api/sales-summary?${params.toString()}`),
-          axios.get(`/api/sales-by-item?${params.toString()}`),
-          axios.get(`/api/sales-by-date?${params.toString()}&grouping=daily`),
-          axios.get(
+          axiosInstance.get(`/api/sales-summary?${params.toString()}`),
+          axiosInstance.get(`/api/sales-by-item?${params.toString()}`),
+          axiosInstance.get(
+            `/api/sales-by-date?${params.toString()}&grouping=daily`
+          ),
+          axiosInstance.get(
             `/api/weekly-sales-forecast${
               forecastParams.toString() ? `?${forecastParams.toString()}` : ""
             }`

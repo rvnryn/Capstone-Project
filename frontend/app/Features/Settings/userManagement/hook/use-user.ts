@@ -24,7 +24,8 @@ export type CreateUserPayload = Omit<
 >;
 export type UpdateUserPayload = Partial<CreateUserPayload>;
 
-const API_BASE = "/api/users";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE = `${API_BASE_URL}/api/users`;
 
 export function useUsersAPI() {
   // Get offline queue functions

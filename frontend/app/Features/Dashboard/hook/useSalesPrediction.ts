@@ -2,6 +2,8 @@ import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
 export interface SalesPrediction {
   name: string;
   sales: number[];
@@ -56,7 +58,7 @@ export function useSalesHistory(
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: `/api/predict_top_sales?timeframe=${timeframe}&top_n=${top_n}`,
+          url: `${API_BASE_URL}/api/predict_top_sales?timeframe=${timeframe}&top_n=${top_n}`,
         },
         {
           cacheKey: `sales-history-${timeframe}-${top_n}`,
@@ -93,7 +95,7 @@ export function useHistoricalAnalysis() {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: `/api/historical_analysis?days=${days}`,
+          url: `${API_BASE_URL}/api/historical_analysis?days=${days}`,
         },
         {
           cacheKey: `historical-analysis-${days}`,

@@ -23,8 +23,9 @@ export interface InventorySettingInput {
   low_stock_threshold?: number;
   category?: string;
 }
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
-const API_BASE = "/api/inventory-settings";
+const API_BASE = `${API_BASE_URL}/api/inventory-settings`;
 
 export function useInventorySettingsAPI() {
   const [loading, setLoading] = useState(false);

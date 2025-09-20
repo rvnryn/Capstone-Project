@@ -3,7 +3,7 @@ import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 export function useDashboardQuery() {
   const queryClient = useQueryClient();
-
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
   // Low Stock
   const lowStock = useQuery({
     queryKey: ["dashboard", "low-stock"],
@@ -11,7 +11,7 @@ export function useDashboardQuery() {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: "/api/dashboard/low-stock",
+          url: `${API_BASE_URL}/api/dashboard/low-stock`,
         },
         {
           cacheKey: "dashboard-low-stock",
@@ -34,7 +34,7 @@ export function useDashboardQuery() {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: "/api/dashboard/expiring-ingredients",
+          url: `${API_BASE_URL}/api/dashboard/expiring-ingredients`,
         },
         {
           cacheKey: "dashboard-expiring",
@@ -56,7 +56,7 @@ export function useDashboardQuery() {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: "/api/dashboard/surplus-ingredients",
+          url: `${API_BASE_URL}/api/dashboard/surplus-ingredients`,
         },
         {
           cacheKey: "dashboard-surplus",
@@ -78,7 +78,7 @@ export function useDashboardQuery() {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: "/api/dashboard/expired-ingredients",
+          url: `${API_BASE_URL}/api/dashboard/expired-ingredients`,
         },
         {
           cacheKey: "dashboard-expired",
@@ -100,7 +100,7 @@ export function useDashboardQuery() {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: "/api/custom-holidays",
+          url: `${API_BASE_URL}/api/custom-holidays`,
         },
         {
           cacheKey: "dashboard-custom-holidays",
@@ -125,7 +125,7 @@ export function useDashboardQuery() {
       const response = await offlineAxiosRequest(
         {
           method: "POST",
-          url: "/api/custom-holidays",
+          url: `${API_BASE_URL}/api/custom-holidays`,
           data,
         },
         { showErrorToast: true }
@@ -149,7 +149,7 @@ export function useDashboardQuery() {
       const response = await offlineAxiosRequest(
         {
           method: "PUT",
-          url: `/api/custom-holidays/${data.id}`,
+          url: `${API_BASE_URL}/api/custom-holidays/${data.id}`,
           data,
         },
         { showErrorToast: true }
@@ -168,7 +168,7 @@ export function useDashboardQuery() {
       const response = await offlineAxiosRequest(
         {
           method: "DELETE",
-          url: `/api/custom-holidays/${id}`,
+          url: `${API_BASE_URL}/api/custom-holidays/${id}`,
         },
         { showErrorToast: true }
       );

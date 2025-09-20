@@ -39,7 +39,7 @@ export type UpdateInventoryPayload = Partial<AddInventoryPayload>;
 export function useInventoryAPI() {
   // Get offline queue functions
   const { addOfflineAction, isOnline } = useOfflineQueue();
-
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
   // Helper function to handle offline write operations
   const handleOfflineWriteOperation = useCallback(
     async (
@@ -78,10 +78,10 @@ export function useInventoryAPI() {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: `/api/inventory/${id}`,
+          url: `${API_BASE_URL}/api/inventory/${id}`,
         },
         {
-          cacheKey: `inventory-item-${id}`,
+          cacheKey: `${API_BASE_URL}inventory-item-${id}`,
           cacheHours: 2,
           showErrorToast: true,
         }
@@ -100,7 +100,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "POST",
-              url: "/api/inventory",
+              url: `${API_BASE_URL}/api/inventory`,
               data: item,
             },
             {
@@ -109,7 +109,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "add-inventory-item",
-          endpoint: "/api/inventory",
+          endpoint: `${API_BASE_URL}/api/inventory`,
           method: "POST",
           payload: item,
         }
@@ -133,7 +133,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "PUT",
-              url: `/api/inventory/${id}`,
+              url: `${API_BASE_URL}/api/inventory/${id}`,
               data: cleanedItem,
             },
             {
@@ -142,7 +142,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "update-inventory-item",
-          endpoint: `/api/inventory/${id}`,
+          endpoint: `${API_BASE_URL}/api/inventory/${id}`,
           method: "PUT",
           payload: cleanedItem,
         }
@@ -158,7 +158,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "DELETE",
-              url: `/api/inventory/${id}`,
+              url: `${API_BASE_URL}/api/inventory/${id}`,
             },
             {
               showErrorToast: true,
@@ -166,7 +166,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "delete-inventory-item",
-          endpoint: `/api/inventory/${id}`,
+          endpoint: `${API_BASE_URL}/api/inventory/${id}`,
           method: "DELETE",
           payload: { id },
         }
@@ -180,7 +180,7 @@ export function useInventoryAPI() {
       const response = await offlineAxiosRequest<InventoryItem[]>(
         {
           method: "GET",
-          url: "/api/inventory",
+          url: `${API_BASE_URL}/api/inventory`,
         },
         {
           cacheKey: "inventory-list",
@@ -203,7 +203,7 @@ export function useInventoryAPI() {
     const response = await offlineAxiosRequest<InventoryItem>(
       {
         method: "GET",
-        url: `/api/inventory-today/${id}`,
+        url: `${API_BASE_URL}/api/inventory-today/${id}`,
       },
       {
         cacheKey: `inventory-today-item-${id}`,
@@ -221,7 +221,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "POST",
-              url: "/api/inventory-today",
+              url: `${API_BASE_URL}/api/inventory-today`,
               data: item,
             },
             {
@@ -230,7 +230,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "add-today-inventory-item",
-          endpoint: "/api/inventory-today",
+          endpoint: `${API_BASE_URL}/api/inventory-today`,
           method: "POST",
           payload: item,
         }
@@ -254,7 +254,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "PUT",
-              url: `/api/inventory-today/${id}`,
+              url: `${API_BASE_URL}/api/inventory-today/${id}`,
               data: cleanedItem,
             },
             {
@@ -263,7 +263,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "update-today-inventory-item",
-          endpoint: `/api/inventory-today/${id}`,
+          endpoint: `${API_BASE_URL}/api/inventory-today/${id}`,
           method: "PUT",
           payload: cleanedItem,
         }
@@ -279,7 +279,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "DELETE",
-              url: `/api/inventory-today/${id}`,
+              url: `${API_BASE_URL}/api/inventory-today/${id}`,
             },
             {
               showErrorToast: true,
@@ -287,7 +287,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "delete-today-inventory-item",
-          endpoint: `/api/inventory-today/${id}`,
+          endpoint: `${API_BASE_URL}/api/inventory-today/${id}`,
           method: "DELETE",
           payload: { id },
         }
@@ -301,7 +301,7 @@ export function useInventoryAPI() {
       const response = await offlineAxiosRequest<InventoryItem[]>(
         {
           method: "GET",
-          url: "/api/inventory-today",
+          url: `${API_BASE_URL}/api/inventory-today`,
         },
         {
           cacheKey: "inventory-today-list",
@@ -324,7 +324,7 @@ export function useInventoryAPI() {
     const response = await offlineAxiosRequest<InventoryItem>(
       {
         method: "GET",
-        url: `/api/inventory-surplus/${id}`,
+        url: `${API_BASE_URL}/api/inventory-surplus/${id}`,
       },
       {
         cacheKey: `inventory-surplus-item-${id}`,
@@ -342,7 +342,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "POST",
-              url: "/api/inventory-surplus",
+              url: `${API_BASE_URL}/api/inventory-surplus`,
               data: item,
             },
             {
@@ -351,7 +351,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "add-surplus-inventory-item",
-          endpoint: "/api/inventory-surplus",
+          endpoint: `${API_BASE_URL}/api/inventory-surplus`,
           method: "POST",
           payload: item,
         }
@@ -379,7 +379,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "PUT",
-              url: `/api/inventory-surplus/${id}`,
+              url: `${API_BASE_URL}/api/inventory-surplus/${id}`,
               data: cleanedItem,
             },
             {
@@ -388,7 +388,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "update-surplus-inventory-item",
-          endpoint: `/api/inventory-surplus/${id}`,
+          endpoint: `${API_BASE_URL}/api/inventory-surplus/${id}`,
           method: "PUT",
           payload: cleanedItem,
         }
@@ -404,7 +404,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "DELETE",
-              url: `/api/inventory-surplus/${id}`,
+              url: `${API_BASE_URL}/api/inventory-surplus/${id}`,
             },
             {
               showErrorToast: true,
@@ -412,7 +412,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "delete-surplus-inventory-item",
-          endpoint: `/api/inventory-surplus/${id}`,
+          endpoint: `${API_BASE_URL}/api/inventory-surplus/${id}`,
           method: "DELETE",
           payload: { id },
         }
@@ -426,7 +426,7 @@ export function useInventoryAPI() {
       const response = await offlineAxiosRequest<InventoryItem[]>(
         {
           method: "GET",
-          url: "/api/inventory-surplus",
+          url: `${API_BASE_URL}/api/inventory-surplus`,
         },
         {
           cacheKey: "inventory-surplus-list",
@@ -453,7 +453,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "POST",
-              url: `/api/inventory/${id}/transfer-to-today`,
+              url: `${API_BASE_URL}/api/inventory/${id}/transfer-to-today`,
               data: { quantity },
             },
             {
@@ -462,7 +462,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "transfer-to-today",
-          endpoint: `/api/inventory/${id}/transfer-to-today`,
+          endpoint: `${API_BASE_URL}/api/inventory/${id}/transfer-to-today`,
           method: "POST",
           payload: { id, quantity },
         }
@@ -478,7 +478,7 @@ export function useInventoryAPI() {
           offlineAxiosRequest(
             {
               method: "POST",
-              url: `/api/inventory-today/${id}/transfer-to-surplus`,
+              url: `${API_BASE_URL}/api/inventory-today/${id}/transfer-to-surplus`,
               data: { quantity },
             },
             {
@@ -487,7 +487,7 @@ export function useInventoryAPI() {
           ),
         {
           action: "transfer-to-surplus",
-          endpoint: `/api/inventory-today/${id}/transfer-to-surplus`,
+          endpoint: `${API_BASE_URL}/api/inventory-today/${id}/transfer-to-surplus`,
           method: "POST",
           payload: { id, quantity },
         }
@@ -502,7 +502,7 @@ export function useInventoryAPI() {
         const response = await offlineAxiosRequest(
           {
             method: "POST",
-            url: `/api/inventory-surplus/${id}/transfer-to-today`,
+            url: `${API_BASE_URL}/api/inventory-surplus/${id}/transfer-to-today`,
             data: { quantity },
           },
           {

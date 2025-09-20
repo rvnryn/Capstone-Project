@@ -1,4 +1,3 @@
-import axiosInstance from "@/app/lib/axios";
 import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 import { useCallback } from "react";
 
@@ -14,7 +13,8 @@ export interface InventoryLogEntry {
 }
 
 export function useInventoryReportAPI() {
-  // Fetch logs (optionally by date or range)
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
   const fetchLogs = useCallback(
     async (start_date?: string, end_date?: string) => {
       const params: Record<string, string> = {};
@@ -29,7 +29,7 @@ export function useInventoryReportAPI() {
         const response = await offlineAxiosRequest(
           {
             method: "GET",
-            url: "/api/inventory-log",
+            url: `${API_BASE_URL}/api/inventory-log`,
             params,
           },
           {
@@ -60,7 +60,7 @@ export function useInventoryReportAPI() {
       const res = await offlineAxiosRequest(
         {
           method: "PUT",
-          url: "/api/inventory-log",
+          url: `${API_BASE_URL}/api/inventory-log`,
           data: entries,
         },
         {

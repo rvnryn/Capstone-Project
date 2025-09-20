@@ -2,6 +2,8 @@ import { useState } from "react";
 import axios from "@/app/lib/axios";
 import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
 export interface UserActivityLog {
   activity_id?: number;
   user_id: number;
@@ -35,7 +37,7 @@ export function useUserActivityLogAPI() {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: "/api/user-activity",
+          url: `${API_BASE_URL}/api/user-activity`,
           params,
         },
         {
@@ -65,7 +67,7 @@ export function useUserActivityLogAPI() {
       const response = await offlineAxiosRequest(
         {
           method: "POST",
-          url: "/api/user-activity",
+          url: `${API_BASE_URL}/api/user-activity`,
           data: log,
         },
         {

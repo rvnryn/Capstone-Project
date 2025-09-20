@@ -27,7 +27,7 @@ export interface MenuIngredient {
 export function useMenuAPI() {
   // Get offline queue functions
   const { addOfflineAction, isOnline } = useOfflineQueue();
-
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
   // Helper function to handle offline write operations
   const handleOfflineWriteOperation = useCallback(
     async (
@@ -66,7 +66,7 @@ export function useMenuAPI() {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: "/api/menu",
+          url: `${API_BASE_URL}/api/menu`,
         },
         {
           cacheKey: "menu-list",
@@ -92,7 +92,7 @@ export function useMenuAPI() {
         offlineAxiosRequest(
           {
             method: "PATCH",
-            url: `/api/menu/${menu_id}`,
+            url: `${API_BASE_URL}/api/menu/${menu_id}`,
             data,
           },
           {
@@ -101,7 +101,7 @@ export function useMenuAPI() {
         ),
       {
         action: "update-menu-item",
-        endpoint: `/api/menu/${menu_id}`,
+        endpoint: `${API_BASE_URL}/api/menu/${menu_id}`,
         method: "PATCH",
         payload: data,
       }
@@ -118,7 +118,7 @@ export function useMenuAPI() {
         offlineAxiosRequest(
           {
             method: "PATCH",
-            url: `/api/menu/${menu_id}/update-with-image-and-ingredients`,
+            url: `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
             data: form,
             headers: { "Content-Type": "multipart/form-data" },
           },
@@ -128,7 +128,7 @@ export function useMenuAPI() {
         ),
       {
         action: "update-menu-with-image",
-        endpoint: `/api/menu/${menu_id}/update-with-image-and-ingredients`,
+        endpoint: `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
         method: "PATCH",
         payload: form, // Note: FormData will be serialized for queue
       }
@@ -141,7 +141,7 @@ export function useMenuAPI() {
         offlineAxiosRequest(
           {
             method: "DELETE",
-            url: `/api/menu/${menu_id}`,
+            url: `${API_BASE_URL}/api/menu/${menu_id}`,
           },
           {
             showErrorToast: true,
@@ -149,7 +149,7 @@ export function useMenuAPI() {
         ),
       {
         action: "delete-menu-item",
-        endpoint: `/api/menu/${menu_id}`,
+        endpoint: `${API_BASE_URL}/api/menu/${menu_id}`,
         method: "DELETE",
         payload: { menu_id },
       }
@@ -163,7 +163,7 @@ export function useMenuAPI() {
         offlineAxiosRequest(
           {
             method: "POST",
-            url: "/api/menu/create-with-image-and-ingredients",
+            url: `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
             data: form,
             headers: { "Content-Type": "multipart/form-data" },
           },
@@ -173,7 +173,7 @@ export function useMenuAPI() {
         ),
       {
         action: "add-menu-with-image",
-        endpoint: "/api/menu/create-with-image-and-ingredients",
+        endpoint: `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
         method: "POST",
         payload: form,
       }
@@ -184,7 +184,7 @@ export function useMenuAPI() {
     const res = await offlineAxiosRequest(
       {
         method: "GET",
-        url: `/api/menu/${menu_id}`,
+        url: `${API_BASE_URL}/api/menu/${menu_id}`,
       },
       {
         cacheKey: `menu-item-${menu_id}`,
@@ -204,7 +204,7 @@ export function useMenuAPI() {
         offlineAxiosRequest(
           {
             method: "DELETE",
-            url: `/api/menu/${menu_id}/ingredient/${ingredient_id}`,
+            url: `${API_BASE_URL}/api/menu/${menu_id}/ingredient/${ingredient_id}`,
           },
           {
             showErrorToast: true,
@@ -212,7 +212,7 @@ export function useMenuAPI() {
         ),
       {
         action: "delete-menu-ingredient",
-        endpoint: `/api/menu/${menu_id}/ingredient/${ingredient_id}`,
+        endpoint: `${API_BASE_URL}/api/menu/${menu_id}/ingredient/${ingredient_id}`,
         method: "DELETE",
         payload: { menu_id, ingredient_id },
       }
@@ -225,7 +225,7 @@ export function useMenuAPI() {
         offlineAxiosRequest(
           {
             method: "POST",
-            url: "/api/menu/recalculate-stock-status",
+            url: `${API_BASE_URL}/api/menu/recalculate-stock-status`,
           },
           {
             showErrorToast: true,
@@ -233,7 +233,7 @@ export function useMenuAPI() {
         ),
       {
         action: "recalculate-menu-stock",
-        endpoint: "/api/menu/recalculate-stock-status",
+        endpoint: `${API_BASE_URL}/api/menu/recalculate-stock-status`,
         method: "POST",
         payload: {},
       }

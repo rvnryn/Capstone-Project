@@ -1,6 +1,8 @@
 import useSWR from "swr";
 import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
 export interface BackupSchedule {
   id: number;
   user_id: number;
@@ -20,7 +22,7 @@ export interface BackupScheduleSettings {
 // Fetch the current backup schedule
 export function useBackupSchedule() {
   const { data, error, mutate, isLoading } = useSWR<BackupSchedule>(
-    "/api/backup/schedule",
+    `${API_BASE_URL}/api/backup/schedule`,
     async (url: string) => {
       const res = await offlineAxiosRequest(
         {
@@ -49,7 +51,7 @@ export async function updateBackupSchedule(settings: BackupScheduleSettings) {
   const res = await offlineAxiosRequest(
     {
       method: "POST",
-      url: "/api/backup/schedule",
+      url: `${API_BASE_URL}/api/backup/schedule`,
       data: settings,
     },
     {

@@ -1,5 +1,7 @@
 import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
 export function useBackupRestoreAPI() {
   // Download backup from FastAPI, encrypt if password provided
   const getToken = () =>
@@ -11,7 +13,9 @@ export function useBackupRestoreAPI() {
     const response = await offlineAxiosRequest<{ data: Blob; headers?: any }>(
       {
         method: "GET",
-        url: `/api/backup?password=${encodeURIComponent(password)}`,
+        url: `${API_BASE_URL}/api/backup?password=${encodeURIComponent(
+          password
+        )}`,
         responseType: "blob",
       },
       {
@@ -66,7 +70,7 @@ export function useBackupRestoreAPI() {
       await offlineAxiosRequest(
         {
           method: "POST",
-          url: "/api/restore",
+          url: `${API_BASE_URL}/api/restore`,
           data: formData,
           headers: {
             "Content-Type": "multipart/form-data",
@@ -95,7 +99,7 @@ export function useBackupRestoreAPI() {
       const response = await offlineAxiosRequest(
         {
           method: "POST",
-          url: "/api/backup_drive",
+          url: `${API_BASE_URL}/api/backup_drive`,
           data: { access_token, password: backupPassword },
           headers: {
             "Content-Type": "application/json",
@@ -129,7 +133,7 @@ export function useBackupRestoreAPI() {
       await offlineAxiosRequest(
         {
           method: "POST",
-          url: "/api/restore_drive",
+          url: `${API_BASE_URL}/api/restore_drive`,
           data: { access_token, file_id, password },
           headers: {
             "Content-Type": "application/json",
@@ -161,7 +165,7 @@ export function useBackupRestoreAPI() {
       const response = await offlineAxiosRequest(
         {
           method: "POST",
-          url: "/api/backup_s3",
+          url: `${API_BASE_URL}/api/backup_s3`,
           data: { password: backupPassword, ...(filename ? { filename } : {}) },
           headers: {
             "Content-Type": "application/json",
@@ -196,7 +200,7 @@ export function useBackupRestoreAPI() {
       await offlineAxiosRequest(
         {
           method: "POST",
-          url: "/api/restore_s3",
+          url: `${API_BASE_URL}/api/restore_s3`,
           data: filename ? { filename, password } : { password },
           headers: {
             "Content-Type": "application/json",

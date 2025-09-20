@@ -2,6 +2,8 @@
 import { useState, useCallback } from "react";
 import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
 export interface NotificationSettings {
   user_id: number;
   low_stock_enabled: boolean;
@@ -32,7 +34,7 @@ export function useNotificationSettingsAPI(userId: number) {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: `/api/notification-settings?user_id=${userId}`,
+          url: `${API_BASE_URL}/api/notification-settings?user_id=${userId}`,
         },
         {
           cacheKey,
@@ -71,7 +73,7 @@ export function useNotificationSettingsAPI(userId: number) {
         const res = await offlineAxiosRequest(
           {
             method: "POST",
-            url: "/api/notification-settings",
+            url: `${API_BASE_URL}/api/notification-settings`,
             data: newSettings,
             headers: {
               "Content-Type": "application/json",

@@ -4,6 +4,8 @@ import { useOfflineQueue } from "@/app/hooks/usePWA";
 import { useCallback } from "react";
 import { toast } from "react-toastify";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
 // Supplier types
 export interface Supplier {
   supplier_id: number;
@@ -69,7 +71,7 @@ export function useSupplierAPI() {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
-          url: `/api/suppliers/${id}`,
+          url: `${API_BASE_URL}/api/suppliers/${id}`,
         },
         {
           cacheKey: `supplier-${id}`,
@@ -91,7 +93,7 @@ export function useSupplierAPI() {
           offlineAxiosRequest(
             {
               method: "POST",
-              url: "/api/suppliers",
+              url: `${API_BASE_URL}/api/suppliers`,
               data: supplier,
             },
             {
@@ -116,7 +118,7 @@ export function useSupplierAPI() {
           offlineAxiosRequest(
             {
               method: "PUT",
-              url: `/api/suppliers/${id}`,
+              url: `${API_BASE_URL}/api/suppliers/${id}`,
               data: supplier,
             },
             {
@@ -141,7 +143,7 @@ export function useSupplierAPI() {
           offlineAxiosRequest(
             {
               method: "DELETE",
-              url: `/api/suppliers/${id}`,
+              url: `${API_BASE_URL}/api/suppliers/${id}`,
             },
             {
               showErrorToast: true,
@@ -163,7 +165,7 @@ export function useSupplierAPI() {
       const response = await offlineAxiosRequest<Supplier[]>(
         {
           method: "GET",
-          url: "/api/suppliers",
+          url: `${API_BASE_URL}/api/suppliers`,
         },
         {
           cacheKey: "suppliers-list",
