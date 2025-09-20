@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useEffect, useMemo, useCallback } from "react";
 import * as XLSX from "xlsx";
 import {
@@ -19,6 +18,9 @@ import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import { useSimpleSalesReport } from "./hooks/useSimpleSalesReport";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
+import { saveAs } from "file-saver";
+import { AiOutlineInfoCircle } from "react-icons/ai";
+import { supabase } from "@/app/utils/Server/supabaseClient";
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!;
 const SHEET_RANGE = "Sheet1!A1";
@@ -42,7 +44,12 @@ const GoogleSheetIntegration = ({
     scope:
       "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive",
     onSuccess,
-    onError: console.error,
+    onError: (err) => {
+      console.error(err);
+      alert(
+        "Google authentication failed. Please ensure you grant all requested permissions."
+      );
+    },
   });
 
   return (
@@ -76,6 +83,7 @@ export default function ReportSales() {
 
   // UI state
   const [searchQuery, setSearchQuery] = useState("");
+  const [pendingSearch, setPendingSearch] = useState("");
   const [showPopup, setShowPopup] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -91,6 +99,162 @@ export default function ReportSales() {
     direction: "asc" as "asc" | "desc",
   });
 
+  // Place debug useEffects here, after all state/variable declarations
+  useEffect(() => {
+    // Call fetchReportData on mount and whenever period changes
+    fetchReportData()
+      .then((data) => {
+        console.log("[ReportSales] fetchReportData result:", data);
+      })
+      .catch((err) => {
+        console.error("[ReportSales] fetchReportData error:", err);
+      });
+  }, [period, fetchReportData]);
+
+  useEffect(() => {
+    console.log("[ReportSales] reportData:", reportData);
+    console.log("[ReportSales] error:", error);
+  }, [reportData, error]);
+
+  // ML Weekly Forecast Section
+  type WeeklyForecast = {
+    week_start: string;
+    predicted_sales: number;
+    is_holiday_week: number;
+    holiday_type?: "official" | "custom" | null;
+  };
+  type HistoricalPrediction = {
+    week_start: string;
+    predicted_sales: number;
+    actual_sales: number;
+    is_holiday_week: number;
+    holiday_type?: "official" | "custom" | null;
+  };
+  type SalesReportData = {
+    forecast?: WeeklyForecast[];
+    historicalPredictions?: HistoricalPrediction[];
+    [key: string]: any;
+  };
+  // Holiday type filter state
+  const [holidayTypeFilter, setHolidayTypeFilter] = useState<
+    "" | "official" | "custom" | "none" | "all"
+  >("all");
+  // ...existing code...
+  // Place filteredWeeks after forecast/historicalPredictions are defined
+  const forecast: WeeklyForecast[] =
+    (reportData && Array.isArray((reportData as SalesReportData).forecast)
+      ? (reportData as SalesReportData).forecast
+      : []) || [];
+  const historicalPredictions: HistoricalPrediction[] =
+    (reportData &&
+    Array.isArray((reportData as SalesReportData).historicalPredictions)
+      ? (reportData as SalesReportData).historicalPredictions
+      : []) || [];
+
+  // Filtered weeks for table/chart (must be after forecast/historicalPredictions)
+  const filteredWeeks = useMemo(() => {
+    const allWeeksMap = new Map<string, any>();
+    historicalPredictions.forEach((h) => {
+      allWeeksMap.set(h.week_start, h);
+    });
+    forecast.forEach((f) => {
+      if (!allWeeksMap.has(f.week_start)) {
+        allWeeksMap.set(f.week_start, f);
+      }
+    });
+    let allWeeks = Array.from(allWeeksMap.values()).sort((a, b) =>
+      a.week_start.localeCompare(b.week_start)
+    );
+    if (holidayTypeFilter === "all") return allWeeks;
+    if (holidayTypeFilter === "none")
+      return allWeeks.filter((w) => !w.is_holiday_week);
+    return allWeeks.filter((w) => w.holiday_type === holidayTypeFilter);
+  }, [historicalPredictions, forecast, holidayTypeFilter]);
+  // Holiday legend/tooltip
+  const holidayLegend = (
+    <div className="flex items-center gap-4 mt-2 text-xs text-gray-300">
+      <span className="flex items-center gap-1">
+        <span className="inline-block w-3 h-3 rounded-full bg-blue-400 mr-1" />{" "}
+        Official PH Holiday
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block w-3 h-3 rounded-full bg-pink-400 mr-1" />{" "}
+        Custom Holiday
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block w-3 h-3 rounded-full bg-gray-500 mr-1" />{" "}
+        Not a Holiday
+      </span>
+    </div>
+  );
+
+  // Merge actual and predicted by week_start
+  const chartData = useMemo(() => {
+    if (!historicalPredictions.length) return null;
+    const allWeeks: string[] = historicalPredictions.map((w) => w.week_start);
+    return {
+      labels: allWeeks,
+      datasets: [
+        {
+          label: "Actual Sales",
+          data: historicalPredictions.map((w) => w.actual_sales),
+          borderColor: "#34d399",
+          backgroundColor: "rgba(52,211,153,0.2)",
+          tension: 0.3,
+          fill: false,
+        },
+        {
+          label: "Predicted Sales (ML)",
+          data: historicalPredictions.map((w) => w.predicted_sales),
+          borderColor: "#facc15",
+          backgroundColor: "rgba(250,204,21,0.2)",
+          borderDash: [6, 4],
+          tension: 0.3,
+          fill: false,
+        },
+      ],
+    };
+  }, [historicalPredictions]);
+
+  // Calculate forecast accuracy (MAPE)
+  const forecastAccuracy = useMemo(() => {
+    if (!historicalPredictions.length) return null;
+    let totalAPE = 0;
+    let count = 0;
+    for (const w of historicalPredictions) {
+      if (w.actual_sales && w.actual_sales > 0) {
+        totalAPE += Math.abs(
+          (w.actual_sales - w.predicted_sales) / w.actual_sales
+        );
+        count++;
+      }
+    }
+    if (count === 0) return null;
+    return 100 - (totalAPE / count) * 100; // Accuracy %
+  }, [historicalPredictions]);
+
+  // Actionable alert: If next week's forecast is much higher/lower than average
+  const actionableAlert = useMemo(() => {
+    if (!forecast.length) return null;
+    const avg =
+      forecast.reduce((sum, w) => sum + w.predicted_sales, 0) / forecast.length;
+    const nextWeek = forecast[forecast.length - 1];
+    if (!nextWeek) return null;
+    if (nextWeek.predicted_sales > avg * 1.2) {
+      return {
+        type: "high",
+        message: `Next week's forecast (₱${nextWeek.predicted_sales.toLocaleString()}) is significantly above average. Consider preparing extra stock or staff.`,
+      };
+    }
+    if (nextWeek.predicted_sales < avg * 0.8) {
+      return {
+        type: "low",
+        message: `Next week's forecast (₱${nextWeek.predicted_sales.toLocaleString()}) is below average. Consider reducing inventory or running promotions.`,
+      };
+    }
+    return null;
+  }, [forecast]);
+
   const categories = [
     "Rice Toppings",
     "Sizzlers",
@@ -103,15 +267,44 @@ export default function ReportSales() {
   ];
 
   // Fetch data based on period
+  // Enhanced: Fetch report data and ML forecast with item/category filters
+
+  // Supabase Realtime: Listen for changes in order_items and refresh sales data
   useEffect(() => {
-    if (period === "today") {
-      fetchTodayReport();
-    } else if (period === "week") {
-      fetchWeekReport();
-    } else if (period === "month") {
-      fetchMonthReport();
+    const channel = supabase
+      .channel("order_items_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "order_items" },
+        (payload) => {
+          // Refresh sales data on any insert/update/delete
+          if (period === "today") {
+            fetchTodayReport();
+          } else if (period === "week") {
+            fetchWeekReport();
+          } else if (period === "month") {
+            fetchMonthReport();
+          }
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [
+    period,
+    fetchTodayReport,
+    fetchWeekReport,
+    fetchMonthReport,
+    fetchReportData,
+  ]);
+
+  // Handler for search input Enter key
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      setSearchQuery(pendingSearch);
     }
-  }, [period, fetchTodayReport, fetchWeekReport, fetchMonthReport]);
+  };
 
   // Helper functions
   const handleClear = useCallback(() => {
@@ -277,6 +470,7 @@ export default function ReportSales() {
     return sorted;
   }, [groupedSales, sortConfig]);
 
+  // Prepare main sales data for export
   const values = [
     ["Item Name", "Category", "Quantity Sold", "Unit Price", "Total Revenue"],
     ...sortedSales.map((item) => [
@@ -288,22 +482,65 @@ export default function ReportSales() {
     ]),
   ];
 
+  // Prepare forecast data for export
+  let forecastTableRows = [
+    ...historicalPredictions.map((w) => [
+      w.week_start,
+      w.actual_sales,
+      w.predicted_sales,
+      w.is_holiday_week ? "Yes" : "No",
+    ]),
+    ...forecast
+      .filter(
+        (f) => !historicalPredictions.some((h) => h.week_start === f.week_start)
+      )
+      .map((f) => [
+        f.week_start,
+        "",
+        f.predicted_sales,
+        f.is_holiday_week ? "Yes" : "No",
+      ]),
+  ];
+  // Debug log
+  console.log("[Export] historicalPredictions:", historicalPredictions);
+  console.log("[Export] forecast:", forecast);
+  if (forecastTableRows.length === 0) {
+    forecastTableRows = [["No forecast data available", "", "", ""]];
+  }
+  const forecastTable = [
+    ["Week Start", "Actual Sales", "Predicted Sales", "Is Holiday Week"],
+    ...forecastTableRows,
+  ];
+
   const exportToExcel = () => {
+    // Main sales sheet
     const ws = XLSX.utils.aoa_to_sheet(values);
+    // Forecast sheet
+    const wsForecast = XLSX.utils.aoa_to_sheet(forecastTable);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Sales Report");
-    XLSX.writeFile(wb, `Sales_Report - ${getFormattedDate()}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, wsForecast, "Sales Forecast");
+
+    // Write and save
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([wbout], { type: "application/octet-stream" });
+    saveAs(blob, `Sales_Report_${getFormattedDate()}.xlsx`);
     setExportSuccess(true);
+    setShowPopup(false);
   };
 
   const appendToGoogleSheet = async (
     accessToken: string,
     sheetId: string,
     sheetRange: string,
-    data: any[][]
+    data: any[][],
+    forecastData: any[][]
   ) => {
     try {
-      await fetch(
+      // Combine main data and forecast data with a blank row and header
+      const combined = [...data, [], ["Sales Forecast"], ...forecastData];
+      console.log("[Google Export] Appending data to sheet:", combined);
+      const res = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${sheetRange}:append?valueInputOption=USER_ENTERED`,
         {
           method: "POST",
@@ -311,16 +548,31 @@ export default function ReportSales() {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ values: data }),
+          body: JSON.stringify({ values: combined }),
         }
       );
+      const result = await res.json();
+      console.log("[Google Export] Append result:", result);
+      if (
+        result &&
+        result.error &&
+        result.error.status === "PERMISSION_DENIED"
+      ) {
+        alert(
+          "Google Sheets export failed: Insufficient permissions. Please log out, re-authenticate, and grant all requested permissions."
+        );
+      }
       setExportSuccess(true);
     } catch (error) {
       console.error("Append failed:", error);
+      alert(
+        "Google Sheets export failed. Please check your permissions and try again."
+      );
     }
   };
 
   const createGoogleSheet = async (accessToken: string) => {
+    console.log("[Google Export] createGoogleSheet called", accessToken);
     try {
       const response = await fetch(
         "https://sheets.googleapis.com/v4/spreadsheets",
@@ -337,8 +589,15 @@ export default function ReportSales() {
         }
       );
       const sheet = await response.json();
+      console.log("[Google Export] Sheet created:", sheet);
       const sheetId = sheet.spreadsheetId;
-      await appendToGoogleSheet(accessToken, sheetId, SHEET_RANGE, values);
+      await appendToGoogleSheet(
+        accessToken,
+        sheetId,
+        SHEET_RANGE,
+        values,
+        forecastTable
+      );
     } catch (error) {
       console.error("Failed to create sheet:", error);
     }
@@ -353,6 +612,10 @@ export default function ReportSales() {
   };
 
   const handleGoogleLoginSuccess = (tokenResponse: any) => {
+    console.log(
+      "[Google Export] handleGoogleLoginSuccess called",
+      tokenResponse
+    );
     setIsExporting(true);
     setShowPopup(false);
     const accessToken = tokenResponse.access_token;
@@ -616,6 +879,136 @@ export default function ReportSales() {
                   </div>
                 </header>
 
+                {(forecast.length > 0 || historicalPredictions.length > 0) && (
+                  <section className="my-8">
+                    <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-yellow-400 mb-4 flex items-center gap-2">
+                      <FaChartLine className="text-yellow-400" />
+                      Weekly Sales Forecast{" "}
+                      <span className="relative group">
+                        <AiOutlineInfoCircle size={18} color="orange" />
+                        <span className="absolute left-6 top-1/2 -translate-y-1/2 z-20 w-max min-w-[220px] bg-black text-orange-200 text-xs rounded-lg px-3 py-2 shadow-lg border border-yellow-500 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 whitespace-nowrap">
+                          Forecasts are estimates only and may not be 100%
+                          accurate.
+                        </span>
+                      </span>
+                    </h3>
+                    {/* Holiday Type Filter */}
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <label className="text-xs text-gray-300 font-medium">
+                        Holiday Type:
+                      </label>
+                      <select
+                        value={holidayTypeFilter}
+                        onChange={(e) =>
+                          setHolidayTypeFilter(e.target.value as any)
+                        }
+                        className="bg-gray-800/60 border border-gray-700 text-white rounded px-2 py-1 text-xs"
+                      >
+                        <option value="all">All</option>
+                        <option value="official">Official PH</option>
+                        <option value="custom">Custom</option>
+                        <option value="none">Not a Holiday</option>
+                      </select>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="table-auto w-full text-sm text-left border-collapse min-w-[400px] bg-gray-900/60 rounded-lg">
+                        <thead>
+                          <tr>
+                            <th className="px-4 py-2 text-yellow-400">
+                              Week Start
+                            </th>
+                            <th className="px-4 py-2 text-yellow-400">
+                              Predicted Sales
+                            </th>
+                            <th className="px-4 py-2 text-green-400">
+                              Actual Sales
+                            </th>
+                            <th className="px-4 py-2 text-blue-400">
+                              Holiday?
+                            </th>
+                            <th className="px-4 py-2 text-pink-400">Type</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredWeeks.map((row) => (
+                            <tr
+                              key={row.week_start}
+                              className="border-b border-gray-800"
+                            >
+                              <td className="px-4 py-2 font-mono">
+                                {row.week_start}
+                              </td>
+                              <td className="px-4 py-2 text-yellow-200 font-semibold">
+                                ₱{row.predicted_sales.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-2 text-green-300 font-semibold">
+                                {row.actual_sales !== null &&
+                                row.actual_sales !== undefined ? (
+                                  `₱${row.actual_sales.toLocaleString()}`
+                                ) : (
+                                  <span className="text-gray-500">N/A</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                {row.is_holiday_week ? (
+                                  row.holiday_type === "official" ? (
+                                    <span
+                                      className="inline-flex items-center gap-1 text-blue-400 font-bold"
+                                      title="Official PH Holiday"
+                                    >
+                                      <span className="inline-block w-3 h-3 rounded-full bg-blue-400 mr-1" />
+                                      Yes
+                                    </span>
+                                  ) : row.holiday_type === "custom" ? (
+                                    <span
+                                      className="inline-flex items-center gap-1 text-pink-400 font-bold"
+                                      title="Custom Holiday"
+                                    >
+                                      <span className="inline-block w-3 h-3 rounded-full bg-pink-400 mr-1" />
+                                      Yes
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-blue-400 font-bold">
+                                      Yes
+                                    </span>
+                                  )
+                                ) : (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-gray-500 font-normal"
+                                    title="Not a holiday"
+                                  >
+                                    <span className="inline-block w-3 h-3 rounded-full bg-gray-500 mr-1" />
+                                    No
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                {row.holiday_type === "official" && (
+                                  <span className="text-blue-400">
+                                    Official
+                                  </span>
+                                )}
+                                {row.holiday_type === "custom" && (
+                                  <span className="text-pink-400">Custom</span>
+                                )}
+                                {!row.is_holiday_week && (
+                                  <span className="text-gray-500">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {holidayLegend}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      * Forecast includes seasonality, official Philippine
+                      holidays, and custom holidays/events for improved
+                      accuracy.
+                    </p>
+                  </section>
+                )}
+
                 {/* Divider */}
                 <div className="relative mb-2 xs:mb-3 sm:mb-4 lg:mb-6">
                   <div className="absolute inset-0 flex items-center">
@@ -651,14 +1044,18 @@ export default function ReportSales() {
                     <input
                       type="text"
                       placeholder="Search sales..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      value={pendingSearch}
+                      onChange={(e) => setPendingSearch(e.target.value)}
+                      onKeyDown={handleSearchKeyDown}
                       className="w-full bg-gray-800/50 backdrop-blur-sm text-white placeholder-gray-400 rounded-md xs:rounded-lg sm:rounded-xl px-6 xs:px-8 sm:px-12 py-2 xs:py-2.5 sm:py-3 lg:py-4 shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-400/50 border border-gray-600/50 hover:border-gray-500 transition-all text-2xs xs:text-xs sm:text-sm md:text-base custom-scrollbar touch-target"
                     />
-                    {searchQuery && (
+                    {pendingSearch && (
                       <div className="absolute right-1.5 xs:right-2 sm:right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
                         <button
-                          onClick={() => setSearchQuery("")}
+                          onClick={() => {
+                            setPendingSearch("");
+                            setSearchQuery("");
+                          }}
                           className="text-gray-400 hover:text-white transition-colors bg-gray-600/50 hover:bg-gray-500/50 rounded-full w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 flex items-center justify-center text-2xs xs:text-xs sm:text-sm touch-target no-select"
                           title="Clear search"
                           aria-label="Clear search"

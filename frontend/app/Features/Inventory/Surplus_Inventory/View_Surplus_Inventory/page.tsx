@@ -2,6 +2,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import {
+  useInventorySettingsAPI,
+  InventorySetting,
+} from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
 import { routes } from "@/app/routes/routes";
@@ -31,19 +35,23 @@ export default function ViewSurplusInventoryItem() {
   const { isMenuOpen, isMobile } = useNavigation();
   const [item, setItem] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { fetchSettings } = useInventorySettingsAPI();
+  const [settings, setSettings] = useState<InventorySetting[]>([]);
+  const [unit, setUnit] = useState<string>("");
 
   const itemId = searchParams.get("id");
 
   useEffect(() => {
-    const fetchItem = async () => {
+    const fetchAll = async () => {
       if (!itemId) {
         router.push(routes.surplus_inventory);
         return;
       }
-
       try {
-        // Fetch from inventory-surplus endpoint
-        const response = await axios.get(`/api/inventory-surplus/${itemId}`);
+        const [response, settingsData] = await Promise.all([
+          axios.get(`/api/inventory-surplus/${itemId}`),
+          fetchSettings(),
+        ]);
         const data = response.data;
         const formatted = {
           id: data.item_id,
@@ -57,16 +65,22 @@ export default function ViewSurplusInventoryItem() {
           expiration_date: data.expiration_date || null,
         };
         setItem(formatted);
+        setSettings(settingsData);
+        // Find unit from settings
+        const itemName = (data.item_name || "").toString().trim().toLowerCase();
+        const setting = settingsData.find(
+          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+        );
+        setUnit(setting?.default_unit || "");
       } catch (error) {
-        console.error("Error fetching item:", error);
+        console.error("Error fetching item or settings:", error);
         router.push(routes.surplus_inventory);
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchItem();
-  }, [itemId, router]);
+    fetchAll();
+  }, [itemId, router, fetchSettings]);
 
   const formatDateOnly = (input: string | null): string => {
     if (!input) return "-";
@@ -234,7 +248,9 @@ export default function ViewSurplusInventoryItem() {
                   <ItemRow
                     icon={<FiHash className="text-green-400" />}
                     label="Quantity In Stock"
-                    value={item.stock.toString()}
+                    value={
+                      unit ? `${item.stock} ${unit}` : item.stock.toString()
+                    }
                   />
                   <ItemRow
                     icon={<FiCalendar className="text-orange-400" />}

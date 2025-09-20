@@ -14,6 +14,7 @@ import {
 } from "react-icons/fa";
 import { HiDocumentReport } from "react-icons/hi";
 import { HiSparkles } from "react-icons/hi";
+import { saveAs } from "file-saver";
 
 const Report = () => {
   const router = useRouter();

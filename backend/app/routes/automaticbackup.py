@@ -53,7 +53,10 @@ router = APIRouter(prefix="/backup", tags=["backup"])
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-BACKUP_DIR = "backups"
+import pathlib
+
+# Save backups in the user's Documents/cardiacdelights_backups directory
+BACKUP_DIR = str(pathlib.Path.home() / "Documents" / "cardiacdelights_backups")
 
 # --- SQLAlchemy Table for backup_schedule ---
 metadata = MetaData()
@@ -70,39 +73,126 @@ backup_schedule = Table(
 
 
 # --- Backup logic ---
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+from cryptography.fernet import Fernet
+import base64
+
+
+def derive_fernet_key(
+    password: str, salt: bytes = b"cardiacdelights-backup-salt"
+) -> bytes:
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=390000,
+        backend=default_backend(),
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    return key
+
+
 def backup_to_local():
+    import sqlalchemy
+    from sqlalchemy.engine import create_engine
+    import pandas as pd
+    import json
+    import io
+    import gzip
+    import shutil
+
     if not os.path.exists(BACKUP_DIR):
         os.makedirs(BACKUP_DIR)
-    filename = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
-    filepath = os.path.join(BACKUP_DIR, filename)
-    # Replace with your actual DB dump command
-    os.system(f"pg_dump yourdb > {filepath}")
-    return filepath
+    # Use your actual database URL from environment or config
+    from app.supabase import POSTGRES_URL
+
+    engine = create_engine(POSTGRES_URL.replace("asyncpg", "psycopg2"))
+    insp = sqlalchemy.inspect(engine)
+    tables = insp.get_table_names()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_data = {}
+    for table in tables:
+        df = pd.read_sql_table(table, engine)
+        backup_data[table] = df.to_dict(orient="records")
+
+    # Always require password from environment variable
+    password = os.getenv("BACKUP_ENCRYPTION_PASSWORD")
+    if not password:
+        raise RuntimeError(
+            "BACKUP_ENCRYPTION_PASSWORD environment variable is required for automatic backup encryption."
+        )
+    key = derive_fernet_key(password)
+    fernet = Fernet(key)
+
+    # Compress and encrypt
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="w") as gz_file:
+        gz_file.write(json.dumps(backup_data, default=str, indent=2).encode("utf-8"))
+    buf.seek(0)
+    encrypted = fernet.encrypt(buf.getvalue())
+
+    # Save encrypted file
+    backup_filename = f"backup_{timestamp}.json.enc"
+    backup_path = os.path.join(BACKUP_DIR, backup_filename)
+    with open(backup_path, "wb") as f:
+        f.write(encrypted)
+    return backup_path
 
 
-def backup_to_gdrive(filepath):
-    # Google Drive API integration
-    SERVICE_ACCOUNT_FILE = "app/credentials.json"
-    FOLDER_ID = "1nwUJZfn8B22r6HMQoGrtM2H1LsbiFn-E"
-    SCOPES = ["https://www.googleapis.com/auth/drive.file"]
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES
+# def backup_to_gdrive(filepath):
+#     # Google Drive API integration
+#     SERVICE_ACCOUNT_FILE = "app/credentials.json"
+#     FOLDER_ID = "1nwUJZfn8B22r6HMQoGrtM2H1LsbiFn-E"
+#     SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+#     credentials = service_account.Credentials.from_service_account_file(
+#         SERVICE_ACCOUNT_FILE, scopes=SCOPES
+#     )
+#     drive_service = build("drive", "v3", credentials=credentials)
+#     file_metadata = {"name": os.path.basename(filepath), "parents": [FOLDER_ID]}
+#     media = MediaFileUpload(filepath, resumable=True)
+#     file = (
+#         drive_service.files()
+#         .create(body=file_metadata, media_body=media, fields="id")
+#         .execute()
+#     )
+#     print(f'Uploaded to Google Drive with file ID: {file.get("id")}')
+
+
+def backup_to_s3(filepath):
+    import boto3
+    import os
+
+    bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
+    if not bucket_name:
+        print("AWS_S3_BUCKET_NAME not set in environment. Skipping S3 upload.")
+        return
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        region_name=os.getenv("AWS_DEFAULT_REGION"),
     )
-    drive_service = build("drive", "v3", credentials=credentials)
-    file_metadata = {"name": os.path.basename(filepath), "parents": [FOLDER_ID]}
-    media = MediaFileUpload(filepath, resumable=True)
-    file = (
-        drive_service.files()
-        .create(body=file_metadata, media_body=media, fields="id")
-        .execute()
-    )
-    print(f'Uploaded to Google Drive with file ID: {file.get("id")}')
+    key = os.path.basename(filepath)
+    # Enforce only encrypted files are uploaded
+    if not filepath.endswith(".enc"):
+        print(
+            "Error: Only encrypted backup files (.enc) may be uploaded to S3. Aborting upload."
+        )
+        return
+    try:
+        s3.upload_file(filepath, bucket_name, key)
+        print(f"Uploaded encrypted backup to S3 bucket '{bucket_name}' as '{key}'")
+    except Exception as e:
+        print(f"Failed to upload to S3: {e}")
 
 
 def scheduled_backup():
     filepath = backup_to_local()
-    backup_to_gdrive(filepath)
-    print(f"Backup completed: {filepath} (local + Google Drive)")
+    # backup_to_gdrive(filepath)
+    backup_to_s3(filepath)
+    print(f"Backup completed: {filepath} (local + Google Drive + S3)")
 
 
 def reschedule_backup(frequency, day_of_week, day_of_month, time_of_day):
@@ -194,11 +284,11 @@ async def load_and_schedule(session: AsyncSession):
     user_id = 1  # Replace with actual user/session logic
     stmt = select(backup_schedule).where(backup_schedule.c.user_id == user_id)
     result = await session.execute(stmt)
-    row = result.scalar_one_or_none()
+    row = result.mappings().first()
     if row:
         reschedule_backup(
-            row.frequency,
-            row.day_of_week,
-            row.day_of_month,
-            row.time_of_day,
+            row["frequency"],
+            row["day_of_week"],
+            row["day_of_month"],
+            row["time_of_day"],
         )

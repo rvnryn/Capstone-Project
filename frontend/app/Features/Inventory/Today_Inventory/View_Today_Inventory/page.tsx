@@ -9,6 +9,10 @@ import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { useInventoryAPI } from "@/app/Features/Inventory/hook/use-inventoryAPI";
 import {
+  useInventorySettingsAPI,
+  InventorySetting,
+} from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
+import {
   FiEye,
   FiCalendar,
   FiTag,
@@ -31,38 +35,65 @@ export default function ViewTodayInventoryItem() {
   const [isLoading, setIsLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const itemId = searchParams.get("id");
+  const { fetchSettings } = useInventorySettingsAPI();
+  const [settings, setSettings] = useState<InventorySetting[]>([]);
+  const [unit, setUnit] = useState<string>("");
 
   useEffect(() => {
-    const fetchItem = async () => {
+    const fetchAll = async () => {
       if (!itemId) {
         router.push(routes.todays_inventory);
         return;
       }
-
       try {
-        const data = await getTodayItem(itemId);
+        const [data, settingsData] = await Promise.all([
+          getTodayItem(itemId),
+          fetchSettings(),
+        ]);
+        // Find unit and threshold from settings
+        const itemName = (data.item_name || "").toString().trim().toLowerCase();
+        const setting = settingsData.find(
+          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+        );
+        setUnit(setting?.default_unit || "");
+        // Recompute status using latest settings
+        const threshold = Number(setting?.low_stock_threshold);
+        const fallbackThreshold = 100;
+        const useThreshold =
+          !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
+        const stockQty = Number(data.stock_quantity);
+        let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
+        if (stockQty === 0) {
+          status = "Out Of Stock";
+        } else if (stockQty <= useThreshold * 0.5) {
+          status = "Critical";
+        } else if (stockQty <= useThreshold) {
+          status = "Low";
+        } else {
+          status = "Normal";
+        }
         const formatted = {
           id: data.item_id,
           name: data.item_name,
           batch: data.batch_date,
           category: data.category,
-          status: data.stock_status,
+          status,
           stock: data.stock_quantity,
           added: data.created_at,
           updated: data.updated_at,
           expiration_date: data.expiration_date || null,
         };
         setItem(formatted);
+        setSettings(settingsData);
       } catch (error) {
-        console.error("Error fetching item:", error);
+        console.error("Error fetching item or settings:", error);
         router.push(routes.todays_inventory);
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchItem();
-  }, [itemId, router, getTodayItem]);
+    fetchAll();
+  }, [itemId, router, getTodayItem, fetchSettings]);
 
   const formatDateOnly = (input: string | null): string => {
     if (!input) return "-";
@@ -230,7 +261,9 @@ export default function ViewTodayInventoryItem() {
                   <ItemRow
                     icon={<FiHash className="text-green-400" />}
                     label="Quantity In Stock"
-                    value={item.stock.toString()}
+                    value={
+                      unit ? `${item.stock} ${unit}` : item.stock.toString()
+                    }
                   />
                   <ItemRow
                     icon={<FiCalendar className="text-orange-400" />}
@@ -247,11 +280,13 @@ export default function ViewTodayInventoryItem() {
                     label="Stock Status"
                     value={item.status}
                     valueClassName={
-                      item.status === "Low"
+                      item.status === "Critical"
                         ? "text-red-400 font-semibold"
-                        : item.status === "Normal"
+                        : item.status === "Low"
                         ? "text-yellow-400 font-semibold"
-                        : "text-green-400 font-semibold"
+                        : item.status === "Normal"
+                        ? "text-green-400 font-semibold"
+                        : "text-white font-semibold"
                     }
                   />
                   <ItemRow

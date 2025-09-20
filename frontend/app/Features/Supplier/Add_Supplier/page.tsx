@@ -47,14 +47,28 @@ export default function AddSupplier() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
 
+  const capitalizeWords = (str: string) =>
+    str.replace(/\b\w/g, (char) => char.toUpperCase());
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const { name, value } = e.target;
       setIsDirty(true);
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
+      setFormData((prev) => {
+        let newValue = value;
+        // Normalize capitalization for specific fields
+        if (
+          name === "supplier_name" ||
+          name === "contact_person" ||
+          name === "supplies"
+        ) {
+          newValue = capitalizeWords(value.toLowerCase());
+        }
+        return {
+          ...prev,
+          [name]: newValue,
+        };
+      });
     },
     []
   );

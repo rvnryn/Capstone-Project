@@ -2,8 +2,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import {
+  useInventorySettingsAPI,
+  InventorySetting,
+} from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
 import { routes } from "@/app/routes/routes";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
@@ -47,6 +50,9 @@ export default function EditInventoryItem() {
   const itemId = searchParams.get("id");
 
   const [formData, setFormData] = useState<any>({});
+  const { fetchSettings } = useInventorySettingsAPI();
+  const [settings, setSettings] = useState<InventorySetting[]>([]);
+  const [unit, setUnit] = useState<string>("");
   const [errors, setErrors] = useState({
     name: "",
     category: "",
@@ -66,15 +72,16 @@ export default function EditInventoryItem() {
   const [focusedField, setFocusedField] = useState<string>("");
 
   useEffect(() => {
-    const fetchItem = async () => {
+    const fetchAll = async () => {
       if (!itemId) {
         router.push(routes.inventory);
         return;
       }
-
       try {
-        const data = await getItem(itemId);
-
+        const [data, settingsData] = await Promise.all([
+          getItem(itemId),
+          fetchSettings(),
+        ]);
         // Map fields to match form expectations
         const mappedItem = {
           id: data.item_id,
@@ -86,19 +93,24 @@ export default function EditInventoryItem() {
           added: new Date(data.created_at),
           expiration_date: data.expiration_date?.split("T")[0] || "",
         };
-
         setFormData(mappedItem);
         setInitialSettings(mappedItem); // Set initial settings for unsaved changes detection
+        setSettings(settingsData);
+        // Find unit from settings
+        const itemName = (data.item_name || "").toString().trim().toLowerCase();
+        const setting = settingsData.find(
+          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+        );
+        setUnit(setting?.default_unit || "");
       } catch (error) {
-        console.error("Error fetching item:", error);
+        console.error("Error fetching item or settings:", error);
         router.push(routes.inventory);
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchItem();
-  }, [itemId, router, getItem]);
+    fetchAll();
+  }, [itemId, router, getItem, fetchSettings]);
 
   // Validation logic
   const validate = useCallback((data: any) => {
@@ -144,6 +156,9 @@ export default function EditInventoryItem() {
     }
   }, [formData, validate, isSubmitted]);
 
+  const capitalizeWords = (str: string) =>
+    str.replace(/\b\w/g, (char) => char.toUpperCase());
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -151,7 +166,12 @@ export default function EditInventoryItem() {
     setIsDirty(true);
     setFormData((prev: any) => ({
       ...prev,
-      [name]: name === "stock" ? Number(value) : value,
+      [name]:
+        name === "stock"
+          ? Number(value)
+          : typeof value === "string"
+          ? capitalizeWords(value)
+          : value,
     }));
   };
 
@@ -517,27 +537,34 @@ export default function EditInventoryItem() {
                       <span className="text-red-400">*</span>
                     </label>
                     <div className="relative max-w-md">
-                      <input
-                        type="number"
-                        id="stock"
-                        name="stock"
-                        required
-                        min={1}
-                        value={formData.stock === 0 ? "" : formData.stock}
-                        onChange={handleChange}
-                        onFocus={() => handleFocus("stock")}
-                        onBlur={handleBlur}
-                        placeholder="Enter quantity..."
-                        className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
-                          isSubmitted && errors.stock
-                            ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                            : focusedField === "stock"
-                            ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                            : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                        }`}
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          id="stock"
+                          name="stock"
+                          required
+                          min={1}
+                          value={formData.stock === 0 ? "" : formData.stock}
+                          onChange={handleChange}
+                          onFocus={() => handleFocus("stock")}
+                          onBlur={handleBlur}
+                          placeholder="Enter quantity..."
+                          className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
+                            isSubmitted && errors.stock
+                              ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                              : focusedField === "stock"
+                              ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                              : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                          }`}
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                        />
+                        {unit && (
+                          <span className="text-gray-400 text-xs xs:text-sm font-normal">
+                            {unit}
+                          </span>
+                        )}
+                      </div>
                       {focusedField === "stock" && !errors.stock && (
                         <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                           <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>

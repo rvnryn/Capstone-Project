@@ -1,5 +1,7 @@
 from unittest import result
-from fastapi import APIRouter, Query, HTTPException, Depends
+from fastapi import APIRouter, Query, HTTPException, Depends, Request
+from slowapi.util import get_remote_address
+from slowapi import Limiter
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -10,6 +12,8 @@ import json
 
 router = APIRouter()
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
+
 
 class NotificationSettings(BaseModel):
     user_id: int
@@ -18,16 +22,6 @@ class NotificationSettings(BaseModel):
     expiration_enabled: bool = True
     expiration_days: int = 3
     expiration_method: Optional[List[str]] = ["inapp"]
-    expired_enabled: bool = True  # New: enable notifications for already expired items
-    expired_method: Optional[List[str]] = [
-        "inapp"
-    ]  # New: method for expired notifications
-    missing_threshold_enabled: bool = (
-        True  # New: enable notifications for items without thresholds
-    )
-    missing_threshold_method: Optional[List[str]] = [
-        "inapp"
-    ]  # New: method for missing threshold notifications
 
 
 class Notification(BaseModel):
@@ -39,8 +33,9 @@ class Notification(BaseModel):
 
 
 # --- Notification Settings Endpoints ---
+@limiter.limit("10/minute")
 @router.get("/notification-settings")
-def get_notification_settings(user_id: int):
+def get_notification_settings(request: Request, user_id: int):
     try:
         resp = (
             supabase.table("notification_settings")
@@ -57,8 +52,10 @@ def get_notification_settings(user_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@limiter.limit("10/minute")
 @router.post("/notification-settings")
 async def update_notification_settings(
+    request: Request,
     settings: NotificationSettings,
     user=Depends(require_role("Owner", "General Manager", "Store Manager")),
     db=Depends(get_db),

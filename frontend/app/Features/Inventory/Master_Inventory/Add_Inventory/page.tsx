@@ -148,13 +148,16 @@ export default function AddInventoryItem() {
     }
   }, [formData, validate, isSubmitted]);
 
+  const capitalizeWords = (str: string) =>
+    str.replace(/\b\w/g, (char) => char.toUpperCase());
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-      const { name, value } = e.target;
+      const { name, value, type } = e.target;
       setIsDirty(true);
       setFormData((prev) => ({
         ...prev,
-        [name]: name === "stock" ? Number(value) : value,
+        [name]: type === "number" ? value : capitalizeWords(value),
       }));
     },
     []
@@ -321,7 +324,6 @@ export default function AddInventoryItem() {
         >
           <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
             <article className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl xs:rounded-3xl shadow-2xl border border-gray-800/50 p-4 xs:p-6 sm:p-8 md:p-10 lg:p-12 xl:p-14 2xl:p-16 w-full">
-              {/* Header with improved visual hierarchy */}
               <header className="flex items-center gap-3 xs:gap-4 sm:gap-5 mb-4 xs:mb-6 sm:mb-8 md:mb-10">
                 <div className="relative">
                   <div className="absolute inset-0 bg-yellow-400/20 rounded-full blur-sm xs:blur-md sm:blur-lg"></div>

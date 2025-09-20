@@ -1,3 +1,4 @@
+"use client";
 import axiosInstance from "@/app/lib/axios";
 import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 import { useOfflineQueue } from "@/app/hooks/usePWA";

@@ -161,13 +161,28 @@ export default function NotificationSettings() {
             ])
             .select("user_id")
             .single();
+          // Enhanced logging for debugging
+          console.log("Supabase insertRes (full):", insertRes);
           if (!insertRes.error && insertRes.data && insertRes.data.user_id) {
             setUserId(insertRes.data.user_id);
           } else {
-            console.error("User insert error:", insertRes.error, insertRes);
-            setUserError(
-              "Failed to create user in users table. Please contact support."
-            );
+            // Log all possible properties for diagnosis
+            console.error("User insert error: full response:", insertRes);
+            if (insertRes.error) {
+              setUserError(
+                `Failed to create user: ${
+                  insertRes.error.message || "Unknown error"
+                }`
+              );
+            } else {
+              setUserError(
+                `Failed to create user in users table. No error details returned.\nFull response: ${JSON.stringify(
+                  insertRes,
+                  null,
+                  2
+                )}\nPlease check your users table schema, required fields, and RLS policies.`
+              );
+            }
             setUserId(null);
           }
         }

@@ -618,7 +618,7 @@ const NavigationBar = ({
           aria-label={anyModalOpen ? "Go back" : "Open menu"}
           style={{
             top: "0.5rem",
-            left: "0.5rem",
+            left: "1rem",
             width: "3rem",
             height: "3rem",
             zIndex: 60,
@@ -1154,13 +1154,24 @@ const NavigationBar = ({
 
         {/* Enhanced Responsive User Profile and Controls */}
         {(!(screenSize === "xs" || screenSize === "sm") || !isMenuOpen) && (
-          <div className={`flex items-center ${getSpacing("medium")}`}>
+          <div
+            className={`flex items-center ${getSpacing(
+              "medium"
+            )} min-w-0 max-w-full`}
+            style={{
+              height: "3.5rem", // Adjust height to fit nicely at the top
+              minHeight: "3.5rem",
+              maxHeight: "3.5rem",
+            }}
+          >
+            {/* User Info */}
             {/* Enhanced Responsive Notification Bell */}
             <div className="relative" ref={bellRef}>
               <button
                 className="relative p-2.5 rounded-xl hover:bg-gradient-to-br hover:from-yellow-400/10 hover:to-yellow-300/5 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 group"
                 aria-label="Notifications"
                 onClick={() => setBellOpen(!bellOpen)}
+                style={{ height: "2.5rem", width: "2.5rem" }} // Make bell button more compact
               >
                 <FaBell
                   className="text-yellow-300 group-hover:text-yellow-200 transition-colors duration-300"
@@ -1176,23 +1187,24 @@ const NavigationBar = ({
 
               {/* Enhanced Responsive Notification Dropdown */}
               {bellOpen && (
-                <div
-                  className={`absolute right-0 mt-3 bg-gradient-to-br from-black/98 via-gray-900/98 to-black/98 backdrop-blur-xl text-yellow-100 rounded-2xl shadow-2xl z-50 border border-yellow-400/20
-                ${
-                  screenSize === "xs"
-                    ? "w-72 max-w-[calc(100vw-1rem)]"
-                    : screenSize === "sm"
-                    ? "w-80 max-w-[calc(100vw-2rem)]"
-                    : "w-80"
-                }`}
-                  style={{
-                    boxShadow:
-                      "0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(251, 191, 36, 0.1)",
-                  }}
-                >
-                  <div className="p-4 font-bold border-b border-yellow-400/20 flex items-center justify-between bg-gradient-to-r from-yellow-400/5 to-transparent rounded-t-2xl">
-                    <span className="text-yellow-200">Notifications</span>
-                    <div className="flex items-center gap-2">
+                <div>
+                  <div
+                    className={`absolute right-0 mt-3 bg-gradient-to-br from-black/98 via-gray-900/98 to-black/98 backdrop-blur-xl text-yellow-100 rounded-2xl shadow-2xl z-50 border border-yellow-400/20
+              ${
+                screenSize === "xs"
+                  ? "w-72 max-w-[calc(100vw-1rem)]"
+                  : screenSize === "sm"
+                  ? "w-80 max-w-[calc(100vw-2rem)]"
+                  : "w-80"
+              }`}
+                    style={{
+                      boxShadow:
+                        "0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(251, 191, 36, 0.1)",
+                    }}
+                  >
+                    <div className="p-4 font-bold border-b border-yellow-400/20 flex items-center justify-between bg-gradient-to-r from-yellow-400/5 to-transparent rounded-t-2xl">
+                      <span className="text-yellow-200">Notifications</span>
+                      <div className="flex items-center gap-2"></div>
                       <span className="text-xs text-yellow-400 px-2 py-1 bg-yellow-400/10 rounded-full border border-yellow-400/20">
                         {unreadCount} unread
                       </span>
@@ -1206,123 +1218,123 @@ const NavigationBar = ({
                         </button>
                       )}
                     </div>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {notifications.length === 0 ? (
-                      <div className="p-6 text-center">
-                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-yellow-400/10 to-yellow-300/5 flex items-center justify-center">
-                          <FaBell className="text-yellow-400/50 text-xl" />
-                        </div>
-                        <p className="text-gray-400 text-sm">
-                          No notifications
-                        </p>
-                      </div>
-                    ) : (
-                      notifications.map((n) => {
-                        // Decide color based on notification type or message
-                        let messageColor = "text-yellow-100";
-                        let bgColor = "";
-                        const msg = n.message?.toLowerCase() || "";
-                        const type = (n.type || "").toLowerCase();
-
-                        // Expired/expiring soon
-                        if (
-                          type === "expired" ||
-                          type === "expiring" ||
-                          msg.includes("expired") ||
-                          msg.includes("expiring soon")
-                        ) {
-                          messageColor = "text-red-500";
-                          bgColor =
-                            "bg-gradient-to-r from-red-800/18 via-red-700/15 to-transparent border-l-2 border-l-white";
-                        }
-                        // Low stock
-                        else if (
-                          type === "low_stock" ||
-                          msg.includes("low stock")
-                        ) {
-                          messageColor = "text-orange-400";
-                          bgColor =
-                            "bg-gradient-to-r from-orange-800/18 via-orange-700/15 to-transparent border-l-2 border-l-orange-300";
-                        }
-                        // Missing threshold
-                        else if (
-                          type === "missing_threshold" ||
-                          msg.includes("missing threshold") ||
-                          msg.includes("threshold not set")
-                        ) {
-                          messageColor = "text-blue-400";
-                          bgColor =
-                            "bg-gradient-to-r from-blue-800/18 via-blue-700/15 to-transparent border-l-2 border-l-blue-300";
-                        }
-                        // Default unread
-                        else if (n.status === "unread") {
-                          messageColor = "text-yellow-200";
-                          bgColor =
-                            "bg-gradient-to-r from-yellow-800/18 via-yellow-700/15 to-transparent border-l-2 border-l-yellow-300";
-                        }
-
-                        // Add visual indicator for unread/read
-                        const isUnread = n.status === "unread";
-
-                        return (
-                          <div
-                            key={n.id}
-                            className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl ${bgColor} flex items-start gap-3 group`}
-                            onClick={() => handleNotificationClick(n)}
-                          >
-                            {/* Unread/Read dot indicator */}
-                            <span
-                              className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
-                                isUnread
-                                  ? "bg-yellow-400 animate-pulse shadow-yellow-400/40 shadow"
-                                  : "bg-gray-600"
-                              }`}
-                              title={isUnread ? "Unread" : "Read"}
-                            ></span>
-                            <div className="flex-1 min-w-0">
-                              <div
-                                className={`text-sm leading-relaxed font-medium ${messageColor}`}
-                              >
-                                {n.message}
-                              </div>
-                              <div className="text-xs text-yellow-400/70 mt-2 flex items-center gap-1">
-                                <div className="w-1 h-1 bg-yellow-400 rounded-full"></div>
-                                {new Date(n.created_at).toLocaleString(
-                                  "en-GB",
-                                  {
-                                    year: "numeric",
-                                    month: "short",
-                                    day: "2-digit",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                    hour12: true,
-                                  }
-                                )}
-                                <span
-                                  className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                    isUnread
-                                      ? "bg-yellow-400/20 text-yellow-300 border border-yellow-400/40"
-                                      : "bg-gray-700/40 text-gray-300 border border-gray-500/40"
-                                  }`}
-                                >
-                                  {isUnread ? "Unread" : "Read"}
-                                </span>
-                              </div>
-                            </div>
-                            {/* Remove notification button */}
-                            <button
-                              onClick={(e) => handleRemoveNotification(n, e)}
-                              className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-400/50"
-                              title="Remove notification"
-                              aria-label="Remove notification"
-                            >
-                              <FaTimes size={12} />
-                            </button>
+                    <div className="max-h-64 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="p-6 text-center">
+                          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-yellow-400/10 to-yellow-300/5 flex items-center justify-center">
+                            <FaBell className="text-yellow-400/50 text-xl" />
                           </div>
-                        );
-                      })
-                    )}
+                          <p className="text-gray-400 text-sm">
+                            No notifications
+                          </p>
+                        </div>
+                      ) : (
+                        notifications.map((n) => {
+                          // Decide color based on notification type or message
+                          let messageColor = "text-yellow-100";
+                          let bgColor = "";
+                          const msg = n.message?.toLowerCase() || "";
+                          const type = (n.type || "").toLowerCase();
+
+                          // Expired/expiring soon
+                          if (
+                            type === "expired" ||
+                            type === "expiring" ||
+                            msg.includes("expired") ||
+                            msg.includes("expiring soon")
+                          ) {
+                            messageColor = "text-red-500";
+                            bgColor =
+                              "bg-gradient-to-r from-red-800/18 via-red-700/15 to-transparent border-l-2 border-l-white";
+                          }
+                          // Low stock
+                          else if (
+                            type === "low_stock" ||
+                            msg.includes("low stock")
+                          ) {
+                            messageColor = "text-orange-400";
+                            bgColor =
+                              "bg-gradient-to-r from-orange-800/18 via-orange-700/15 to-transparent border-l-2 border-l-orange-300";
+                          }
+                          // Missing threshold
+                          else if (
+                            type === "missing_threshold" ||
+                            msg.includes("missing threshold") ||
+                            msg.includes("threshold not set")
+                          ) {
+                            messageColor = "text-blue-400";
+                            bgColor =
+                              "bg-gradient-to-r from-blue-800/18 via-blue-700/15 to-transparent border-l-2 border-l-blue-300";
+                          }
+                          // Default unread
+                          else if (n.status === "unread") {
+                            messageColor = "text-yellow-200";
+                            bgColor =
+                              "bg-gradient-to-r from-yellow-800/18 via-yellow-700/15 to-transparent border-l-2 border-l-yellow-300";
+                          }
+
+                          // Add visual indicator for unread/read
+                          const isUnread = n.status === "unread";
+
+                          return (
+                            <div
+                              key={n.id}
+                              className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl ${bgColor} flex items-start gap-3 group`}
+                              onClick={() => handleNotificationClick(n)}
+                            >
+                              {/* Unread/Read dot indicator */}
+                              <span
+                                className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                                  isUnread
+                                    ? "bg-yellow-400 animate-pulse shadow-yellow-400/40 shadow"
+                                    : "bg-gray-600"
+                                }`}
+                                title={isUnread ? "Unread" : "Read"}
+                              ></span>
+                              <div className="flex-1 min-w-0">
+                                <div
+                                  className={`text-sm leading-relaxed font-medium ${messageColor}`}
+                                >
+                                  {n.message}
+                                </div>
+                                <div className="text-xs text-yellow-400/70 mt-2 flex items-center gap-1">
+                                  <div className="w-1 h-1 bg-yellow-400 rounded-full"></div>
+                                  {new Date(n.created_at).toLocaleString(
+                                    "en-GB",
+                                    {
+                                      year: "numeric",
+                                      month: "short",
+                                      day: "2-digit",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      hour12: true,
+                                    }
+                                  )}
+                                  <span
+                                    className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                      isUnread
+                                        ? "bg-yellow-400/20 text-yellow-300 border border-yellow-400/40"
+                                        : "bg-gray-700/40 text-gray-300 border border-gray-500/40"
+                                    }`}
+                                  >
+                                    {isUnread ? "Unread" : "Read"}
+                                  </span>
+                                </div>
+                              </div>
+                              {/* Remove notification button */}
+                              <button
+                                onClick={(e) => handleRemoveNotification(n, e)}
+                                className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                                title="Remove notification"
+                                aria-label="Remove notification"
+                              >
+                                <FaTimes size={12} />
+                              </button>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1340,12 +1352,18 @@ const NavigationBar = ({
                   ? "max-w-[200px]"
                   : "max-w-xs"
               }`}
+              style={{
+                height: "2.8rem", // Make user profile bar more compact
+                minHeight: "2.8rem",
+                maxHeight: "2.8rem",
+              }}
             >
               <div className="flex flex-col min-w-0 max-w-full">
                 <span
                   className={`font-bold bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent leading-tight font-poppins truncate drop-shadow-sm ${getTextSize(
                     "small"
                   )}`}
+                  style={{ lineHeight: "1.2" }}
                 >
                   {user?.name || "User"}
                 </span>
@@ -1353,6 +1371,7 @@ const NavigationBar = ({
                   className={`text-yellow-100/80 leading-tight font-inter truncate transition-colors duration-300 group-hover:text-yellow-200 ${getTextSize(
                     "small"
                   )}`}
+                  style={{ lineHeight: "1.1" }}
                 >
                   {role || "Role"}
                 </span>
@@ -1365,11 +1384,16 @@ const NavigationBar = ({
                   className={`px-2.5 py-1 rounded-full font-medium flex items-center transition-all duration-300 backdrop-blur-sm ${getTextSize(
                     "small"
                   )} ${getSpacing("small")}
-                    ${
-                      isActuallyOnline
-                        ? "bg-gradient-to-r from-green-500/20 to-green-600/20 text-green-300 border border-green-400/40 shadow-green-400/20"
-                        : "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-300 border border-red-400/40 shadow-red-400/20"
-                    }`}
+                ${
+                  isActuallyOnline
+                    ? "bg-gradient-to-r from-green-500/20 to-green-600/20 text-green-300 border border-green-400/40 shadow-green-400/20"
+                    : "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-300 border border-red-400/40 shadow-red-400/20"
+                }`}
+                  style={{
+                    height: "1.8rem",
+                    minWidth: "4.5rem",
+                    fontSize: "0.95em",
+                  }}
                 >
                   {isActuallyOnline ? (
                     <FaWifi size={Math.max(8, getIconSize() - 8)} />

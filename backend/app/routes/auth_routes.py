@@ -1,65 +1,87 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
+from slowapi.util import get_remote_address
+from slowapi import Limiter
 from pydantic import BaseModel
 from app.services.auth_service import login_user
 import httpx
+import asyncio
 import os
-from app.supabase import get_db, supabase
+from app.supabase import get_db
 from datetime import datetime
 from app.routes.userActivity import UserActivityLog
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 
 class LoginRequest(BaseModel):
     email: str
     password: str
 
 
+@limiter.limit("10/minute")
 @router.post("/auth/login")
-async def login(request: LoginRequest, db: Session = Depends(get_db)):
+async def login(
+    request: Request, login_req: LoginRequest, db: AsyncSession = Depends(get_db)
+):
     try:
-        identifier = request.email  # Could be email or username
+        identifier = login_req.email
+        from sqlalchemy import select
+        from app.models.userModal import User
 
+        user_row = {}
         if "@" not in identifier:
-            db_response = (
-                supabase.table("users")
-                .select("email", "user_id", "username", "name", "user_role")
-                .eq("username", identifier)
-                .execute()
-            )
-            if not db_response.data or len(db_response.data) != 1:
+            stmt = select(User).where(User.username == identifier)
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
+            if not user:
                 raise HTTPException(status_code=404, detail="Username not found")
-            identifier = db_response.data[0]["email"]
-            user_row = db_response.data[0]
+            identifier = user.email
+            user_row = {
+                "user_id": user.user_id,
+                "username": user.username,
+                "name": user.name,
+                "user_role": user.user_role,
+                "email": user.email,
+            }
         else:
-            db_response = (
-                supabase.table("users")
-                .select("user_id", "username", "name", "user_role", "email")
-                .eq("email", identifier)
-                .execute()
-            )
-            if not db_response.data or len(db_response.data) != 1:
-                user_row = {}
-            else:
-                user_row = db_response.data[0]
+            stmt = select(User).where(User.email == identifier)
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
+            if not user:
+                raise HTTPException(status_code=404, detail="Email not found")
+            user_row = {
+                "user_id": user.user_id,
+                "username": user.username,
+                "name": user.name,
+                "user_role": user.user_role,
+                "email": user.email,
+            }
 
-        result = await login_user(identifier, request.password)
+        # Debug print
+        print(f"Logging in user: {user_row}")
 
-        # New code block to update auth_id in users table
+        result = await login_user(identifier, login_req.password)
+        if not result or "user" not in result:
+            raise HTTPException(status_code=401, detail="Invalid login credentials")
+
         supabase_user_id = result.get("user", {}).get("id") or result.get("user_id")
         email = identifier
         if supabase_user_id and email:
-            # Update users table with new auth_id
-            supabase.table("users").update({"auth_id": supabase_user_id}).eq(
-                "email", email
-            ).execute()
+            stmt = select(User).where(User.email == email)
+            result_user = await db.execute(stmt)
+            user_obj = result_user.scalar_one_or_none()
+            if user_obj:
+                user_obj.auth_id = supabase_user_id
+                db.add(user_obj)
+                await db.commit()
 
         try:
             new_activity = UserActivityLog(
                 user_id=user_row.get("user_id"),
                 action_type="login",
-                description="User logged in",
+                description="User  logged in",
                 activity_date=datetime.utcnow(),
                 report_date=datetime.utcnow(),
                 user_name=user_row.get("name"),
@@ -72,10 +94,9 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         except Exception as e:
             print("Failed to record login activity:", e)
 
-        # Always include the resolved email in the response
         response_data = {
-            **result,  # JWT and other info from login_user
-            "email": identifier,  # resolved email
+            **result,
+            "email": identifier,
             "user_id": user_row.get("user_id"),
             "name": user_row.get("name"),
             "user_role": user_row.get("user_role"),
@@ -85,7 +106,8 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Unexpected error during login: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/auth/session")
@@ -105,24 +127,50 @@ async def get_session(request: Request, db=Depends(get_db)):
         "Authorization": f"Bearer {token}",
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        if response.status_code != 200:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        user_data = response.json()
-        supabase_user_id = user_data.get("id")
-        email = user_data.get("email")
-        name = user_data.get("user_metadata", {}).get("name", "")
+    # Use a small retry loop with timeout to avoid unhandled httpx.ReadTimeout
+    async def _fetch_user():
+        timeout = httpx.Timeout(5.0, read=5.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            return await client.get(url, headers=headers)
+
+    max_retries = 3
+    backoff = 0.5
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = await _fetch_user()
+            break
+        except (httpx.ReadTimeout, httpx.RequestError) as e:
+            if attempt == max_retries:
+                print(f"Supabase auth fetch failed after {attempt} attempts: {e}")
+                raise HTTPException(status_code=503, detail="Auth provider timed out")
+            await asyncio.sleep(backoff)
+            backoff *= 2
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user_data = response.json()
+    supabase_user_id = user_data.get("id")
+    email = user_data.get("email")
+    name = user_data.get("user_metadata", {}).get("name", "")
 
     # Get user info from your users table using auth_id
-    db_response = (
-        supabase.table("users").select("*").eq("auth_id", supabase_user_id).execute()
-    )
-    if not db_response.data or len(db_response.data) != 1:
+    from sqlalchemy import select
+    from app.models.userModal import User
+
+    stmt = select(User).where(User.auth_id == supabase_user_id)
+    result_user = await db.execute(stmt)
+    user = result_user.scalar_one_or_none()
+    if not user:
         raise HTTPException(
             status_code=404, detail="User not found or duplicate users found"
         )
-    db_user = db_response.data[0]
+    db_user = {
+        "auth_id": user.auth_id,
+        "user_id": user.user_id,
+        "name": user.name,
+        "email": user.email,
+        "user_role": user.user_role,
+    }
 
     # Build response: merge Supabase and DB info
     return {
@@ -137,7 +185,7 @@ async def get_session(request: Request, db=Depends(get_db)):
 
 
 @router.post("/auth/logout")
-async def logout(request: Request, db: Session = Depends(get_db)):
+async def logout(request: Request, db: AsyncSession = Depends(get_db)):
     # Get token from Authorization header
     auth_header = request.headers.get("authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -153,23 +201,45 @@ async def logout(request: Request, db: Session = Depends(get_db)):
         "Authorization": f"Bearer {token}",
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        if response.status_code != 200:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        user_data = response.json()
-        supabase_user_id = user_data.get("id")
+    # Use same retry/timeout approach for logout session fetch
+    async def _fetch_user_logout():
+        timeout = httpx.Timeout(5.0, read=5.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            return await client.get(url, headers=headers)
+
+    max_retries = 3
+    backoff = 0.5
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = await _fetch_user_logout()
+            break
+        except (httpx.ReadTimeout, httpx.RequestError) as e:
+            if attempt == max_retries:
+                print(f"Supabase auth fetch failed after {attempt} attempts: {e}")
+                raise HTTPException(status_code=503, detail="Auth provider timed out")
+            await asyncio.sleep(backoff)
+            backoff *= 2
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user_data = response.json()
+    supabase_user_id = user_data.get("id")
 
     # Get user info from your users table
-    db_response = (
-        supabase.table("users")
-        .select("user_id", "username", "name", "user_role")
-        .eq("auth_id", supabase_user_id)
-        .execute()
-    )
-    if not db_response.data or len(db_response.data) != 1:
+    from sqlalchemy import select
+    from app.models.userModal import User
+
+    stmt = select(User).where(User.auth_id == supabase_user_id)
+    result_user = await db.execute(stmt)
+    user = result_user.scalar_one_or_none()
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    db_user = db_response.data[0]
+    db_user = {
+        "user_id": user.user_id,
+        "username": user.username,
+        "name": user.name,
+        "user_role": user.user_role,
+    }
 
     # Log the logout activity
     try:

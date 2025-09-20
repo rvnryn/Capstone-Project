@@ -1,4 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
+from slowapi.util import get_remote_address
+from slowapi import Limiter
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
@@ -39,8 +43,9 @@ class UserUpdate(BaseModel):
     password: str | None = None
 
 
+@limiter.limit("10/minute")
 @router.get("/users", response_model=List[User])
-def get_users():
+def get_users(request: Request):
     try:
         response = supabase.table("users").select("*").execute()
         print("Raw Supabase data:", response.data)  # Debug line
@@ -52,8 +57,9 @@ def get_users():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@limiter.limit("10/minute")
 @router.get("/users/{user_id}", response_model=User)
-def get_user(user_id: int):
+def get_user(request: Request, user_id: int):
     try:
         response = (
             supabase.table("users")

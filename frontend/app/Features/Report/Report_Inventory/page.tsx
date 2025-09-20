@@ -1,11 +1,9 @@
 "use client";
-
 import { useState, useEffect, useMemo, useCallback } from "react";
 import * as XLSX from "xlsx";
 import {
   FaSearch,
   FaGoogle,
-  FaCloudUploadAlt,
   FaBoxes,
   FaSort,
   FaChartLine,
@@ -14,18 +12,12 @@ import {
   FaFilter,
 } from "react-icons/fa";
 import {
-  MdWarning,
   MdCheckCircle,
   MdAssessment,
   MdTrendingUp,
   MdTrendingDown,
 } from "react-icons/md";
-import {
-  FiTrendingUp,
-  FiBarChart,
-  FiPieChart,
-  FiActivity,
-} from "react-icons/fi";
+import { FiBarChart, FiPieChart, FiActivity } from "react-icons/fi";
 import { TbReportAnalytics } from "react-icons/tb";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import NavigationBar from "@/app/components/navigation/navigation";
@@ -33,8 +25,9 @@ import ResponsiveMain from "@/app/components/ResponsiveMain";
 import dayjs from "dayjs";
 import { useInventoryReportAPI } from "./hook/use-inventoryreport";
 import axiosInstance from "@/app/lib/axios";
-
+import { supabase } from "@/app/utils/Server/supabaseClient";
 import { useAuth } from "@/app/context/AuthContext";
+import { saveAs } from "file-saver";
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!;
 
@@ -90,7 +83,6 @@ export default function ReportInventory() {
   const { user } = useAuth();
   const [pastInventory, setPastInventory] = useState<InventoryItem[]>([]);
 
-  // 💡 Smart Balance states
   const [historicalInventory, setHistoricalInventory] = useState<
     InventoryItem[]
   >([]);
@@ -98,7 +90,6 @@ export default function ReportInventory() {
   const [availableHistoricalDates, setAvailableHistoricalDates] = useState<
     string[]
   >([]);
-  // ...existing state...
 
   // 💡 Smart Balance: Unique report dates including historical data
   const uniqueReportDates = useMemo(() => {
@@ -115,6 +106,7 @@ export default function ReportInventory() {
     ].map((date) => dayjs(date).format("YYYY-MM-DD"));
     return [...new Set(allDates)].sort((a, b) => b.localeCompare(a)); // Sort newest first
   }, [inventory, pastInventory, availableHistoricalDates]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [showPopup, setShowPopup] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
@@ -134,85 +126,90 @@ export default function ReportInventory() {
   });
   const { fetchLogs, saveLogs } = useInventoryReportAPI();
 
-  // Fetch current inventory and auto-save if not already logged for today
-  useEffect(() => {
-    async function load() {
-      try {
-        const today = new Date().toISOString().slice(0, 10);
-        // Check if today's log already exists
-        const logs = await fetchLogs(today);
-        // Always display master inventory for today
-        const masterRes = await axiosInstance.get("/api/inventory");
-        const masterInventory = masterRes.data;
-        setInventory(
-          masterInventory.map((item: any) => {
-            const batchDate = item.created_at;
-            return {
-              id: item.item_id || item.id,
-              name: item.item_name || item.name,
-              inStock: today < item.expiration_date ? item.stock_quantity : 0,
-              wastage: today >= item.expiration_date ? item.stock_quantity : 0,
-              stock: item.stock_status,
-              report_date: typeof today === "string" ? today : String(today),
-              category: item.category,
-              expiration_date: item.expiration_date,
-              batch_id: batchDate
-                ? new Date(batchDate).toLocaleDateString()
-                : `Batch-${item.item_id || "Unknown"}`,
-              created_at: item.created_at,
-            };
-          })
-        );
-        // Only save today's log if it does not already exist
-        if (!logs || logs.length === 0) {
-          if (!user || !user.user_id) {
+  const load = useCallback(async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const logs = await fetchLogs(today);
+      const masterRes = await axiosInstance.get("/api/inventory");
+      const masterInventory = masterRes.data;
+      setInventory(
+        masterInventory.map((item: any) => {
+          const batchDate = item.created_at;
+          return {
+            id: item.item_id || item.id,
+            name: item.item_name || item.name,
+            inStock: today < item.expiration_date ? item.stock_quantity : 0,
+            wastage: today >= item.expiration_date ? item.stock_quantity : 0,
+            stock: item.stock_status,
+            report_date: typeof today === "string" ? today : String(today),
+            category: item.category,
+            expiration_date: item.expiration_date,
+            batch_id: batchDate
+              ? new Date(batchDate).toLocaleDateString()
+              : `Batch-${item.item_id || "Unknown"}`,
+            created_at: item.created_at,
+          };
+        })
+      );
+      if ((!logs || logs.length === 0) && user && user.user_id) {
+        const logEntries = masterInventory
+          .filter((item: any) => item.item_id != null)
+          .map((item: any) => ({
+            item_id: Number(item.item_id),
+            remaining_stock:
+              today < item.expiration_date
+                ? parseInt(item.stock_quantity, 10)
+                : 0,
+            action_date: new Date(today).toISOString(),
+            user_id: Number(user.user_id),
+            status: String(item.stock_status),
+            wastage:
+              today >= item.expiration_date
+                ? parseInt(item.stock_quantity, 10)
+                : 0,
+            item_name: String(item.item_name || item.name || "Unknown Item"),
+            batch_date: item.created_at
+              ? new Date(item.created_at).toISOString()
+              : new Date().toISOString(),
+          }));
+        try {
+          await saveLogs(logEntries);
+        } catch (err: any) {
+          if (err.response) {
             console.error(
-              "Cannot save logs: user_id is missing from AuthContext user object."
+              "saveLogs error:",
+              err.response.data,
+              err.response.status
             );
-            return;
-          }
-          const logEntries = masterInventory
-            .filter((item: any) => item.item_id != null)
-            .map((item: any) => ({
-              item_id: Number(item.item_id),
-              remaining_stock:
-                today < item.expiration_date
-                  ? parseInt(item.stock_quantity, 10)
-                  : 0,
-              action_date: new Date(today).toISOString(),
-              user_id: Number(user.user_id),
-              status: String(item.stock_status),
-              wastage:
-                today >= item.expiration_date
-                  ? parseInt(item.stock_quantity, 10)
-                  : 0,
-              item_name: String(item.item_name || item.name || "Unknown Item"),
-              batch_date: item.created_at
-                ? new Date(item.created_at).toISOString()
-                : new Date().toISOString(),
-            }));
-          try {
-            await saveLogs(logEntries);
-          } catch (err: any) {
-            if (err.response) {
-              console.error(
-                "saveLogs error:",
-                err.response.data,
-                err.response.status
-              );
-            } else {
-              console.error("saveLogs error:", err);
-            }
+          } else {
+            console.error("saveLogs error:", err);
           }
         }
-      } catch (error) {
-        console.error("Error fetching inventory:", error);
       }
+    } catch (error) {
+      console.error("Error fetching inventory:", error);
     }
-    load();
   }, [fetchLogs, saveLogs, user]);
 
-  // 💡 Smart Balance: Load available historical dates (lightweight query)
+  useEffect(() => {
+    load();
+
+    const channel = supabase
+      .channel("inventory_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inventory" },
+        (payload) => {
+          load();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [load]);
+
   useEffect(() => {
     async function loadAvailableHistoricalDates() {
       try {
@@ -486,8 +483,10 @@ export default function ReportInventory() {
   const exportExcel = () => {
     const ws = XLSX.utils.aoa_to_sheet(excelValues);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Inventory");
-    XLSX.writeFile(wb, `Inventory_Report_${formatDate()}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Inventory Report");
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([wbout], { type: "application/octet-stream" });
+    saveAs(blob, `Inventory_Report_${formatDate()}.xlsx`);
     setExportSuccess(true);
     setShowPopup(false);
   };
@@ -1342,25 +1341,6 @@ export default function ReportInventory() {
                                 </p>
                               </div>
                             </div>
-
-                            <div className="grid grid-cols-2 gap-2 xs:gap-3">
-                              <div className="bg-purple-500/10 rounded-md xs:rounded-lg p-1.5 xs:p-2 border border-purple-500/20">
-                                <p className="text-purple-400 text-2xs xs:text-xs font-medium mb-0.5 truncate">
-                                  Batch ID
-                                </p>
-                                <p className="text-white text-xs xs:text-sm font-mono truncate">
-                                  {item.batch_id || "N/A"}
-                                </p>
-                              </div>
-                              <div className="bg-green-500/10 rounded-md xs:rounded-lg p-1.5 xs:p-2 border border-green-500/20">
-                                <p className="text-green-400 text-2xs xs:text-xs font-medium mb-0.5 truncate">
-                                  Report Date
-                                </p>
-                                <p className="text-white text-xs xs:text-sm font-mono truncate">
-                                  {item.report_date}
-                                </p>
-                              </div>
-                            </div>
                           </div>
                         ))
                       )}
@@ -2028,8 +2008,8 @@ export default function ReportInventory() {
                   <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-gray-700/50 text-center space-y-4 sm:space-y-6 max-w-sm sm:max-w-md w-full">
                     <div className="flex justify-center mb-4">
                       <div className="relative">
-                        <div className="absolute inset-0 bg-blue-500/20 rounded-full blur-xl"></div>
-                        <div className="relative bg-gradient-to-br from-blue-500 to-blue-600 p-4 rounded-full">
+                        <div className="absolute inset-0 bg-blue-400/20 rounded-full blur-xl"></div>
+                        <div className="relative bg-gradient-to-br from-blue-400 to-blue-500 p-4 rounded-full">
                           <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
                         </div>
                       </div>

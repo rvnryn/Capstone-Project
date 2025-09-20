@@ -1,3 +1,4 @@
+import boto3
 import os
 import json
 import pickle
@@ -8,7 +9,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
 import time
@@ -18,15 +19,35 @@ from app.supabase import SessionLocal, get_db
 from datetime import datetime, date
 from app.routes.userActivity import UserActivityLog
 from app.utils.rbac import require_role
+from fastapi import Form
+import zipfile
+import pandas as pd
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+from cryptography.fernet import Fernet
+import base64
+
+
+def derive_fernet_key(
+    password: str, salt: bytes = b"cardiacdelights-backup-salt"
+) -> bytes:
+    # Derive a Fernet key from the password using PBKDF2HMAC
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=390000,
+        backend=default_backend(),
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    return key
 
 
 router = APIRouter()
 
 TABLES = [
     "backup_history",
-    "food_trend_ingredients",
-    "food_trend_menu",
-    "food_trends",
     "ingredients",
     "inventory",
     "inventory_log",
@@ -39,9 +60,6 @@ TABLES = [
     "notification_settings",
     "order_items",
     "orders",
-    "past_inventory_log",
-    "past_order_items",
-    "past_user_activity_log",
     "suppliers",
     "user_activity_log",
     "users",
@@ -122,6 +140,7 @@ def compress_json_gzip(data):
 async def backup(
     user=Depends(require_role("Owner", "General Manager", "Store Manager")),
     db=Depends(get_db),
+    password: str = Query(..., description="Password to encrypt backup (required)"),
 ):
     start_time = time.time()
 
@@ -137,6 +156,14 @@ async def backup(
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future = executor.submit(compress_json_gzip, backup_data)
         buf = future.result()
+
+    # Always require password for encryption
+    key = derive_fernet_key(password)
+    fernet = Fernet(key)
+    encrypted = fernet.encrypt(buf.getvalue())
+    buf = io.BytesIO(encrypted)
+    filename = "backup.json.enc"
+    media_type = "application/octet-stream"
 
     elapsed = time.time() - start_time
 
@@ -159,13 +186,13 @@ async def backup(
         print("Failed to record local Backup activity:", e)
 
     print(
-        f"[PROFILE] Backup completed in {elapsed:.2f} seconds. Size: {buf.getbuffer().nbytes/1024:.1f} KB (gzip)"
+        f"[PROFILE] Backup completed in {elapsed:.2f} seconds. Size: {buf.getbuffer().nbytes/1024:.1f} KB (encrypted/gzip)"
     )
 
     return StreamingResponse(
         buf,
-        media_type="application/gzip",
-        headers={"Content-Disposition": "attachment; filename=backup.json.gz"},
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
@@ -177,8 +204,13 @@ async def backup_drive(
 ):
     body = await request.json()
     access_token = body.get("access_token")
+    password = body.get("password")
     if not access_token:
         raise HTTPException(status_code=400, detail="Missing access token")
+    if not password:
+        raise HTTPException(
+            status_code=400, detail="Password is required for backup encryption."
+        )
 
     # Use paginated fetch for each table
     async def fetch_table(table):
@@ -193,16 +225,23 @@ async def backup_drive(
         future = executor.submit(compress_json_gzip, backup_data)
         buf = future.result()
 
-    # Save to local compressed file (.json.gz)
-    backup_file = "backup_data.json.gz"
+    # Always require password for encryption
+    key = derive_fernet_key(password)
+    fernet = Fernet(key)
+    encrypted = fernet.encrypt(buf.getvalue())
+    buf = io.BytesIO(encrypted)
+    backup_file = "backup_data.json.enc"
+    mimetype = "application/octet-stream"
+
+    # Save to local file
     with open(backup_file, "wb") as f:
         f.write(buf.read())
     buf.seek(0)
 
-    # Upload to Google Drive (set mimetype to gzip)
+    # Upload to Google Drive
     service = authenticate_google_drive_with_token(access_token)
     file_metadata = {"name": backup_file}
-    media = MediaFileUpload(backup_file, mimetype="application/gzip")
+    media = MediaFileUpload(backup_file, mimetype=mimetype)
     file = (
         service.files()
         .create(body=file_metadata, media_body=media, fields="id")
@@ -237,96 +276,301 @@ async def backup_drive(
     return JSONResponse({"message": "Backup successful!", "file_id": file_id})
 
 
-@router.post("/restore")
-async def restore(
-    file: UploadFile = File(...),
+@router.post("/backup_s3")
+async def backup_s3(
+    request: Request,
     user=Depends(require_role("Owner", "General Manager", "Store Manager")),
     db=Depends(get_db),
 ):
+    body = await request.json()
+    password = body.get("password")
+    filename = (
+        body.get("filename")
+        or f"backup_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json.enc"
+    )
+    if not password:
+        raise HTTPException(
+            status_code=400, detail="Password is required for backup encryption."
+        )
+
+    # Fetch data
+    async def fetch_table(table):
+        return await fetch_table_paginated(table, batch_size=1000)
+
+    tasks = [fetch_table(table) for table in TABLES]
+    results = await asyncio.gather(*tasks)
+    backup_data = {table: rows for table, rows in results}
+
+    # Compress and encrypt
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(compress_json_gzip, backup_data)
+        buf = future.result()
+    key = derive_fernet_key(password)
+    fernet = Fernet(key)
+    encrypted = fernet.encrypt(buf.getvalue())
+    buf = io.BytesIO(encrypted)
+
+    # Upload to S3
+    bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
+    region = os.getenv("AWS_DEFAULT_REGION")
+    aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    if not bucket_name:
+        raise HTTPException(
+            status_code=500, detail="AWS_S3_BUCKET_NAME not set in environment."
+        )
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        region_name=region,
+    )
+    buf.seek(0)
+    s3.upload_fileobj(buf, bucket_name, filename)
+
+    # Log activity
     try:
+        user_row = getattr(user, "user_row", user)
+        new_activity = UserActivityLog(
+            user_id=user_row.get("user_id"),
+            action_type="S3 backup",
+            description=f"Performed S3 backup.",
+            activity_date=datetime.utcnow(),
+            report_date=datetime.utcnow(),
+            user_name=user_row.get("name"),
+            role=user_row.get("user_role"),
+        )
+        db.add(new_activity)
+        await db.flush()
+        await db.commit()
+        print("S3 backup activity logged successfully.")
+    except Exception as e:
+        print("Failed to record S3 backup activity:", e)
+
+    return JSONResponse({"message": "Backup uploaded to S3!", "filename": filename})
+
+
+@router.post("/restore")
+async def restore(
+    file: UploadFile = File(...),
+    password: str = Form(..., description="Password to decrypt backup (required)"),
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
+    # Always initialize response to a default error structure
+    response = JSONResponse(
+        {"status": "error", "message": "Unknown failure"}, status_code=500
+    )
+    try:
+        print("[DEBUG] /restore called")
+        print(
+            f"[DEBUG] file: {getattr(file, 'filename', None)}; password: {password!r}"
+        )
+        filename = getattr(file, "filename", "") or ""
         contents = await file.read()
-        try:
-            data = json.loads(contents)
-        except Exception as e:
-            print("Restore error: Invalid JSON file.", e)
-            raise HTTPException(status_code=400, detail="Invalid JSON file.")
+        # --- ZIP of CSVs restore ---
+        import csv
+        import io
+        import zipfile
 
-        # Validate backup structure
-        if not isinstance(data, dict):
-            print("Restore error: Backup data is not a dict.")
-            raise HTTPException(status_code=400, detail="Backup file format invalid.")
-
-        # Map of table to columns that are dates or datetimes (add more as needed)
-        date_columns = {
-            "inventory": ["batch_date", "expiration_date", "created_at", "updated_at"],
-            "inventory_surplus": [
-                "batch_date",
-                "expiration_date",
-                "created_at",
-                "updated_at",
-            ],
-            "inventory_log": ["created_at", "updated_at"],
-            "inventory_today": ["created_at", "updated_at"],
-            "past_inventory_log": ["created_at", "updated_at"],
-            "orders": ["created_at", "updated_at"],
-            "order_items": ["created_at", "updated_at"],
-            "past_order_items": ["created_at", "updated_at"],
-            "user_activity_log": ["created_at", "updated_at"],
-            "past_user_activity_log": ["created_at", "updated_at"],
-            "notification": ["created_at", "updated_at"],
-            "notification_settings": ["created_at", "updated_at"],
-            "menu": ["created_at", "updated_at"],
-            "menu_ingredients": ["created_at"],
-            "ingredients": ["created_at", "updated_at"],
-            "suppliers": ["created_at", "updated_at"],
-            "backup_history": ["created_at"],
-            "inventory_settings": ["created_at", "updated_at"],
-            "users": ["created_at", "updated_at"],
-            # Add more as needed
-        }
-
-        def parse_date(val):
-            # If already a datetime/date or None, return as is
-            if val is None or isinstance(val, (datetime, date)):
-                return val
-            if isinstance(val, str):
-                # Try datetime formats first
-                dt_formats = [
-                    "%Y-%m-%dT%H:%M:%S.%fZ",
-                    "%Y-%m-%dT%H:%M:%S.%f",
-                    "%Y-%m-%dT%H:%M:%S",
-                    "%Y-%m-%d %H:%M:%S.%f%z",
-                    "%Y-%m-%d %H:%M:%S.%f",
-                    "%Y-%m-%d %H:%M:%S",
-                ]
-                for fmt in dt_formats:
-                    try:
-                        return datetime.strptime(val, fmt)
-                    except Exception:
-                        continue
-                # Try date-only format
+        if filename.endswith(".zip"):
+            try:
+                if not isinstance(contents, bytes):
+                    raise Exception("ZIP file must be bytes")
+                zf = zipfile.ZipFile(io.BytesIO(contents))
+                data = {}
+                for name in zf.namelist():
+                    if name.endswith(".csv"):
+                        table_name = name[:-4]
+                        with zf.open(name) as f:
+                            csv_bytes = f.read()
+                            csv_str = csv_bytes.decode("utf-8")
+                            reader = csv.DictReader(io.StringIO(csv_str))
+                            data[table_name] = [row for row in reader]
+                        print(
+                            f"[INFO] Restoring from CSV in ZIP: {name}, {len(data[table_name])} rows"
+                        )
+                if not data:
+                    raise Exception("No CSV files found in ZIP")
+            except Exception as e:
+                print(f"[ERROR] ZIP of CSVs restore failed: {e}")
+                raise HTTPException(
+                    status_code=400, detail=f"ZIP of CSVs restore failed: {str(e)}"
+                )
+        # --- CSV restore ---
+        elif filename.endswith(".csv"):
+            # Assume filename is <table>.csv
+            table_name = filename[:-4]
+            try:
+                if isinstance(contents, bytes):
+                    contents_str = contents.decode("utf-8")
+                else:
+                    contents_str = contents
+                reader = csv.DictReader(io.StringIO(contents_str))
+                data = {table_name: [row for row in reader]}
+                print(
+                    f"[INFO] Restoring from CSV for table: {table_name}, {len(data[table_name])} rows"
+                )
+            except Exception as e:
+                print(f"[ERROR] CSV restore failed: {e}")
+                raise HTTPException(
+                    status_code=400, detail=f"CSV restore failed: {str(e)}"
+                )
+        # --- Encrypted JSON restore ---
+        elif filename.endswith(".enc"):
+            # Always require password for decryption
+            key = derive_fernet_key(password)
+            fernet = Fernet(key)
+            # Always treat contents as bytes
+            raw = contents if isinstance(contents, bytes) else bytes(contents)
+            # Try direct Fernet decrypt first
+            try:
+                decrypted = fernet.decrypt(raw)
+                data = json.loads(decrypted)
+            except Exception as e1:
+                print(f"[ERROR] Direct Fernet decrypt failed: {e1}")
+                # If Fernet fails, try decompress then decrypt (gzipped+encrypted)
                 try:
-                    return datetime.strptime(val, "%Y-%m-%d").date()
+                    decompressed = gzip.decompress(raw)
+                    decrypted = fernet.decrypt(decompressed)
+                    data = json.loads(decrypted)
+                except Exception as e2:
+                    print(f"[ERROR] Gzip+Fernet decrypt failed: {e2}")
+                    # Fallback: try plain gzip (not encrypted, just compressed)
+                    try:
+                        decompressed = gzip.decompress(raw)
+                        data = json.loads(decompressed)
+                        print(
+                            "[WARN] Fallback: Restored as plain gzipped JSON, not encrypted!"
+                        )
+                    except Exception as e3:
+                        print(f"[ERROR] Fallback plain gzip failed: {e3}")
+                        # Final fallback: try plain JSON
+                        try:
+                            if isinstance(raw, bytes):
+                                data = json.loads(raw.decode("utf-8"))
+                            else:
+                                data = json.loads(raw)
+                            print(
+                                "[WARN] Final fallback: Restored as plain JSON, not encrypted or compressed!"
+                            )
+                        except Exception as e4:
+                            print(f"[ERROR] Final fallback plain JSON failed: {e4}")
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Decryption failed: {str(e1)} | Gzip+decrypt failed: {str(e2)} | Fallback plain gzip failed: {str(e3)} | Final fallback plain JSON failed: {str(e4)}",
+                            )
+        else:
+            # Assume plain JSON (should be bytes)
+            try:
+                if isinstance(contents, bytes):
+                    data = json.loads(contents.decode("utf-8"))
+                else:
+                    data = json.loads(contents)
+            except Exception as e:
+                print(f"[ERROR] Invalid JSON: {e}")
+                raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
+
+        # --- Type map for casting CSV/ZIP values ---
+        import importlib
+        from sqlalchemy import Integer, Float, String, Date, DateTime, Text
+
+        # Map table name to model class
+        MODEL_MAP = {}
+        model_modules = [
+            "inventory",
+            "inventory_surplus",
+            "custom_holiday",
+            "notification_settings",
+            "userModal",
+        ]
+        for mod in model_modules:
+            try:
+                m = importlib.import_module(f"app.models.{mod}")
+                for attr in dir(m):
+                    obj = getattr(m, attr)
+                    if hasattr(obj, "__tablename__"):
+                        MODEL_MAP[obj.__tablename__] = obj
+            except Exception as e:
+                print(f"[WARN] Could not import model {mod}: {e}")
+
+        def normalize_value(col, value):
+            # Handle empty/null
+            if value is None or (
+                isinstance(value, str) and value.strip().upper() in ("", "NULL")
+            ):
+                return None
+            col_lower = col.lower()
+            # *_at → datetime
+            if col_lower.endswith("_at") and isinstance(value, str):
+                try:
+                    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except Exception:
+                    return None
+            # *_date → date
+            if col_lower.endswith("_date") and isinstance(value, str):
+                try:
+                    return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+                except Exception:
+                    return None
+            # *_id, quantity, price, amount, stock → numeric
+            if (
+                col_lower == "id"
+                or col_lower.endswith("_id")
+                or any(
+                    word in col_lower
+                    for word in ["quantity", "price", "amount", "stock"]
+                )
+            ):
+                # Try int first, then float
+                try:
+                    return int(value)
+                except Exception:
+                    try:
+                        return float(value)
+                    except Exception:
+                        return value
+            # Columns containing phone, reference, email, name, notes, address, supplies → always string
+            if any(
+                word in col_lower
+                for word in [
+                    "phone",
+                    "reference",
+                    "email",
+                    "name",
+                    "notes",
+                    "address",
+                    "supplies",
+                ]
+            ):
+                return str(value)
+            # Try to cast to int if it looks like an int
+            if isinstance(value, str) and value.isdigit():
+                try:
+                    return int(value)
                 except Exception:
                     pass
-            return val
+            # Try to cast to float if it looks like a float
+            if isinstance(value, str):
+                try:
+                    if "." in value or "e" in value.lower():
+                        return float(value)
+                except Exception:
+                    pass
+            # Fallback: keep as is
+            return value
 
-        # Define child tables first, then parent tables
+        def cast_row(table, row):
+            return {k: normalize_value(k, v) for k, v in row.items()}
+
+        # Table deletion order (children first)
         delete_order = [
-            # Child tables first (no other table references these)
-            "food_trend_ingredients",  # references food_trends, ingredients
-            "food_trend_menu",  # references food_trends, menu
-            "menu_ingredients",  # references menu, ingredients
-            "order_items",  # references orders, menu
-            "inventory_log",  # references inventory, users
-            "user_activity_log",  # references users
-            "backup_history",  # references users
-            "notification_settings",  # references users
-            "past_inventory_log",  # references inventory, users
-            "past_order_items",  # references orders, menu
-            "past_user_activity_log",  # references users
-            # Parent tables (delete after all referencing child tables)
-            "food_trends",
+            "menu_ingredients",
+            "order_items",
+            "inventory_log",
+            "user_activity_log",
+            "backup_history",
+            "notification_settings",
             "menu",
             "ingredients",
             "inventory",
@@ -336,387 +580,113 @@ async def restore(
             "inventory_surplus",
             "inventory_today",
             "notification",
-            "users",
+            # "users",  # SKIP users table to preserve sessions and logins
         ]
+        parent_tables = [
+            "menu",
+            "ingredients",
+            "inventory",
+            "orders",
+            "suppliers",
+            "inventory_settings",
+            "inventory_surplus",
+            "inventory_today",
+            "notification",
+            # "users",  # SKIP users table to preserve sessions and logins
+        ]
+        child_tables = [
+            "menu_ingredients",
+            "order_items",
+            "inventory_log",
+            "user_activity_log",
+            "backup_history",
+            "notification_settings",
+        ]
+        # Date columns for special parsing
+        date_columns = {
+            "orders": ["order_date"],
+            "inventory_log": ["action_date", "batch_date"],
+            "inventory_today": [
+                "batch_date",
+                "expiration_date",
+                "created_at",
+                "updated_at",
+            ],
+            "user_activity_log": ["activity_date", "report_date"],
+        }
+
         async with SessionLocal() as session:
-            # First, delete all tables in order
             from app.supabase import supabase
 
+            # Delete all data in restore order
             for table in delete_order:
                 try:
-                    if table == "users":
-                        # Delete users from Supabase Auth before deleting from users table
-                        result = await session.execute(
-                            text("SELECT auth_id FROM users WHERE auth_id IS NOT NULL")
-                        )
-                        auth_ids = [row[0] for row in result.fetchall() if row[0]]
-                        for auth_id in auth_ids:
-                            try:
-                                supabase.auth.admin.delete_user(auth_id)
-                                print(f"Deleted user from Supabase Auth: {auth_id}")
-                            except Exception as auth_err:
-                                print(f"Error deleting from Supabase Auth: {auth_err}")
-                        await session.execute(text(f"DELETE FROM {table}"))
-                    elif table == "menu_ingredients":
-                        result = await session.execute(
-                            text("SELECT COUNT(*) FROM menu_ingredients")
-                        )
-                        before_count = result.scalar()
-                        print(
-                            f"[DEBUG] menu_ingredients rows before delete: {before_count}"
-                        )
-                        await session.execute(text(f"DELETE FROM {table}"))
-                        result = await session.execute(
-                            text("SELECT COUNT(*) FROM menu_ingredients")
-                        )
-                        after_count = result.scalar()
-                        print(
-                            f"[DEBUG] menu_ingredients rows after delete: {after_count}"
-                        )
-                    else:
-                        await session.execute(text(f"DELETE FROM {table}"))
+                    await session.execute(text(f"DELETE FROM {table}"))
                 except Exception as e:
                     print(f"Restore error in table {table} (DELETE):", e)
-                    raise HTTPException(
+                    response = JSONResponse(
+                        {
+                            "status": "error",
+                            "message": f"Restore failed for table {table} (DELETE): {str(e)}",
+                        },
                         status_code=500,
-                        detail=f"Restore failed for table {table} (DELETE): {str(e)}",
                     )
-            # Commit deletes before inserts
+                    return response
             await session.commit()
-            # Insert parent tables first, then child tables
-            parent_tables = [
-                "food_trends",
-                "menu",
-                "ingredients",
-                "inventory",
-                "orders",
-                "suppliers",
-                "inventory_settings",
-                "inventory_surplus",
-                "inventory_today",
-                "notification",
-                "users",
-            ]
-            child_tables = [
-                "food_trend_ingredients",
-                "food_trend_menu",
-                "menu_ingredients",
-                "order_items",
-                "inventory_log",
-                "user_activity_log",
-                "backup_history",
-                "notification_settings",
-                "past_inventory_log",
-                "past_order_items",
-                "past_user_activity_log",
-            ]
-            # Insert parent tables
+
             created_auth_users = []
+
+            # Insert parent tables
             for table in parent_tables:
                 if table in data and isinstance(data[table], list):
-                    try:
-                        for row in data[table]:
-                            # ...existing code for date/datetime conversion and insert...
-                            if table == "inventory_log":
-                                from datetime import datetime
-
-                                for col in ["action_date", "batch_date"]:
-                                    if col in row and isinstance(row[col], str):
-                                        value = row[col]
-                                        try:
-                                            if value.endswith("Z"):
-                                                value = value.replace("Z", "+00:00")
-                                            row[col] = datetime.fromisoformat(value)
-                                        except Exception:
-                                            try:
-                                                row[col] = datetime.strptime(
-                                                    value, "%Y-%m-%d %H:%M:%S"
-                                                )
-                                            except Exception:
-                                                row[col] = None
-                            elif table == "inventory_today":
-                                from datetime import date
-
-                                for col in ["batch_date", "expiration_date"]:
-                                    if col in row and isinstance(row[col], str):
-                                        try:
-                                            row[col] = date.fromisoformat(row[col])
-                                        except Exception:
-                                            row[col] = None
-                                for col in ["created_at", "updated_at"]:
-                                    if col in row and isinstance(row[col], str):
-                                        from datetime import datetime
-
-                                        value = row[col]
-                                        try:
-                                            if value.endswith("Z"):
-                                                value = value.replace("Z", "+00:00")
-                                            row[col] = datetime.fromisoformat(value)
-                                        except Exception:
-                                            row[col] = None
-                            elif table == "user_activity_log":
-                                for col in ["activity_date", "report_date"]:
-                                    if col in row and isinstance(row[col], str):
-                                        value = row[col]
-                                        try:
-                                            if value.endswith("Z"):
-                                                value = value.replace("Z", "+00:00")
-                                            row[col] = datetime.fromisoformat(value)
-                                        except Exception:
-                                            try:
-                                                row[col] = datetime.strptime(
-                                                    value, "%Y-%m-%d %H:%M:%S"
-                                                )
-                                            except Exception:
-                                                row[col] = None
-                            elif table in date_columns:
-                                for col in date_columns[table]:
-                                    if col in row and isinstance(row[col], str):
-                                        try:
-                                            from datetime import datetime, date
-
-                                            value = row[col]
-                                            if value.endswith(
-                                                "+00:00"
-                                            ) or value.endswith("Z"):
-                                                value = value.replace("Z", "+00:00")
-                                            try:
-                                                row[col] = datetime.fromisoformat(value)
-                                            except Exception:
-                                                row[col] = date.fromisoformat(
-                                                    value.split(" ")[0]
-                                                )
-                                        except Exception:
-                                            row[col] = parse_date(row[col])
-                            columns = ",".join(row.keys())
-                            values = ",".join([f":{k}" for k in row.keys()])
-                            if table == "users" and "user_id" in row:
-                                # Always set a default password for Supabase Auth
-                                default_password = "changeme123"
-                                # Use OVERRIDING SYSTEM VALUE for identity column
-                                await session.execute(
-                                    text(
-                                        f"INSERT INTO {table} ({columns}) OVERRIDING SYSTEM VALUE VALUES ({values})"
-                                    ),
-                                    row,
-                                )
-                                from app.supabase import supabase
-
-                                email = row.get("email")
-                                if email:
-                                    try:
-                                        # Create user in Supabase Auth with default password
-                                        result = supabase.auth.admin.create_user(
-                                            {
-                                                "email": email,
-                                                "password": default_password,
-                                                "email_confirm": True,
-                                            }
-                                        )
-                                        new_auth_id = (
-                                            result.user.id
-                                            if hasattr(result, "user")
-                                            and hasattr(result.user, "id")
-                                            else None
-                                        )
-                                        if new_auth_id:
-                                            # Update the database user record with the new auth_id
-                                            await session.execute(
-                                                text(
-                                                    "UPDATE users SET auth_id = :auth_id WHERE email = :email"
-                                                ),
-                                                {
-                                                    "auth_id": new_auth_id,
-                                                    "email": email,
-                                                },
-                                            )
-                                        created_auth_users.append(email)
-                                    except Exception as auth_err:
-                                        print(
-                                            f"Restore: Error creating Supabase Auth user for {email}: {auth_err}"
-                                        )
-                            else:
-                                await session.execute(
-                                    text(
-                                        f"INSERT INTO {table} ({columns}) VALUES ({values})"
-                                    ),
-                                    row,
-                                )
-                    except Exception as e:
-                        print(f"Restore error in table {table} (INSERT):", e)
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"Restore failed for table {table} (INSERT): {str(e)}",
-                        )
-            # Insert child tables
-            for table in child_tables:
-                if table in data and isinstance(data[table], list):
-                    try:
-                        for row in data[table]:
-                            # ...existing code for date/datetime conversion and insert...
-                            if table == "inventory_log":
-                                from datetime import datetime
-
-                                for col in ["action_date", "batch_date"]:
-                                    if col in row and isinstance(row[col], str):
-                                        value = row[col]
-                                        try:
-                                            if value.endswith("Z"):
-                                                value = value.replace("Z", "+00:00")
-                                            row[col] = datetime.fromisoformat(value)
-                                        except Exception:
-                                            try:
-                                                row[col] = datetime.strptime(
-                                                    value, "%Y-%m-%d %H:%M:%S"
-                                                )
-                                            except Exception:
-                                                row[col] = None
-                            elif table == "inventory_today":
-                                from datetime import date
-
-                                for col in ["batch_date", "expiration_date"]:
-                                    if col in row and isinstance(row[col], str):
-                                        try:
-                                            row[col] = date.fromisoformat(row[col])
-                                        except Exception:
-                                            row[col] = None
-                                for col in ["created_at", "updated_at"]:
-                                    if col in row and isinstance(row[col], str):
-                                        from datetime import datetime
-
-                                        value = row[col]
-                                        try:
-                                            if value.endswith("Z"):
-                                                value = value.replace("Z", "+00:00")
-                                            row[col] = datetime.fromisoformat(value)
-                                        except Exception:
-                                            row[col] = None
-                            elif table == "user_activity_log":
-                                for col in ["activity_date", "report_date"]:
-                                    if col in row and isinstance(row[col], str):
-                                        value = row[col]
-                                        try:
-                                            if value.endswith("Z"):
-                                                value = value.replace("Z", "+00:00")
-                                            row[col] = datetime.fromisoformat(value)
-                                        except Exception:
-                                            try:
-                                                row[col] = datetime.strptime(
-                                                    value, "%Y-%m-%d %H:%M:%S"
-                                                )
-                                            except Exception:
-                                                row[col] = None
-                            elif table in date_columns:
-                                for col in date_columns[table]:
-                                    if col in row and isinstance(row[col], str):
-                                        try:
-                                            from datetime import datetime, date
-
-                                            value = row[col]
-                                            if value.endswith(
-                                                "+00:00"
-                                            ) or value.endswith("Z"):
-                                                value = value.replace("Z", "+00:00")
-                                            try:
-                                                row[col] = datetime.fromisoformat(value)
-                                            except Exception:
-                                                row[col] = date.fromisoformat(
-                                                    value.split(" ")[0]
-                                                )
-                                        except Exception:
-                                            row[col] = parse_date(row[col])
-                            columns = ",".join(row.keys())
-                            values = ",".join([f":{k}" for k in row.keys()])
+                    for row in data[table]:
+                        try:
+                            # Cast all values using model schema
+                            row_casted = cast_row(table, row)
+                            # Insert row
+                            columns = ", ".join(row_casted.keys())
+                            values = ", ".join([f":{k}" for k in row_casted.keys()])
                             await session.execute(
                                 text(
                                     f"INSERT INTO {table} ({columns}) VALUES ({values})"
                                 ),
-                                row,
+                                row_casted,
                             )
-                    except Exception as e:
-                        print(f"Restore error in table {table} (INSERT):", e)
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"Restore failed for table {table} (INSERT): {str(e)}",
-                        )
-            await session.commit()
+                        except Exception as e:
+                            print(f"Restore error in table {table} (INSERT):", e)
+                            response = JSONResponse(
+                                {
+                                    "status": "error",
+                                    "message": f"Restore failed for table {table} (INSERT): {str(e)}",
+                                },
+                                status_code=500,
+                            )
+                            return response
 
-        try:
-            user_row = getattr(user, "user_row", user)
-            new_activity = UserActivityLog(
-                user_id=user_row.get("user_id"),
-                action_type="local restore",
-                description=f"Performed local restore.",
-                activity_date=datetime.utcnow(),
-                report_date=datetime.utcnow(),
-                user_name=user_row.get("name"),
-                role=user_row.get("user_role"),
-            )
-            db.add(new_activity)
-            await db.flush()
-            await db.commit()
-            print("local restore activity logged successfully.")
-        except Exception as e:
-            print("Failed to record local restore activity:", e)
-
-        return JSONResponse({"status": "success", "message": "Restore completed."})
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print("Restore error: Unexpected exception.", e)
-        raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
-
-
-@router.post("/restore_drive")
-async def restore_drive(
-    request: Request,
-    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
-    db=Depends(get_db),
-):
-    try:
-        body = await request.json()
-        access_token = body.get("access_token")
-        file_id = body.get("file_id")
-        if not access_token or not file_id:
-            raise HTTPException(
-                status_code=400, detail="Missing access token or file_id"
-            )
-
-        # Debug: log access token and request details
-        print(f"[restore_drive] Using access token: {access_token}")
-        url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
-        headers = {"Authorization": f"Bearer {access_token}"}
-        response = requests.get(url, headers=headers)
-        print(f"[restore_drive] Google Drive response status: {response.status_code}")
-        print(f"[restore_drive] Google Drive response body: {response.text}")
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to download file from Google Drive: {response.text}",
-            )
-
-        contents = response.content
+        # If we reach here, restore succeeded
+        response = JSONResponse(
+            {"status": "success", "message": "Restore completed successfully"},
+            status_code=200,
+        )
 
         # Decompress if gzipped
         try:
-            # Try to decompress as gzip
             with gzip.GzipFile(fileobj=io.BytesIO(contents)) as gz:
                 contents = gz.read()
         except OSError:
-            # Not gzipped, use as-is
             pass
 
-        # Simulate UploadFile for restore
+        # Simulate UploadFile for restore, always use bytes
         class DummyUploadFile:
-            def __init__(self, content):
-                self.content = content
+            def __init__(self, content, filename="restore_from_drive.enc"):
+                self.content = content if isinstance(content, bytes) else bytes(content)
+                self.filename = filename
 
             async def read(self):
                 return self.content
 
         dummy_file = DummyUploadFile(contents)
-        # Call the restore logic
-        response = await restore(dummy_file)
+        # Only call restore recursively if needed (for Drive/S3 endpoints), not here
 
         try:
             user_row = getattr(user, "user_row", user)
@@ -738,7 +708,156 @@ async def restore_drive(
 
         return response
     except HTTPException as he:
-        raise he
+        return JSONResponse(
+            {"status": "error", "message": str(he.detail)},
+            status_code=he.status_code if hasattr(he, "status_code") else 500,
+        )
     except Exception as e:
         print("Restore Drive error: Unexpected exception.", e)
-        raise HTTPException(status_code=500, detail=f"Restore Drive failed: {str(e)}")
+        return JSONResponse(
+            {"status": "error", "message": f"Restore Drive failed: {str(e)}"},
+            status_code=500,
+        )
+
+
+# ...existing code...
+
+
+@router.post("/restore_s3")
+async def restore_s3(
+    request: Request,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
+
+    # Get S3 config from environment
+    bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
+    region = os.getenv("AWS_DEFAULT_REGION")
+    aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    if not bucket_name:
+        raise HTTPException(
+            status_code=500, detail="AWS_S3_BUCKET_NAME not set in environment."
+        )
+
+    # Parse request body for filename and password
+    body = await request.json()
+    print(f"[DEBUG] /restore_s3 called with body: {body}")
+    filename = body.get("filename") if isinstance(body, dict) else None
+    password = body.get("password") if isinstance(body, dict) else None
+    if not password:
+        print("[DEBUG] /restore_s3 missing password!")
+        raise HTTPException(
+            status_code=400, detail="Password is required for restore from S3."
+        )
+
+    # Connect to S3
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        region_name=region,
+    )
+
+    # If no filename provided, find the latest backup file
+    if not filename:
+        resp = s3.list_objects_v2(Bucket=bucket_name)
+        files = [
+            obj["Key"]
+            for obj in resp.get("Contents", [])
+            if obj["Key"].endswith(".gz") or obj["Key"].endswith(".json")
+        ]
+        if not files:
+            raise HTTPException(
+                status_code=404, detail="No backup files found in S3 bucket."
+            )
+        # Sort by name (or use LastModified for more accuracy)
+        files = sorted(files, reverse=True)
+        filename = files[0]
+
+    # Download the file from S3
+    buf = io.BytesIO()
+    try:
+        s3.download_fileobj(bucket_name, filename, buf)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to download {filename} from S3: {e}"
+        )
+    buf.seek(0)
+
+    # Decompress if gzipped
+    contents = buf.read()
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(contents)) as gz:
+            contents = gz.read()
+    except OSError:
+        # Not gzipped, use as-is
+        pass
+
+    class DummyUploadFile:
+        def __init__(self, content, filename="restore_from_s3.enc"):
+            self.content = content if isinstance(content, bytes) else bytes(content)
+            self.filename = filename
+
+        async def read(self):
+            return self.content
+
+    dummy_file = DummyUploadFile(contents, filename=filename or "restore_from_s3.enc")
+    response = await restore(dummy_file, password=password, user=user, db=db)
+
+    try:
+        user_row = getattr(user, "user_row", user)
+        new_activity = UserActivityLog(
+            user_id=user_row.get("user_id"),
+            action_type="restore S3",
+            description=f"Performed restore from AWS S3 ({filename}).",
+            activity_date=datetime.utcnow(),
+            report_date=datetime.utcnow(),
+            user_name=user_row.get("name"),
+            role=user_row.get("user_role"),
+        )
+        db.add(new_activity)
+        await db.flush()
+        await db.commit()
+        print("restore S3 activity logged successfully.")
+    except Exception as e:
+        print("Failed to record restore S3 activity:", e)
+
+    return response
+
+
+@router.get("/list-s3-backups")
+async def list_s3_backups():
+    """
+    List all backup files in the S3 bucket for the frontend picker.
+    """
+    import os
+    import boto3
+
+    bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
+    region = os.getenv("AWS_DEFAULT_REGION")
+    aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    if not bucket_name:
+        raise HTTPException(
+            status_code=500, detail="AWS_S3_BUCKET_NAME not set in environment."
+        )
+
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        region_name=region,
+    )
+
+    try:
+        resp = s3.list_objects_v2(Bucket=bucket_name)
+        files = [
+            obj["Key"]
+            for obj in resp.get("Contents", [])
+            if obj["Key"].endswith((".enc", ".zip", ".gz", ".json"))
+        ]
+        files = sorted(files, reverse=True)
+        return files
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list S3 files: {e}")

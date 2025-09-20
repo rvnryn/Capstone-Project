@@ -32,7 +32,9 @@ export default function AddMenuPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [error, setError] = useState("");
-  const [ingredients, setIngredients] = useState([{ name: "", quantity: "" }]);
+  const [ingredients, setIngredients] = useState([
+    { name: "", quantity: "", measurement: "g" },
+  ]);
   const [showRemoveIngredientModal, setShowRemoveIngredientModal] =
     useState(false);
   const [ingredientToRemoveIdx, setIngredientToRemoveIdx] = useState<
@@ -54,13 +56,17 @@ export default function AddMenuPage() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
 
+  // Capitalize first letter of each word
+  const capitalizeWords = (str: string) =>
+    str.replace(/\b\w/g, (char) => char.toUpperCase());
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value } = e.target;
       setIsDirty(true);
       setFormData((prev) => ({
         ...prev,
-        [name]: value,
+        [name]: name === "dish_name" ? capitalizeWords(value) : value,
       }));
     },
     []
@@ -80,12 +86,26 @@ export default function AddMenuPage() {
     field: string,
     value: string
   ) => {
+    // For quantity, only allow non-negative integers
+    if (field === "quantity") {
+      if (!/^\d*$/.test(value)) return; // Only allow digits
+    }
     setIngredients((ings) =>
-      ings.map((ing, i) => (i === idx ? { ...ing, [field]: value } : ing))
+      ings.map((ing, i) =>
+        i === idx
+          ? {
+              ...ing,
+              [field]: field === "name" ? capitalizeWords(value) : value,
+            }
+          : ing
+      )
     );
   };
   const addIngredient = () =>
-    setIngredients([...ingredients, { name: "", quantity: "" }]);
+    setIngredients([
+      ...ingredients,
+      { name: "", quantity: "", measurement: "g" },
+    ]);
 
   const removeIngredient = (idx: number) => {
     setIngredientToRemoveIdx(idx);
@@ -129,6 +149,7 @@ export default function AddMenuPage() {
         .map((ing) => ({
           name: ing.name,
           quantity: ing.quantity,
+          measurement: ing.measurement,
         }));
 
       // Step: Create menu item with image and ingredients
@@ -353,7 +374,7 @@ export default function AddMenuPage() {
                       )}
                     </div>
                     <label className="mt-4 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-0.5 rounded-lg font-semibold shadow cursor-pointer transition">
-                      Change Image
+                      Upload Image
                       <input
                         type="file"
                         accept="image/*"
@@ -387,8 +408,10 @@ export default function AddMenuPage() {
                           className="flex-1 min-w-0 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
                         />
                         <input
-                          type="text"
-                          placeholder="Quantity (e.g. 100g, 1 cup)"
+                          type="number"
+                          min={0}
+                          step={1}
+                          placeholder="Quantity"
                           value={ing.quantity}
                           onChange={(e) =>
                             handleIngredientChange(
@@ -397,8 +420,31 @@ export default function AddMenuPage() {
                               e.target.value
                             )
                           }
-                          className="flex-1 min-w-0 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
+                          className="w-20 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                         />
+                        <select
+                          value={ing.measurement}
+                          onChange={(e) =>
+                            handleIngredientChange(
+                              idx,
+                              "measurement",
+                              e.target.value
+                            )
+                          }
+                          className="w-24 bg-gray-800 text-white rounded-lg px-2 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
+                        >
+                          <option value="g">g</option>
+                          <option value="kg">kg</option>
+                          <option value="ml">ml</option>
+                          <option value="l">l</option>
+                          <option value="pcs">pcs</option>
+                          <option value="tbsp">tbsp</option>
+                          <option value="tsp">tsp</option>
+                          <option value="cup">cup</option>
+                          <option value="oz">oz</option>
+                        </select>
                         <button
                           type="button"
                           onClick={() => removeIngredient(idx)}

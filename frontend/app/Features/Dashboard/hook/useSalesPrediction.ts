@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import axiosInstance from "@/app/lib/axios";
+import { useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 export interface SalesPrediction {
@@ -41,61 +41,55 @@ export interface HistoricalAnalysis {
   insights: string[];
 }
 
-export function useSalesHistory() {
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<SalesPrediction[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchSalesHistory = useCallback(
-    async (timeframe: string = "weekly", top_n: number = 3) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await offlineAxiosRequest(
-          {
-            method: "GET",
-            url: `/api/predict_top_sales?timeframe=${timeframe}&top_n=${top_n}`,
-          },
-          {
-            cacheKey: `sales-history-${timeframe}-${top_n}`,
-            cacheHours: 6, // Sales data can be cached for 6 hours
-            showErrorToast: true,
-            fallbackData: [], // Return empty array as fallback
-          }
-        );
-        setData(response.data);
-      } catch (err: any) {
-        console.error("Sales history fetch error:", err);
-        if (err.isOfflineError) {
-          setError("Sales history not available offline");
-          setData([]); // Set empty data for offline
-        } else {
-          setError(
-            err?.response?.data?.detail ||
-              err.message ||
-              "Failed to fetch sales history"
-          );
-          setData([]);
+export function useSalesHistory(
+  timeframe: "daily" | "weekly" | "monthly",
+  top_n: number
+) {
+  const {
+    data = [],
+    isLoading: loading,
+    error,
+    refetch: fetchSalesHistory,
+  } = useQuery({
+    queryKey: ["sales-history", timeframe, top_n],
+    queryFn: async () => {
+      const response = await offlineAxiosRequest(
+        {
+          method: "GET",
+          url: `/api/predict_top_sales?timeframe=${timeframe}&top_n=${top_n}`,
+        },
+        {
+          cacheKey: `sales-history-${timeframe}-${top_n}`,
+          cacheHours: 6,
+          showErrorToast: true,
+          fallbackData: [],
         }
-      } finally {
-        setLoading(false);
-      }
+      );
+      console.log(
+        "[SalesHistory] API response for",
+        timeframe,
+        top_n,
+        response.data
+      );
+      return response.data;
     },
-    []
-  );
-
+    refetchInterval: 10000,
+    staleTime: 10000,
+  });
+  console.log("[SalesHistory] Hook data for", timeframe, top_n, data);
   return { data, loading, error, fetchSalesHistory };
 }
 
 export function useHistoricalAnalysis() {
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<HistoricalAnalysis | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchHistoricalAnalysis = useCallback(async (days: number = 90) => {
-    setLoading(true);
-    setError(null);
-    try {
+  const days = 90;
+  const {
+    data = null,
+    isLoading: loading,
+    error,
+    refetch: fetchHistoricalAnalysis,
+  } = useQuery({
+    queryKey: ["historical-analysis", days],
+    queryFn: async () => {
       const response = await offlineAxiosRequest(
         {
           method: "GET",
@@ -103,60 +97,36 @@ export function useHistoricalAnalysis() {
         },
         {
           cacheKey: `historical-analysis-${days}`,
-          cacheHours: 12, // Historical analysis can be cached for 12 hours
+          cacheHours: 12,
           showErrorToast: true,
-          fallbackData: null, // Return null as fallback
+          fallbackData: null,
         }
       );
-      setData(response.data);
-    } catch (err: any) {
-      console.error("Historical analysis fetch error:", err);
-      if (err.isOfflineError) {
-        setError("Historical analysis not available offline");
-        setData(null); // Set null data for offline
-      } else {
-        setError(
-          err?.response?.data?.detail ||
-            err.message ||
-            "Failed to fetch historical analysis"
-        );
-        setData(null);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+      return response.data;
+    },
+    refetchInterval: 10000,
+    staleTime: 10000,
+  });
   return { data, loading, error, fetchHistoricalAnalysis };
 }
 
-export function useSalesPrediction() {
-  return useSalesHistory();
+export function useSalesPrediction(
+  timeframe: "daily" | "weekly" | "monthly",
+  top_n: number
+) {
+  return useSalesHistory(timeframe, top_n);
 }
 
-export function useSalesAnalytics() {
-  const salesHistory = useSalesHistory();
+export function useSalesAnalytics(
+  timeframe: "daily" | "weekly" | "monthly",
+  top_n: number
+) {
+  const salesHistory = useSalesHistory(timeframe, top_n);
   const historical = useHistoricalAnalysis();
-
-  const fetchAll = useCallback(
-    async (
-      timeframe: string = "weekly",
-      top_n: number = 3,
-      days: number = 90
-    ) => {
-      await Promise.all([
-        salesHistory.fetchSalesHistory(timeframe, top_n),
-        historical.fetchHistoricalAnalysis(days),
-      ]);
-    },
-    [salesHistory.fetchSalesHistory, historical.fetchHistoricalAnalysis]
-  );
-
   return {
-    prediction: salesHistory, // Keep the same name for backward compatibility
+    prediction: salesHistory,
     historical,
     loading: salesHistory.loading || historical.loading,
     error: salesHistory.error || historical.error,
-    fetchAll,
   };
 }

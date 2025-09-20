@@ -2,6 +2,29 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+// Prefetch helpers
+function usePrefetchInventorySettings(
+  queryClient: ReturnType<typeof useQueryClient>
+) {
+  useEffect(() => {
+    queryClient.prefetchQuery({
+      queryKey: ["inventorySettings"],
+      queryFn: async () => {
+        const res = await axios.get("/api/inventory-settings");
+        return res.data;
+      },
+      staleTime: 1000 * 60 * 60 * 12,
+    });
+    queryClient.prefetchQuery({
+      queryKey: ["todayInventory", []],
+      queryFn: async () => {
+        const res = await axios.get("/api/inventory-today");
+        return res.data;
+      },
+      staleTime: 1000 * 60 * 5,
+    });
+  }, [queryClient]);
+}
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
 import {
@@ -33,10 +56,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import { useInventoryAPI } from "../hook/use-inventoryAPI";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
-import {
-  useInventorySettingsAPI,
-  InventorySetting,
-} from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
+import { InventorySetting } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 import axios from "@/app/lib/axios";
 
 type InventoryItem = {
@@ -58,18 +78,28 @@ export default function TodayInventoryPage() {
   const queryClient = useQueryClient();
   const { isMobile } = useNavigation();
 
-  // Fetch inventory settings (thresholds)
-  const { fetchSettings } = useInventorySettingsAPI();
-  const [settings, setSettings] = useState<InventorySetting[]>([]);
+  // Prefetch inventory/settings on mount
+  usePrefetchInventorySettings(queryClient);
 
-  useEffect(() => {
-    fetchSettings()
-      .then(setSettings)
-      .catch((err) => {
-        console.error("Failed to fetch inventory settings:", err);
-        setSettings([]);
-      });
-  }, [fetchSettings]);
+  // Aggressively cache settings with React Query
+  const {
+    data: settingsRaw,
+    isLoading: isSettingsLoading,
+    isFetching: isSettingsFetching,
+    error: settingsError,
+  } = useQuery<InventorySetting[]>({
+    queryKey: ["inventorySettings"],
+    queryFn: async () => {
+      const res = await axios.get("/api/inventory-settings");
+      return res.data;
+    },
+    staleTime: 1000 * 60 * 60 * 12, // 12 hours
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+  const settings: InventorySetting[] = Array.isArray(settingsRaw)
+    ? settingsRaw
+    : [];
 
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedBatchDate, setSelectedBatchDate] = useState("");
@@ -103,14 +133,15 @@ export default function TodayInventoryPage() {
     return response.data;
   };
 
-  const { data: inventoryData = [], isLoading } = useQuery<InventoryItem[]>({
+  const { data: inventoryDataRaw, isLoading } = useQuery<InventoryItem[]>({
     queryKey: ["todayInventory", settings],
     queryFn: async () => {
       const items = await listTodayItems();
       return items.map((item: any) => {
         const itemName = (item.item_name || "").toString().trim().toLowerCase();
-        const setting = settings.find(
-          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+        const setting = (settings as InventorySetting[]).find(
+          (s: InventorySetting) =>
+            (s.name || "").toString().trim().toLowerCase() === itemName
         );
         // Ensure threshold is a number, fallback to 100 if not set
         const threshold = Number(setting?.low_stock_threshold);
@@ -149,18 +180,48 @@ export default function TodayInventoryPage() {
         };
       });
     },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    // cacheTime should be set in queryClient defaultOptions, not here
   });
+
+  // Always treat as InventoryItem[]
+  const inventoryData: InventoryItem[] = Array.isArray(inventoryDataRaw)
+    ? inventoryDataRaw
+    : [];
 
   const transferToSurplusMutation = useMutation({
     mutationFn: async ({ id, quantity }: { id: number; quantity: number }) => {
       await transferToSurplus(id, quantity);
     },
-    onSuccess: () => {
+    // Optimistic update
+    onMutate: async ({ id, quantity }) => {
+      await queryClient.cancelQueries({ queryKey: ["todayInventory"] });
+      const previousInventory = queryClient.getQueryData<InventoryItem[]>([
+        "todayInventory",
+        settings,
+      ]);
+      if (previousInventory) {
+        queryClient.setQueryData<InventoryItem[]>(
+          ["todayInventory", settings],
+          previousInventory.filter((item) => item.id !== id)
+        );
+      }
+      return { previousInventory };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousInventory) {
+        queryClient.setQueryData(
+          ["todayInventory", settings],
+          context.previousInventory
+        );
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
       queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
-    },
-    onError: (error) => {
-      console.error("Transfer failed:", error);
     },
   });
 
@@ -168,7 +229,30 @@ export default function TodayInventoryPage() {
     mutationFn: async (id: number) => {
       await deleteTodayItem(id);
     },
-    onSuccess: () => {
+    // Optimistic update
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: ["todayInventory"] });
+      const previousInventory = queryClient.getQueryData<InventoryItem[]>([
+        "todayInventory",
+        settings,
+      ]);
+      if (previousInventory) {
+        queryClient.setQueryData<InventoryItem[]>(
+          ["todayInventory", settings],
+          previousInventory.filter((item) => item.id !== id)
+        );
+      }
+      return { previousInventory };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousInventory) {
+        queryClient.setQueryData(
+          ["todayInventory", settings],
+          context.previousInventory
+        );
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
       setShowDeleteModal(false);
       setItemToDelete(null);
@@ -225,7 +309,7 @@ export default function TodayInventoryPage() {
   };
 
   const filtered = useMemo(() => {
-    return inventoryData.filter((item) => {
+    return (inventoryData as InventoryItem[]).filter((item: InventoryItem) => {
       const matchesCategory =
         !selectedCategory || item.category === selectedCategory;
       const matchesBatch =
@@ -489,7 +573,9 @@ export default function TodayInventoryPage() {
                         className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
                       >
                         <option value="">All Categories</option>
-                        {getUniqueCategories(inventoryData).map((category) => (
+                        {getUniqueCategories(
+                          inventoryData as InventoryItem[]
+                        ).map((category) => (
                           <option key={category} value={category}>
                             {category}
                           </option>
@@ -510,7 +596,9 @@ export default function TodayInventoryPage() {
                         className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
                       >
                         <option value="">All Batches</option>
-                        {getUniqueBatchDates(inventoryData).map((date) => (
+                        {getUniqueBatchDates(
+                          inventoryData as InventoryItem[]
+                        ).map((date) => (
                           <option key={date} value={date}>
                             {date}
                           </option>
@@ -555,6 +643,13 @@ export default function TodayInventoryPage() {
                 className="bg-gray-800/30 backdrop-blur-sm rounded-lg xs:rounded-xl sm:rounded-2xl shadow-2xl border border-gray-700/50 overflow-hidden"
                 aria-label="Inventory table"
               >
+                {/* Show subtle loading settings indicator if settings are loading/fetching */}
+                {(isSettingsLoading || isSettingsFetching) && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-yellow-900/20 text-yellow-300 text-xs sm:text-sm">
+                    <MdRefresh className="animate-spin" />
+                    Loading settings...
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="table-auto w-full text-xs xs:text-sm sm:text-base lg:text-lg xl:text-xl text-left border-collapse min-w-[700px]">
                     <caption className="sr-only">

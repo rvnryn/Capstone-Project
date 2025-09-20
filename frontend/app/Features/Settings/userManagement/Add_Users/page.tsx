@@ -127,14 +127,25 @@ export default function AddUsers() {
     }
   }, [formData, validate, isSubmitting]);
 
+  const capitalizeWords = (str: string) =>
+    str.replace(/\b\w/g, (char) => char.toUpperCase());
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value } = e.target;
       setIsDirty(true);
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
+      setFormData((prev) => {
+        let newValue = value;
+        if (name === "name") {
+          newValue = capitalizeWords(value);
+        } else if (name === "username") {
+          newValue = value.trim().toLowerCase();
+        }
+        return {
+          ...prev,
+          [name]: newValue,
+        };
+      });
     },
     []
   );

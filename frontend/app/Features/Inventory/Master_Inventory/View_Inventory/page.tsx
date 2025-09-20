@@ -2,6 +2,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import {
+  useInventorySettingsAPI,
+  InventorySetting,
+} from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { useAuth } from "@/app/context/AuthContext";
@@ -31,18 +35,23 @@ export default function ViewInventoryItem() {
   const [item, setItem] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
+  const { fetchSettings } = useInventorySettingsAPI();
+  const [settings, setSettings] = useState<InventorySetting[]>([]);
+  const [unit, setUnit] = useState<string>("");
 
   const itemId = searchParams.get("id");
 
   useEffect(() => {
-    const fetchItem = async () => {
+    const fetchAll = async () => {
       if (!itemId) {
         router.push(routes.master_inventory);
         return;
       }
-
       try {
-        const data = await getItem(itemId);
+        const [data, settingsData] = await Promise.all([
+          getItem(itemId),
+          fetchSettings(),
+        ]);
         const formatted = {
           id: data.item_id,
           name: data.item_name,
@@ -55,16 +64,22 @@ export default function ViewInventoryItem() {
           expiration_date: data.expiration_date || null,
         };
         setItem(formatted);
+        setSettings(settingsData);
+        // Find unit from settings
+        const itemName = (data.item_name || "").toString().trim().toLowerCase();
+        const setting = settingsData.find(
+          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+        );
+        setUnit(setting?.default_unit || "");
       } catch (error) {
-        console.error("Error fetching item:", error);
+        console.error("Error fetching item or settings:", error);
         router.push(routes.master_inventory);
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchItem();
-  }, [itemId, router, getItem]);
+    fetchAll();
+  }, [itemId, router, getItem, fetchSettings]);
 
   const formatDateOnly = (input: string | null): string => {
     if (!input) return "-";
@@ -231,7 +246,9 @@ export default function ViewInventoryItem() {
                   <ItemRow
                     icon={<FiHash className="text-green-400" />}
                     label="Quantity In Stock"
-                    value={item.stock.toString()}
+                    value={
+                      unit ? `${item.stock} ${unit}` : item.stock.toString()
+                    }
                   />
                   <ItemRow
                     icon={<FiCalendar className="text-orange-400" />}

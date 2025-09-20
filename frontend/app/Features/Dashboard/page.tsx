@@ -1,6 +1,12 @@
 "use client";
+
+import annotationPlugin from "chartjs-plugin-annotation";
 import { useEffect, useState, useRef } from "react";
-import { useDashboardAPI } from "./hook/use-dashboardAPI";
+import { useDashboardQuery } from "./hook/useDashboardQuery";
+import HolidayFormModal from "./Components/HolidayFormModal";
+import { useMemo } from "react";
+import dynamic from "next/dynamic";
+import { useSimpleSalesReport } from "../Report/Report_Sales/hooks/useSimpleSalesReport";
 import {
   useSalesPrediction,
   useHistoricalAnalysis,
@@ -28,182 +34,159 @@ import {
   FaChartBar,
   FaArrowUp,
   FaArrowDown,
+  FaCalendarAlt,
+  FaListUl,
 } from "react-icons/fa";
+import { AiOutlineInfoCircle } from "react-icons/ai";
 import { FiWifiOff, FiTrendingUp, FiTrendingDown } from "react-icons/fi";
-import { MdDashboard, MdTrendingUp, MdInsights } from "react-icons/md";
+import {
+  MdDashboard,
+  MdTrendingUp,
+  MdInsights,
+  MdWarning,
+} from "react-icons/md";
 import { HiSparkles } from "react-icons/hi";
 
 export default function Dashboard() {
+  // Ref to store last chart data for deep comparison
+  const lastChartDataRef = useRef<any>(null);
   const topSalesCanvasRef = useRef<HTMLCanvasElement>(null);
   const [filterType, setFilterType] = useState<"daily" | "weekly" | "monthly">(
     "daily"
   );
-  const [topItemsCount, setTopItemsCount] = useState(6);
+  const [topItemsCount, setTopItemsCount] = useState(5);
   const [showHistoricalView, setShowHistoricalView] = useState(false);
 
   // Use the combined analytics hook for better performance
-  const { prediction, historical, loading, fetchAll } = useSalesAnalytics();
+  const { prediction, historical, loading, error } = useSalesAnalytics(
+    filterType,
+    topItemsCount
+  );
+  // Type guards for prediction/historical data
+  const predictionData: import("./hook/useSalesPrediction").SalesPrediction[] =
+    Array.isArray(prediction.data) ? prediction.data : [];
+  const historicalData:
+    | import("./hook/useSalesPrediction").HistoricalAnalysis
+    | null =
+    historical.data &&
+    typeof historical.data === "object" &&
+    "overview" in historical.data
+      ? (historical.data as import("./hook/useSalesPrediction").HistoricalAnalysis)
+      : null;
 
-  const [lowStockIngredients, setLowStockIngredients] = useState<any[]>([]);
-  const [expiringIngredients, setExpiringIngredients] = useState<any[]>([]);
-  const { fetchLowStock, fetchExpiring, fetchSurplus } = useDashboardAPI();
-  const [surplusIngredients, setSurplusIngredients] = useState<any[]>([]);
+  if (
+    typeof window !== "undefined" &&
+    Chart.registry &&
+    !Chart.registry.plugins.get("annotation")
+  ) {
+    Chart.register(annotationPlugin);
+  }
 
-  const { isOnline } = usePWA();
+  const HolidayCalendar = dynamic(
+    () => import("./Components/HolidayCalendar"),
+    {
+      ssr: false,
+    }
+  );
 
-  // Offline functionality
+  // Use React Query for real-time inventory data
   const {
-    getDashboardStats,
-    getInventoryData,
-    isLoading: offlineLoading,
-    syncCriticalData,
-    smartRefresh,
-  } = useOfflineDataManager();
+    lowStock,
+    expiring,
+    surplus,
+    expired,
+    customHolidays,
+    addHoliday,
+    editHoliday,
+    deleteHoliday,
+  } = useDashboardQuery();
 
-  const [dashboardFromCache, setDashboardFromCache] = useState(false);
-  const [inventoryFromCache, setInventoryFromCache] = useState(false);
-  const [lastDataUpdate, setLastDataUpdate] = useState<string | null>(null);
+  // Define variables for inventory cache status and last update
+  const inventoryFromCache =
+    (lowStock && "isFromCache" in lowStock && (lowStock as any).isFromCache) ||
+    (expiring && "isFromCache" in expiring && (expiring as any).isFromCache) ||
+    (surplus && "isFromCache" in surplus && (surplus as any).isFromCache) ||
+    (expired && "isFromCache" in expired && (expired as any).isFromCache) ||
+    false;
+  const lastDataUpdate =
+    lowStock.dataUpdatedAt ||
+    expiring.dataUpdatedAt ||
+    surplus.dataUpdatedAt ||
+    expired.dataUpdatedAt ||
+    null;
 
-  // Fetch analytics data with historical analysis
-  useEffect(() => {
-    fetchAll(filterType, topItemsCount, 90); // 90 days of historical data
+  // Define variables for low stock and expiring ingredients
+  const lowStockIngredients = lowStock.data || [];
+  const expiringIngredients = expiring.data || [];
+  const expiredItem = expired.data || [];
 
-    // Fetch offline-capable dashboard data
-    const fetchOfflineData = async () => {
-      try {
-        const [dashResult, inventoryResult] = await Promise.all([
-          getDashboardStats(),
-          getInventoryData(),
-        ]);
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalEdit, setModalEdit] = useState<null | any>(null);
+  const [modalDate, setModalDate] = useState<string | null>(null);
 
-        if (dashResult.data) {
-          setDashboardFromCache(dashResult.fromCache);
-          if (dashResult.fromCache) {
-            setLastDataUpdate(new Date().toISOString());
-          }
-        }
-
-        if (inventoryResult.data) {
-          setInventoryFromCache(inventoryResult.fromCache);
-          // Process inventory data for low stock, expiring, surplus
-          const inventory = inventoryResult.data;
-          setLowStockIngredients(
-            inventory.filter(
-              (item: any) => item.current_stock <= item.min_threshold
-            )
-          );
-          setExpiringIngredients(
-            inventory.filter(
-              (item: any) =>
-                item.batch_date &&
-                new Date(item.batch_date) <=
-                  new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-            )
-          );
-          setSurplusIngredients(
-            inventory.filter(
-              (item: any) => item.current_stock >= item.max_threshold
-            )
-          );
-        }
-      } catch (error) {
-        console.error("Failed to fetch offline dashboard data:", error);
-      }
-    };
-
-    fetchOfflineData();
-
-    const interval = setInterval(() => {
-      fetchAll(filterType, topItemsCount, 90);
-      if (isOnline) {
-        smartRefresh(); // Smart refresh offline data when online
-      }
-    }, 60000); // 60 seconds
-    return () => clearInterval(interval);
-  }, [filterType, topItemsCount, fetchAll]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchInventoryData = async () => {
-      if (!isMounted) return;
-
-      console.log("🔄 Fetching inventory data...");
-
-      try {
-        const [lowStock, expiring, surplus] = await Promise.all([
-          fetchLowStock(),
-          fetchExpiring(),
-          fetchSurplus(),
-        ]);
-
-        console.log("✅ Inventory data received:", {
-          lowStock,
-          expiring,
-          surplus,
-        });
-
-        if (isMounted) {
-          setLowStockIngredients(lowStock || []);
-          setExpiringIngredients(expiring || []);
-          setSurplusIngredients(surplus || []);
-
-          // Simple cache
-          const inventoryCache = {
-            lowStock: lowStock || [],
-            expiring: expiring || [],
-            surplus: surplus || [],
-            lastUpdated: new Date().toISOString(),
-          };
-          localStorage.setItem(
-            "dashboard-inventory-cache",
-            JSON.stringify(inventoryCache)
-          );
-        }
-      } catch (error) {
-        console.error("❌ Failed to fetch inventory data:", error);
-
-        if (isMounted) {
-          // Try cache on error
-          const cached = localStorage.getItem("dashboard-inventory-cache");
-          if (cached) {
-            try {
-              const parsedCache = JSON.parse(cached);
-              console.log("📦 Using cached inventory data:", parsedCache);
-              setLowStockIngredients(parsedCache.lowStock || []);
-              setExpiringIngredients(parsedCache.expiring || []);
-              setSurplusIngredients(parsedCache.surplus || []);
-            } catch (parseError) {
-              console.error("Cache parse error:", parseError);
-            }
-          }
-        }
-      }
-    };
-
-    fetchInventoryData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  // Open add modal
+  const handleAddHoliday = (date: string) => {
+    setModalEdit(null);
+    setModalOpen(true);
+  };
+  // Open edit modal
+  const handleEditHoliday = (holiday: any) => {
+    setModalEdit(holiday);
+    setModalDate(null);
+    setModalOpen(true);
+  };
+  // Save handler
+  const handleSaveHoliday = async (data: {
+    date: string;
+    name: string;
+    description?: string;
+  }) => {
+    if (modalEdit) {
+      editHoliday.mutate({ ...data, id: modalEdit.id });
+    } else {
+      await addHoliday.mutateAsync(data);
+      // Force instant refetch for UI update
+      if (customHolidays.refetch) await customHolidays.refetch();
+    }
+    setModalOpen(false);
+    setModalEdit(null);
+    setModalDate(null);
+  };
+  // Delete handler
+  const handleDeleteHoliday = () => {
+    if (modalEdit) {
+      deleteHoliday.mutate(modalEdit.id);
+    }
+    setModalOpen(false);
+    setModalEdit(null);
+    setModalDate(null);
+  };
+  // Cancel modal
+  const handleCancelModal = () => {
+    setModalOpen(false);
+    setModalEdit(null);
+    setModalDate(null);
+  };
+  // Interactive calendar section for custom holidays
 
   useEffect(() => {
-    console.log(
-      "[DEBUG] Chart effect triggered. loading:",
-      loading,
-      "SalesData:",
-      prediction.data
-    );
+    const topN = topItemsCount;
+    const filteredData = predictionData.slice(0, topN);
 
-    if (loading || !prediction.data.length) {
-      console.log("[DEBUG] Skipping chart creation - loading or no data");
+    const chartDataString = JSON.stringify({ filteredData, filterType });
+    if (
+      loading ||
+      !filteredData.length ||
+      lastChartDataRef.current === chartDataString
+    ) {
+      // Skip if loading, no data, or data unchanged
       return;
     }
+    lastChartDataRef.current = chartDataString;
 
     const canvas = topSalesCanvasRef.current;
     if (!canvas) {
-      console.log("[DEBUG] No canvas found");
       return;
     }
 
@@ -216,49 +199,130 @@ export default function Dashboard() {
     let chart: Chart | null = null;
 
     try {
-      // Use bar chart for daily, line for weekly/monthly
-      const chartType = filterType === "daily" ? "bar" : "line";
+      // Chart type and style logic
+      let chartType: "bar" | "line" = "bar";
+      let datasetOptions: any = {};
+      if (filterType === "daily") {
+        chartType = "line";
+        datasetOptions = {
+          backgroundColor: (color: string) => color + "33",
+          borderColor: (color: string) => color,
+          borderWidth: 2,
+          tension: 0, // straight lines
+          fill: false,
+          pointRadius: 4,
+          pointHoverRadius: 7,
+          pointBorderWidth: 2,
+        };
+      } else if (filterType === "weekly") {
+        chartType = "bar";
+        datasetOptions = {
+          backgroundColor: (color: string) => color + "66",
+          borderWidth: 2,
+          tension: 0,
+          fill: false,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          pointBorderWidth: 0,
+          barPercentage: 0.7,
+          categoryPercentage: 0.7,
+        };
+      } else if (filterType === "monthly") {
+        chartType = "line";
+        datasetOptions = {
+          backgroundColor: (color: string) => color + "33",
+          borderWidth: 2,
+          tension: 0.5,
+          fill: { target: "origin", above: undefined }, // will set color below
+          pointRadius: 6,
+          pointHoverRadius: 10,
+          pointBorderWidth: 2,
+        };
+      }
 
       // Ensure all datasets have the same labels and consistent data structure
-      const allLabels = prediction.data[0]?.week ?? [];
-      console.log("[DEBUG] Chart labels:", allLabels);
-      console.log(
-        "[DEBUG] Prediction data structure:",
-        prediction.data.map((d) => ({
-          name: d.name,
-          salesLength: d.sales?.length,
-          sales: d.sales,
-        }))
-      );
+      let allLabels = filteredData[0]?.week ?? [];
+      // For daily, only show the last 7 dates (one week)
+      if (filterType === "daily" && allLabels.length > 7) {
+        allLabels = allLabels.slice(-7);
+      }
+      // For weekly, only show the last 4 weeks (about 1 month)
+      if (filterType === "weekly" && allLabels.length > 4) {
+        allLabels = allLabels.slice(-4);
+      }
+      // For monthly, only show the last 12 months (or less if not available)
+      if (filterType === "monthly" && allLabels.length > 12) {
+        allLabels = allLabels.slice(-12);
+      }
 
       // Normalize datasets to ensure consistent data points
-      const normalizedDatasets = prediction.data.map((trend: any) => {
-        // Ensure sales array has same length as labels, fill with 0 if missing
+      const normalizedDatasets = filteredData.map((trend) => {
+        // For daily, align sales data to last 7 days
+        let salesData = trend.sales;
+        if (filterType === "daily" && salesData.length > 7) {
+          salesData = salesData.slice(-7);
+        }
+        // For weekly, align sales data to last 4 weeks
+        if (filterType === "weekly" && salesData.length > 4) {
+          salesData = salesData.slice(-4);
+        }
+        // For monthly, align sales data to last 12 months
+        if (filterType === "monthly" && salesData.length > 12) {
+          salesData = salesData.slice(-12);
+        }
         const normalizedSales = allLabels.map(
-          (_, index) => trend.sales[index] || 0
+          (_: string, index: number) => salesData[index] || 0
         );
-
-        return {
+        let base: any = {
           label: trend.name,
           data: normalizedSales,
-          borderColor: trend.color,
-          backgroundColor:
-            chartType === "bar" ? trend.color + "BB" : trend.color + "33",
-          borderWidth: 3,
-          tension: chartType === "line" ? 0.4 : 0,
-          fill:
-            chartType === "line"
-              ? { target: "origin", above: trend.color + "20" }
-              : false,
-          pointRadius: chartType === "line" ? 4 : 0,
-          pointHoverRadius: chartType === "line" ? 6 : 0,
-          pointBackgroundColor: trend.color,
-          pointBorderColor: "#fff",
-          pointBorderWidth: chartType === "line" ? 2 : 0,
-          // Bar chart specific options to reduce gaps
-          barPercentage: chartType === "bar" ? 0.95 : undefined,
-          categoryPercentage: chartType === "bar" ? 0.95 : undefined,
         };
+        if (filterType === "daily") {
+          base = {
+            ...base,
+            borderColor: datasetOptions.borderColor(trend.color),
+            backgroundColor: datasetOptions.backgroundColor(trend.color),
+            borderWidth: datasetOptions.borderWidth,
+            tension: datasetOptions.tension,
+            fill: datasetOptions.fill,
+            pointRadius: datasetOptions.pointRadius,
+            pointHoverRadius: datasetOptions.pointHoverRadius,
+            pointBackgroundColor: trend.color,
+            pointBorderColor: "#fff",
+            pointBorderWidth: datasetOptions.pointBorderWidth,
+          };
+        } else if (filterType === "weekly") {
+          base = {
+            ...base,
+            borderColor: trend.color,
+            backgroundColor: datasetOptions.backgroundColor(trend.color),
+            borderWidth: datasetOptions.borderWidth,
+            tension: datasetOptions.tension,
+            fill: datasetOptions.fill,
+            pointRadius: datasetOptions.pointRadius,
+            pointHoverRadius: datasetOptions.pointHoverRadius,
+            pointBackgroundColor: trend.color,
+            pointBorderColor: "#fff",
+            pointBorderWidth: datasetOptions.pointBorderWidth,
+            barPercentage: datasetOptions.barPercentage,
+            categoryPercentage: datasetOptions.categoryPercentage,
+          };
+        } else if (filterType === "monthly") {
+          base = {
+            ...base,
+            borderColor: trend.color,
+            backgroundColor: datasetOptions.backgroundColor(trend.color),
+            borderWidth: datasetOptions.borderWidth,
+            tension: datasetOptions.tension,
+            fill: { target: "origin", above: trend.color + "20" },
+            pointRadius: datasetOptions.pointRadius,
+            pointHoverRadius: datasetOptions.pointHoverRadius,
+            pointBackgroundColor: trend.color,
+            pointBorderColor: "#fff",
+            pointBorderWidth: datasetOptions.pointBorderWidth,
+          };
+        }
+        return base;
       });
 
       chart = new Chart(canvas, {
@@ -320,7 +384,6 @@ export default function Dashboard() {
                     return label;
                   });
 
-                  console.log("[DEBUG] Legend labels:", truncatedLabels);
                   return truncatedLabels;
                 },
               },
@@ -434,7 +497,10 @@ export default function Dashboard() {
         }
       }
     };
-  }, [prediction.data, loading, filterType]);
+  }, [prediction.data, loading, filterType, topItemsCount]);
+
+  // End of useEffect for top sales chart
+  // <-- Add this closing brace to end the useEffect, restoring function structure
 
   const renderFilterButtons = () => (
     <div className="w-full sm:w-auto">
@@ -470,7 +536,6 @@ export default function Dashboard() {
           >
             <option value={3}>Top 3</option>
             <option value={5}>Top 5</option>
-            <option value={6}>All 6</option>
             <option value={10}>Top 10</option>
           </select>
         </div>
@@ -488,7 +553,7 @@ export default function Dashboard() {
             {showHistoricalView ? "Hide" : "Show"}
           </span>
           <span className="xs:hidden">
-            {showHistoricalView ? "Hide Insights" : "Show Insights"}
+            {showHistoricalView ? "Hide Top Performers" : "Show Top Performers"}
           </span>
         </button>
       </div>
@@ -507,94 +572,54 @@ export default function Dashboard() {
   };
 
   const renderHistoricalInsights = () => {
-    if (!showHistoricalView || !historical.data) return null;
+    if (!showHistoricalView || !historicalData) return null;
+
+    // Determine how many top performers to show based on topItemsCount
+    const count = topItemsCount;
+    let performers = historicalData.top_performers.by_total_sales;
 
     return (
       <section className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 rounded-xl p-4 mb-6 border border-blue-500/30">
         <header className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-blue-500/20 rounded-lg">
-            <MdInsights className="text-blue-400 text-xl" />
+            <FaChartBar className="text-yellow-400 text-xl" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-blue-300">
-              Historical Analysis
-            </h3>
-            <p className="text-blue-200 text-sm">
-              {historical.data.overview.analysis_period} •{" "}
-              {historical.data.overview.total_sales} total sales
-            </p>
+            <h3 className="text-lg font-bold text-blue-300">Top Performers</h3>
           </div>
         </header>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Top Performers */}
-          <div className="bg-black/40 rounded-lg p-3">
-            <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
-              <FaChartBar className="text-yellow-400" />
-              Top Performers
-            </h4>
-            <div className="space-y-2">
-              {historical.data.top_performers.by_total_sales
-                .slice(0, 3)
-                .map((item, idx) => (
-                  <div
-                    key={item.item}
-                    className="flex justify-between items-center text-sm"
-                  >
-                    <span className="text-gray-300 truncate">{item.item}</span>
-                    <div className="text-right">
-                      <div className="text-white font-medium">
-                        {item.total_sales}
-                      </div>
-                      <div className="text-gray-400 text-xs">
-                        Avg: {item.avg_sales}
-                      </div>
+        <div className="bg-black/40 rounded-lg p-3">
+          <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
+            <FaChartBar className="text-yellow-400" />
+            Top Performers
+          </h4>
+          <div className="space-y-2">
+            {performers.slice(0, count).map(
+              (
+                item: {
+                  item: string;
+                  total_sales: number;
+                  avg_sales: number;
+                  frequency: number;
+                },
+                idx: number
+              ) => (
+                <div
+                  key={item.item}
+                  className="flex justify-between items-center text-sm"
+                >
+                  <span className="text-gray-300 truncate">{item.item}</span>
+                  <div className="text-right">
+                    <div className="text-white font-medium">
+                      {item.total_sales}
+                    </div>
+                    <div className="text-gray-400 text-xs">
+                      Avg: {item.avg_sales}
                     </div>
                   </div>
-                ))}
-            </div>
-          </div>
-
-          {/* Trends */}
-          <div className="bg-black/40 rounded-lg p-3">
-            <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
-              <FiTrendingUp className="text-green-400" />
-              Trends
-            </h4>
-            <div className="space-y-2">
-              {historical.data.trends.items_with_trends
-                .slice(0, 3)
-                .map((trend) => (
-                  <div
-                    key={trend.item}
-                    className="flex justify-between items-center text-sm"
-                  >
-                    <span className="text-gray-300 truncate">{trend.item}</span>
-                    <div className="flex items-center gap-2">
-                      {getTrendIcon(trend.trend_direction)}
-                      <span className="text-white text-xs">
-                        {trend.change_percent > 0 ? "+" : ""}
-                        {trend.change_percent}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-
-          {/* Insights */}
-          <div className="bg-black/40 rounded-lg p-3">
-            <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
-              <HiSparkles className="text-purple-400" />
-              Insights
-            </h4>
-            <div className="space-y-1">
-              {historical.data.insights.slice(0, 3).map((insight, idx) => (
-                <p key={idx} className="text-gray-300 text-xs leading-relaxed">
-                  • {insight}
-                </p>
-              ))}
-            </div>
+                </div>
+              )
+            )}
           </div>
         </div>
       </section>
@@ -626,17 +651,206 @@ export default function Dashboard() {
     </div>
   );
 
-  // Debug: Log current state
+  const offlineDataManager = useOfflineDataManager();
+
+  const { isOnline } = usePWA();
+
   console.log("Dashboard State:", {
     loading,
     isOnline,
     salesDataLength: prediction.data.length,
     historicalData: historical.data ? "loaded" : "none",
-    lowStockCount: lowStockIngredients.length,
-    expiringCount: expiringIngredients.length,
-    surplusCount: surplusIngredients.length,
+    lowStockCount: lowStock.data?.length,
+    expiringCount: expiring.data?.length,
+    expiredCount: expired.data?.length,
+    surplusCount: surplus.data?.length,
     filterType,
   });
+
+  // ML Forecast Chart as a child component
+  function MLForecastChart() {
+    const mlForecastCanvasRef = useRef<HTMLCanvasElement>(null);
+    const {
+      data: mlReportData,
+      loading: mlLoading,
+      fetchWeekReport,
+    } = useSimpleSalesReport();
+    // Fetch ML forecast data on mount
+    useEffect(() => {
+      fetchWeekReport();
+    }, []);
+
+    useEffect(() => {
+      console.log("[MLForecastChart] mlReportData:", mlReportData);
+      console.log("[MLForecastChart] mlLoading:", mlLoading);
+    }, [mlReportData, mlLoading]);
+
+    // Prepare ML chart data and holiday highlights
+    const mlChartData = (() => {
+      if (!mlReportData) return null;
+      const forecast = Array.isArray(mlReportData.forecast)
+        ? mlReportData.forecast
+        : [];
+      const historical = Array.isArray(mlReportData.historicalPredictions)
+        ? mlReportData.historicalPredictions
+        : [];
+      if (!forecast.length && !historical.length) return null;
+      const allWeeks = [
+        ...historical.map((w) => w.week_start),
+        ...forecast
+          .map((w) => w.week_start)
+          .filter((w) => !historical.some((h) => h.week_start === w)),
+      ];
+      const weekHolidayType: Record<string, string | null> = {};
+      historical.forEach((w) => {
+        weekHolidayType[w.week_start] = w.holiday_type || null;
+      });
+      forecast.forEach((w) => {
+        weekHolidayType[w.week_start] = w.holiday_type || null;
+      });
+      return {
+        labels: allWeeks,
+        datasets: [
+          {
+            label: "Actual Sales",
+            data: allWeeks.map((w) => {
+              const h = historical.find((x) => x.week_start === w);
+              return h ? h.actual_sales : null;
+            }),
+            borderColor: "#34d399",
+            backgroundColor: "rgba(52,211,153,0.2)",
+            tension: 0.3,
+            fill: false,
+            spanGaps: true,
+          },
+          {
+            label: "Predicted Sales",
+            data: allWeeks.map((w) => {
+              const h = historical.find((x) => x.week_start === w);
+              if (h) return h.predicted_sales;
+              const f = forecast.find((x) => x.week_start === w);
+              return f ? f.predicted_sales : null;
+            }),
+            borderColor: "#facc15",
+            backgroundColor: "rgba(250,204,21,0.2)",
+            borderDash: [6, 4],
+            tension: 0.3,
+            fill: false,
+            spanGaps: true,
+          },
+        ],
+        weekHolidayType,
+      };
+    })();
+
+    useEffect(() => {
+      if (!mlChartData || mlLoading) return;
+      const canvas = mlForecastCanvasRef.current;
+      if (!canvas) return;
+
+      const existingChart = Chart.getChart(canvas);
+      if (existingChart) existingChart.destroy();
+
+      let chart: Chart | null = null;
+      try {
+        const annotations: any = {};
+        if (mlChartData.weekHolidayType) {
+          mlChartData.labels.forEach((label: string, idx: number) => {
+            const type = mlChartData.weekHolidayType[label];
+            if (type === "official" || type === "custom") {
+              annotations[`holiday-${idx}`] = {
+                type: "box",
+                xMin: idx - 0.5,
+                xMax: idx + 0.5,
+                yScaleID: "y",
+                backgroundColor:
+                  type === "official"
+                    ? "rgba(59,130,246,0.12)"
+                    : "rgba(236,72,153,0.12)",
+                borderWidth: 0,
+              };
+            }
+          });
+        }
+
+        chart = new Chart(canvas, {
+          type: "line",
+          data: mlChartData,
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false }, // we’ll handle custom legend
+              tooltip: {
+                backgroundColor: "rgba(0,0,0,0.95)",
+                titleFont: { size: 14, weight: "bold" },
+                bodyFont: { size: 12 },
+                padding: 12,
+                cornerRadius: 8,
+                borderColor: "#fbbf24",
+                borderWidth: 2,
+              },
+              annotation: { annotations },
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                grid: { color: "#374151" },
+                ticks: { color: "#e5e7eb", font: { size: 11 } },
+              },
+              x: {
+                grid: { display: false },
+                ticks: { color: "#e5e7eb", font: { size: 11 } },
+              },
+            },
+            animation: { duration: 700, easing: "easeOutQuart" },
+          },
+        });
+      } catch (error) {
+        console.error("ML Forecast Chart creation failed:", error);
+      }
+
+      const handleResize = () => {
+        if (chart) chart.resize();
+      };
+      window.addEventListener("resize", handleResize);
+      return () => {
+        window.removeEventListener("resize", handleResize);
+        if (chart) chart.destroy();
+      };
+    }, [mlChartData, mlLoading]);
+
+    return (
+      <section
+        aria-label="ML Forecast Chart"
+        className="w-full h-auto bg-gradient-to-br from-black/95 to-slate-800
+                 rounded-2xl shadow-2xl border border-slate-700 p-4 sm:p-6 flex flex-col"
+      >
+        {/* Chart / States */}
+        <div className="flex-1 flex items-center justify-center min-h-[16rem] sm:min-h-[20rem] relative">
+          {mlLoading ? (
+            <div className="flex flex-col items-center justify-center gap-3 animate-pulse">
+              <div className="w-14 h-14 bg-yellow-400/20 rounded-full flex items-center justify-center">
+                <MdTrendingUp className="text-yellow-400 text-2xl animate-bounce" />
+              </div>
+              <p className="text-gray-400 text-sm">
+                Loading ML forecast data...
+              </p>
+            </div>
+          ) : mlChartData ? (
+            <>
+              <canvas ref={mlForecastCanvasRef} className="w-full h-full" />
+            </>
+          ) : (
+            <div className="text-center text-gray-500">
+              <MdTrendingUp className="mx-auto text-4xl mb-2 opacity-50" />
+              <p className="text-sm">No forecast data available.</p>
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section>
@@ -662,18 +876,18 @@ export default function Dashboard() {
                 {/* Sync Button */}
                 <div className="ml-auto hidden sm:block">
                   <SyncButton
-                    onSync={syncCriticalData}
-                    isLoading={offlineLoading}
+                    onSync={() => window.location.reload()}
+                    isLoading={false}
                     className="text-sm"
                   />
                 </div>
               </div>
 
               {/* Offline Data Banner */}
-              {(dashboardFromCache || inventoryFromCache) && (
+              {inventoryFromCache && (
                 <OfflineDataBanner
                   dataType="dashboard and inventory"
-                  isFromCache={dashboardFromCache || inventoryFromCache}
+                  isFromCache={inventoryFromCache}
                   className="mb-4"
                 />
               )}
@@ -706,11 +920,45 @@ export default function Dashboard() {
             {/* Stats Cards */}
             <section
               aria-label="Inventory Stats"
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8"
             >
               <OfflineCard
                 isFromCache={inventoryFromCache}
-                lastUpdated={lastDataUpdate || undefined}
+                lastUpdated={
+                  lastDataUpdate ? String(lastDataUpdate) : undefined
+                }
+                dataType="inventory"
+              >
+                <StatCard
+                  icon={<FaClock className="text-red-400 text-lg sm:text-xl" />}
+                  title="Expired Items"
+                  count={expiredItem.length}
+                  color="border-l-red-500"
+                  bgColor="bg-black/75"
+                />
+              </OfflineCard>
+
+              <OfflineCard
+                isFromCache={inventoryFromCache}
+                lastUpdated={
+                  lastDataUpdate ? String(lastDataUpdate) : undefined
+                }
+                dataType="inventory"
+              >
+                <StatCard
+                  icon={<FaClock className="text-red-400 text-lg sm:text-xl" />}
+                  title="Expiring Soon"
+                  count={expiringIngredients.length}
+                  color="border-l-red-500"
+                  bgColor="bg-black/75"
+                />
+              </OfflineCard>
+
+              <OfflineCard
+                isFromCache={inventoryFromCache}
+                lastUpdated={
+                  lastDataUpdate ? String(lastDataUpdate) : undefined
+                }
                 dataType="inventory"
               >
                 <StatCard
@@ -726,21 +974,9 @@ export default function Dashboard() {
 
               <OfflineCard
                 isFromCache={inventoryFromCache}
-                lastUpdated={lastDataUpdate || undefined}
-                dataType="inventory"
-              >
-                <StatCard
-                  icon={<FaClock className="text-red-400 text-lg sm:text-xl" />}
-                  title="Expiring Soon"
-                  count={expiringIngredients.length}
-                  color="border-l-red-500"
-                  bgColor="bg-black/75"
-                />
-              </OfflineCard>
-
-              <OfflineCard
-                isFromCache={inventoryFromCache}
-                lastUpdated={lastDataUpdate || undefined}
+                lastUpdated={
+                  lastDataUpdate ? String(lastDataUpdate) : undefined
+                }
                 dataType="inventory"
               >
                 <StatCard
@@ -748,7 +984,7 @@ export default function Dashboard() {
                     <FaWarehouse className="text-yellow-400 text-lg sm:text-xl" />
                   }
                   title="Surplus Items"
-                  count={surplusIngredients.length}
+                  count={surplus.data?.length ?? 0}
                   color="border-l-yellow-500"
                   bgColor="bg-black/75"
                 />
@@ -757,28 +993,25 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">
               <section className="xl:col-span-8 flex flex-col gap-4 sm:gap-6">
-                {/* Chart Card */}
+                {/* Chart Card: Top Selling Items */}
                 <section
                   aria-label="Sales Analytics"
                   className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-gray-400"
                 >
                   <header className="mb-3 sm:mb-4 lg:mb-6">
-                    {/* Title Section */}
                     <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                       <div className="p-1.5 sm:p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
                         <FaChartLine className="text-yellow-400 text-lg sm:text-xl" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <h2 className="text-lg sm:text-xl font-bold text-white">
-                          Sales Analytics
+                          Top Selling Items
                         </h2>
                         <p className="text-gray-400 text-xs sm:text-sm">
                           Track your top performing items
                         </p>
                       </div>
                     </div>
-
-                    {/* Filter Controls */}
                     <div className="w-full">{renderFilterButtons()}</div>
                   </header>
                   <div className="w-full h-56 xs:h-64 sm:h-72 md:h-80 lg:h-88 xl:h-[28rem] bg-gray-900/50 rounded-xl border border-gray-700">
@@ -793,34 +1026,256 @@ export default function Dashboard() {
                           </p>
                         </div>
                       </div>
+                    ) : error ? (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center text-red-400">
+                          <p className="text-lg font-semibold">
+                            Failed to load chart
+                          </p>
+                          <p className="text-sm mt-2">{String(error)}</p>
+                        </div>
+                      </div>
+                    ) : !predictionData.length ? (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center text-gray-400">
+                          <p className="text-lg font-semibold">
+                            No sales data available
+                          </p>
+                          <p className="text-sm mt-2">
+                            Try changing the date range or check back later.
+                          </p>
+                        </div>
+                      </div>
                     ) : (
                       <canvas
                         ref={topSalesCanvasRef}
-                        className="w-full h-full"
+                        className="w-full h-full "
                       />
                     )}
                   </div>
-                  {/* Historical Insights Section */}
-                  <div className="mt-6">
-                    {/* Historical Insights Section */}
-                    {renderHistoricalInsights()}
+                  <div className="mt-6">{renderHistoricalInsights()}</div>
+                </section>
+
+                <section
+                  aria-label="ML Sales Forecast"
+                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl 
+             p-4 sm:p-6 border border-gray-500/40 flex flex-col"
+                >
+                  s{/* Header */}
+                  <header className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-start sm:items-center gap-3">
+                      <div className="p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
+                        <FaChartLine className="text-yellow-400 text-lg sm:text-xl" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                          Sales Forecast
+                          <span className="relative group cursor-help">
+                            <AiOutlineInfoCircle
+                              size={18}
+                              className="text-yellow-400"
+                              aria-label="Forecast info"
+                              tabIndex={0}
+                            />
+                            <span
+                              role="tooltip"
+                              className="absolute left-6 top-1/2 -translate-y-1/2 z-20 w-max min-w-[200px] sm:min-w-[240px] 
+                         bg-black/90 text-yellow-100 text-xs rounded-lg px-3 py-2 shadow-lg border border-yellow-500 
+                         opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 
+                         pointer-events-none transition-opacity duration-200"
+                            >
+                              Forecasts are estimates only and may not be 100%
+                              accurate.
+                            </span>
+                          </span>
+                        </h2>
+                        <p className="text-gray-400 text-xs sm:text-sm mt-0.5">
+                          Actual vs Predicted Sales
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        (window.location.href = "/Features/Report/Report_Sales")
+                      }
+                      className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black 
+                 font-semibold text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-lg shadow 
+                 transition-all duration-200 w-full sm:w-auto justify-center"
+                      title="Go to Sales Report"
+                    >
+                      <FaChartLine className="text-sm" />
+                      View Full Report
+                    </button>
+                  </header>
+                  {/* Chart Area */}
+                  <div
+                    className="w-full relative aspect-[2/1] xs:aspect-[2.2/1] sm:aspect-[2.5/1] 
+               md:aspect-[2.8/1] lg:aspect-[3/1] xl:aspect-[3.5/1] flex items-center justify-center p-3"
+                  >
+                    <div className="w-full h-full min-h-[200px] flex items-center justify-center">
+                      <MLForecastChart />
+                    </div>
+                  </div>
+                  {/* Legend */}
+                  <div className="flex flex-wrap justify-center gap-4 mt-4 text-xs">
+                    <span className="flex items-center gap-1 text-blue-300">
+                      <span className="inline-block w-3 h-3 rounded-full bg-blue-400" />
+                      Official Holiday
+                    </span>
+                    <span className="flex items-center gap-1 text-pink-300">
+                      <span className="inline-block w-3 h-3 rounded-full bg-pink-400" />
+                      Custom Holiday
+                    </span>
+                  </div>
+                </section>
+
+                {/* Expired Ingredients Table */}
+                <section
+                  aria-label="Expired Ingredients"
+                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-pink-600/60"
+                >
+                  <header className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+                    <div className="p-1.5 sm:p-2 bg-red-700/30 rounded-lg">
+                      <MdWarning className="text-red-400 text-lg sm:text-xl" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-bold text-red-500">
+                        Expired Stock
+                      </h2>
+                      <p className="text-pink-200 text-xs sm:text-sm">
+                        Items that have already expired and need to be removed
+                      </p>
+                    </div>
+                  </header>
+                  <div className="overflow-x-auto rounded-lg">
+                    <table className="min-w-full text-xs sm:text-sm">
+                      <thead>
+                        <tr className="bg-pink-900/40 border-b border-red-600/40">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-400">
+                            Id
+                          </th>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-400">
+                            Name
+                          </th>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-400 hidden sm:table-cell">
+                            Category
+                          </th>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-400">
+                            Stock
+                          </th>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-400 hidden md:table-cell">
+                            Batch Date
+                          </th>
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-400">
+                            Expired
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {!expired.data || expired.data.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="py-6 sm:py-8 px-4 text-center text-red-300"
+                            >
+                              <div className="flex flex-col items-center justify-center gap-2 w-full">
+                                <MdWarning className="text-red-400 text-xl sm:text-2xl" />
+                                <p className="text-sm">
+                                  No expired ingredients found
+                                </p>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          expired.data?.map(
+                            (
+                              item: {
+                                id?: string | number;
+                                item_id?: string | number;
+                                item_name?: string;
+                                stock_quantity?: number;
+                                expiration_date?: string;
+                                category?: string;
+                                batch_date?: string;
+                              },
+                              idx: number
+                            ) => (
+                              <tr
+                                key={
+                                  item.id ||
+                                  `${item.item_name}-${item.expiration_date}-${idx}`
+                                }
+                                className="border-b border-pink-900/40 hover:bg-pink-900/10 transition-colors duration-200"
+                              >
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
+                                  <div className="truncate max-w-[120px] sm:max-w-none">
+                                    {item.item_id}
+                                  </div>
+                                </td>
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
+                                  <div className="truncate max-w-[120px] sm:max-w-none">
+                                    {item.item_name}
+                                  </div>
+                                </td>
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-red-200 hidden sm:table-cell">
+                                  {item.category || "N/A"}
+                                </td>
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
+                                  <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red-700/30 text-red-200 rounded-full text-xs font-medium">
+                                    {item.stock_quantity}
+                                  </span>
+                                </td>
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-red-200 hidden md:table-cell">
+                                  {item.batch_date
+                                    ? new Date(
+                                        item.batch_date
+                                      ).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                        year: "numeric",
+                                      })
+                                    : "N/A"}
+                                </td>
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-red-200">
+                                  <div className="text-xs">
+                                    {item.expiration_date
+                                      ? new Date(
+                                          item.expiration_date
+                                        ).toLocaleDateString("en-US", {
+                                          month: "short",
+                                          day: "numeric",
+                                          year:
+                                            window.innerWidth < 640
+                                              ? undefined
+                                              : "numeric",
+                                        })
+                                      : "N/A"}
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          )
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </section>
 
                 {/* Expiring Ingredients Table */}
                 <section
                   aria-label="Expiring Ingredients"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-red-500/30"
+                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-orange-500/60"
                 >
                   <header className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
-                    <div className="p-1.5 sm:p-2 bg-red-500/20 rounded-lg">
-                      <FaClock className="text-red-400 text-lg sm:text-xl" />
+                    <div className="p-1.5 sm:p-2 bg-orange-700/30 rounded-lg">
+                      <FaClock className="text-orange-400 text-lg sm:text-xl" />
                     </div>
                     <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-red-400">
+                      <h2 className="text-lg sm:text-xl font-bold text-orange-400">
                         Expiring Soon
                       </h2>
-                      <p className="text-gray-400 text-xs sm:text-sm">
+                      <p className="text-orange-200 text-xs sm:text-sm">
                         Items requiring immediate attention
                       </p>
                     </div>
@@ -828,36 +1283,36 @@ export default function Dashboard() {
                   <div className="overflow-x-auto rounded-lg">
                     <table className="min-w-full text-xs sm:text-sm">
                       <thead>
-                        <tr className="bg-red-500/10 border-b border-red-500/30">
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300">
+                        <tr className="bg-orange-900/40 border-b border-orange-500/40">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-orange-300">
                             Id
                           </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-orange-300">
                             Name
                           </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300 hidden sm:table-cell">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-orange-300 hidden sm:table-cell">
                             Category
                           </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-300">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-orange-300">
                             Stock
                           </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-300 hidden md:table-cell">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-orange-300 hidden md:table-cell">
                             Batch Date
                           </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-300">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-orange-300">
                             Expires
                           </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {expiringIngredients.length === 0 ? (
+                        {!expiring.data || expiring.data.length === 0 ? (
                           <tr>
                             <td
                               colSpan={6}
-                              className="py-6 sm:py-8 px-4 text-center text-gray-400"
+                              className="py-6 sm:py-8 px-4 text-center text-orange-200"
                             >
                               <div className="flex flex-col items-center justify-center gap-2 w-full">
-                                <FaClock className="text-gray-500 text-xl sm:text-2xl" />
+                                <FaClock className="text-orange-400 text-xl sm:text-2xl" />
                                 <p className="text-sm">
                                   No expiring ingredients found
                                 </p>
@@ -865,61 +1320,74 @@ export default function Dashboard() {
                             </td>
                           </tr>
                         ) : (
-                          expiringIngredients.map((item, idx) => (
-                            <tr
-                              key={
-                                item.id ||
-                                `${item.item_name}-${item.expiration_date}-${idx}`
-                              }
-                              className="border-b border-gray-700 hover:bg-red-500/5 transition-colors duration-200"
-                            >
-                              <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
-                                <div className="truncate max-w-[120px] sm:max-w-none">
-                                  {item.item_id}
-                                </div>
-                              </td>
-                              <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
-                                <div className="truncate max-w-[120px] sm:max-w-none">
-                                  {item.item_name}
-                                </div>
-                              </td>
-                              <td className="py-2 sm:py-3 px-2 sm:px-4 text-gray-300 hidden sm:table-cell">
-                                {item.category || "N/A"}
-                              </td>
-                              <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
-                                <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red-500/20 text-red-300 rounded-full text-xs font-medium">
-                                  {item.stock_quantity}
-                                </span>
-                              </td>
-                              <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-gray-300 hidden md:table-cell">
-                                {item.batch_date
-                                  ? new Date(
-                                      item.batch_date
-                                    ).toLocaleDateString("en-US", {
-                                      month: "short",
-                                      day: "numeric",
-                                      year: "numeric",
-                                    })
-                                  : "N/A"}
-                              </td>
-                              <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-gray-300">
-                                <div className="text-xs">
-                                  {item.expiration_date
+                          expiring.data?.map(
+                            (
+                              item: {
+                                id?: string | number;
+                                item_id?: string | number;
+                                item_name?: string;
+                                stock_quantity?: number;
+                                expiration_date?: string;
+                                category?: string;
+                                batch_date?: string;
+                              },
+                              idx: number
+                            ) => (
+                              <tr
+                                key={
+                                  item.id ||
+                                  `${item.item_name}-${item.expiration_date}-${idx}`
+                                }
+                                className="border-b border-orange-900/40 hover:bg-orange-900/10 transition-colors duration-200"
+                              >
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
+                                  <div className="truncate max-w-[120px] sm:max-w-none">
+                                    {item.item_id}
+                                  </div>
+                                </td>
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
+                                  <div className="truncate max-w-[120px] sm:max-w-none">
+                                    {item.item_name}
+                                  </div>
+                                </td>
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-orange-200 hidden sm:table-cell">
+                                  {item.category || "N/A"}
+                                </td>
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
+                                  <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-orange-700/30 text-orange-200 rounded-full text-xs font-medium">
+                                    {item.stock_quantity}
+                                  </span>
+                                </td>
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-orange-200 hidden md:table-cell">
+                                  {item.batch_date
                                     ? new Date(
-                                        item.expiration_date
+                                        item.batch_date
                                       ).toLocaleDateString("en-US", {
                                         month: "short",
                                         day: "numeric",
-                                        year:
-                                          window.innerWidth < 640
-                                            ? undefined
-                                            : "numeric",
+                                        year: "numeric",
                                       })
                                     : "N/A"}
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                                </td>
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-orange-200">
+                                  <div className="text-xs">
+                                    {item.expiration_date
+                                      ? new Date(
+                                          item.expiration_date
+                                        ).toLocaleDateString("en-US", {
+                                          month: "short",
+                                          day: "numeric",
+                                          year:
+                                            window.innerWidth < 640
+                                              ? undefined
+                                              : "numeric",
+                                        })
+                                      : "N/A"}
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          )
                         )}
                       </tbody>
                     </table>
@@ -932,24 +1400,50 @@ export default function Dashboard() {
                 className="xl:col-span-4 flex flex-col gap-4 sm:gap-6 mt-4 xl:mt-0"
                 aria-label="Inventory Sidebar"
               >
+                {/* Calendar Widget */}
+                <section
+                  aria-label="Calendar Widget"
+                  className=" rounded-2xl shadow-xl p-2 sm:p-3"
+                >
+                  <HolidayCalendar
+                    holidays={customHolidays.data || []}
+                    onAdd={handleAddHoliday}
+                    onEdit={handleEditHoliday}
+                  />
+                  {modalOpen && (
+                    <HolidayFormModal
+                      initial={
+                        modalEdit ||
+                        (modalDate
+                          ? { date: modalDate, name: "", description: "" }
+                          : undefined)
+                      }
+                      isEdit={!!modalEdit}
+                      onSave={handleSaveHoliday}
+                      onCancel={handleCancelModal}
+                      onDelete={modalEdit ? handleDeleteHoliday : undefined}
+                    />
+                  )}
+                </section>
+
                 {/* Low Stock */}
                 <section
                   aria-label="Low Stock"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-orange-400"
+                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-yellow-500"
                 >
                   <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                    <div className="p-1.5 sm:p-2 bg-orange-500/20 rounded-lg">
-                      <FaExclamationTriangle className="text-orange-400 text-base sm:text-lg" />
+                    <div className="p-1.5 sm:p-2 bg-yellow-700/30 rounded-lg">
+                      <FaExclamationTriangle className="text-yellow-400 text-base sm:text-lg" />
                     </div>
                     <div>
-                      <h2 className="text-base sm:text-lg font-bold text-orange-400">
+                      <h2 className="text-base sm:text-lg font-bold text-yellow-400">
                         Low Stock
                       </h2>
-                      <p className="text-gray-400 text-xs">Need restocking</p>
+                      <p className="text-yellow-200 text-xs">Need restocking</p>
                     </div>
                   </header>
                   <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
-                    {lowStockIngredients.length === 0 ? (
+                    {!lowStock.data || lowStock.data.length === 0 ? (
                       <div className="text-center py-3 sm:py-4">
                         <FaBoxes className="text-gray-500 text-lg sm:text-xl mx-auto mb-2" />
                         <p className="text-gray-400 text-xs sm:text-sm">
@@ -957,42 +1451,53 @@ export default function Dashboard() {
                         </p>
                       </div>
                     ) : (
-                      lowStockIngredients.map((item, idx) => (
-                        <div
-                          key={item.id || `${item.item_name}-${idx}`}
-                          className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-2 sm:p-3 hover:bg-orange-500/15 transition-colors duration-200"
-                        >
-                          <div className="flex justify-between items-center">
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                <span className="text-orange-300 font-semibold">
-                                  ID:
-                                </span>{" "}
-                                {item.item_id}
-                                <span className="mx-1 text-gray-400">|</span>
-                                <span className="font-semibold">
-                                  {item.item_name}
-                                </span>
-                              </p>
-                              <p className="text-orange-300 text-xs">
-                                Stock: {item.stock_quantity}
-                              </p>
-                            </div>
-                            <div className="text-right flex-shrink-0 ml-2">
-                              <p className="text-gray-400 text-xs">
-                                {item.expiration_date
-                                  ? new Date(
-                                      item.expiration_date
-                                    ).toLocaleDateString("en-US", {
-                                      month: "short",
-                                      day: "numeric",
-                                    })
-                                  : "N/A"}
-                              </p>
+                      lowStock.data?.map(
+                        (
+                          item: {
+                            id?: string | number;
+                            item_id?: string | number;
+                            item_name?: string;
+                            stock_quantity?: number;
+                            expiration_date?: string;
+                          },
+                          idx: number
+                        ) => (
+                          <div
+                            key={item.id || `${item.item_name}-${idx}`}
+                            className="bg-yellow-700/10 border border-yellow-700/20 rounded-lg p-2 sm:p-3 hover:bg-yellow-700/15 transition-colors duration-200"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-white text-xs sm:text-sm truncate">
+                                  <span className="text-yellow-300 font-semibold">
+                                    ID:
+                                  </span>{" "}
+                                  {item.item_id}
+                                  <span className="mx-1 text-gray-400">|</span>
+                                  <span className="font-semibold">
+                                    {item.item_name}
+                                  </span>
+                                </p>
+                                <p className="text-yellow-300 text-xs">
+                                  Stock: {item.stock_quantity}
+                                </p>
+                              </div>
+                              <div className="text-right flex-shrink-0 ml-2">
+                                <p className="text-gray-400 text-xs">
+                                  {item.expiration_date
+                                    ? new Date(
+                                        item.expiration_date
+                                      ).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                      })
+                                    : "N/A"}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))
+                        )
+                      )
                     )}
                   </div>
                 </section>
@@ -1000,21 +1505,21 @@ export default function Dashboard() {
                 {/* Surplus */}
                 <section
                   aria-label="Surplus Stock"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-yellow-400"
+                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-green-500"
                 >
                   <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                    <div className="p-1.5 sm:p-2 bg-yellow-500/20 rounded-lg">
-                      <FaWarehouse className="text-yellow-400 text-base sm:text-lg" />
+                    <div className="p-1.5 sm:p-2 bg-green-700/30 rounded-lg">
+                      <FaWarehouse className="text-green-400 text-base sm:text-lg" />
                     </div>
                     <div>
-                      <h2 className="text-base sm:text-lg font-bold text-yellow-400">
+                      <h2 className="text-base sm:text-lg font-bold text-green-400">
                         Surplus Stock
                       </h2>
-                      <p className="text-gray-400 text-xs">Excess inventory</p>
+                      <p className="text-green-200 text-xs">Excess inventory</p>
                     </div>
                   </header>
                   <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
-                    {surplusIngredients.length === 0 ? (
+                    {!surplus.data || surplus.data.length === 0 ? (
                       <div className="text-center py-3 sm:py-4">
                         <FaWarehouse className="text-gray-500 text-lg sm:text-xl mx-auto mb-2" />
                         <p className="text-gray-400 text-xs sm:text-sm">
@@ -1022,42 +1527,53 @@ export default function Dashboard() {
                         </p>
                       </div>
                     ) : (
-                      surplusIngredients.map((item, idx) => (
-                        <div
-                          key={item.id || `${item.item_name}-${idx}`}
-                          className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2 sm:p-3 hover:bg-yellow-500/15 transition-colors duration-200"
-                        >
-                          <div className="flex justify-between items-center">
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                <span className="text-yellow-300 font-semibold">
-                                  ID:
-                                </span>{" "}
-                                {item.item_id}
-                                <span className="mx-1 text-gray-400">|</span>
-                                <span className="font-semibold">
-                                  {item.item_name}
-                                </span>
-                              </p>
-                              <p className="text-yellow-300 text-xs">
-                                Stock: {item.stock_quantity}
-                              </p>
-                            </div>
-                            <div className="text-right flex-shrink-0 ml-2">
-                              <p className="text-gray-400 text-xs">
-                                {item.expiration_date
-                                  ? new Date(
-                                      item.expiration_date
-                                    ).toLocaleDateString("en-US", {
-                                      month: "short",
-                                      day: "numeric",
-                                    })
-                                  : "N/A"}
-                              </p>
+                      surplus.data?.map(
+                        (
+                          item: {
+                            id?: string | number;
+                            item_id?: string | number;
+                            item_name?: string;
+                            stock_quantity?: number;
+                            expiration_date?: string;
+                          },
+                          idx: number
+                        ) => (
+                          <div
+                            key={item.id || `${item.item_name}-${idx}`}
+                            className="bg-green-700/10 border border-green-700/20 rounded-lg p-2 sm:p-3 hover:bg-green-700/15 transition-colors duration-200"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-white text-xs sm:text-sm truncate">
+                                  <span className="text-green-300 font-semibold">
+                                    ID:
+                                  </span>{" "}
+                                  {item.item_id}
+                                  <span className="mx-1 text-gray-400">|</span>
+                                  <span className="font-semibold">
+                                    {item.item_name}
+                                  </span>
+                                </p>
+                                <p className="text-green-300 text-xs">
+                                  Stock: {item.stock_quantity}
+                                </p>
+                              </div>
+                              <div className="text-right flex-shrink-0 ml-2">
+                                <p className="text-gray-400 text-xs">
+                                  {item.expiration_date
+                                    ? new Date(
+                                        item.expiration_date
+                                      ).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                      })
+                                    : "N/A"}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))
+                        )
+                      )
                     )}
                   </div>
                 </section>

@@ -72,9 +72,32 @@ export function useDashboardAPI() {
     }
   }, []);
 
+  // Fetch expired ingredients with offline support
+  const fetchExpired = useCallback(async () => {
+    try {
+      const response = await offlineAxiosRequest(
+        {
+          method: "GET",
+          url: "/api/dashboard/expired-ingredients",
+        },
+        {
+          cacheKey: "dashboard-expired",
+          cacheHours: 24, // Expired items don't change often
+          showErrorToast: true,
+          fallbackData: [],
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error("Failed to fetch expired ingredients:", error);
+      return [];
+    }
+  }, []);
+
   return {
     fetchLowStock,
     fetchExpiring,
     fetchSurplus,
+    fetchExpired,
   };
 }

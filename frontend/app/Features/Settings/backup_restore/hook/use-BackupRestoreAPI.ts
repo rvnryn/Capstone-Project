@@ -1,5 +1,3 @@
-import CryptoJS from "crypto-js";
-import axiosInstance from "@/app/lib/axios";
 import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 export function useBackupRestoreAPI() {
@@ -7,45 +5,39 @@ export function useBackupRestoreAPI() {
   const getToken = () =>
     typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-  const backup = async (password: string = ""): Promise<void> => {
-    // Use offline-aware axios for GET request, get raw gzip backup
-    const response = await offlineAxiosRequest(
+  const backup = async (password: string): Promise<void> => {
+    if (!password) throw new Error("Password is required for backup.");
+    // Request backup from backend, passing password as query param (required)
+    const response = await offlineAxiosRequest<{ data: Blob; headers?: any }>(
       {
         method: "GET",
-        url: "/api/backup",
+        url: `/api/backup?password=${encodeURIComponent(password)}`,
         responseType: "blob",
       },
       {
         cacheKey: "backup-data",
-        cacheHours: 0, // Backups should not be cached
+        cacheHours: 0,
         showErrorToast: true,
-        fallbackData: null,
+        fallbackData: undefined,
       }
     );
-
     if (!response.data) {
       throw new Error("Backup not available offline");
     }
-
-    let blob: Blob;
-    let filename: string;
-    if (password) {
-      // Read the blob as ArrayBuffer, then encrypt as base64 string
-      const arrayBuffer = await (response.data as Blob).arrayBuffer();
-      const wordArray = CryptoJS.lib.WordArray.create(
-        new Uint8Array(arrayBuffer)
-      );
-      const encrypted = CryptoJS.AES.encrypt(wordArray, password).toString();
-      blob = new Blob([encrypted], { type: "text/plain" });
-      filename = `backup-${new Date()
-        .toISOString()
-        .replace(/[:.]/g, "-")}.json.enc`;
+    // Use filename from content-disposition header if available
+    let filename = `backup-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    const disposition =
+      response.data.headers?.["content-disposition"] ||
+      response.data.headers?.get?.("content-disposition");
+    if (disposition) {
+      const match = /filename=([^;]+)/.exec(disposition);
+      if (match) filename = match[1].replace(/"/g, "");
     } else {
-      blob = new Blob([response.data], { type: "application/gzip" });
-      filename = `backup-${new Date()
-        .toISOString()
-        .replace(/[:.]/g, "-")}.json`;
+      filename += ".json.enc";
     }
+    const blob = new Blob([response.data.data], {
+      type: (response.data.data as Blob).type || "application/octet-stream",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -57,60 +49,19 @@ export function useBackupRestoreAPI() {
   };
 
   // Upload restore file to FastAPI, decrypt and decompress if needed
-  const restore = async (
-    password: string = "",
-    file: File
-  ): Promise<boolean> => {
+  const restore = async (password: string, file: File): Promise<boolean> => {
     if (!file || !file.name) {
       throw new Error("No file selected for restore or file is invalid.");
     }
-    let jsonText: string = "";
-    const isGzipped = file.name.endsWith(".gz") || file.name.endsWith(".enc");
-    const isEncrypted = file.name.endsWith(".enc");
-
-    if (isGzipped) {
-      // Always treat as binary
-      const arrayBuffer = await file.arrayBuffer();
-      let dataBuffer = new Uint8Array(arrayBuffer);
-      // If encrypted, decrypt first
-      if (isEncrypted) {
-        const encryptedText = new TextDecoder("latin1").decode(dataBuffer);
-        if (!password)
-          throw new Error("Password required for encrypted backup.");
-        const decrypted = CryptoJS.AES.decrypt(encryptedText, password);
-        // Convert decrypted WordArray to Uint8Array
-        const decryptedBytes = CryptoJS.enc.Latin1.stringify(decrypted);
-        const byteArray = new Uint8Array(
-          decryptedBytes.split("").map((c) => c.charCodeAt(0))
-        );
-        dataBuffer = byteArray;
-      }
-      // Now decompress
-      try {
-        const pako = (await import("pako")).default;
-        jsonText = pako.ungzip(dataBuffer, { to: "string" });
-      } catch (e) {
-        throw new Error(
-          "Failed to decompress gzipped backup: " + (e as Error).message
-        );
-      }
-    } else if (isEncrypted) {
-      // .json.enc: decrypt, then treat as text
-      const fileText = await file.text();
-      if (!password) throw new Error("Password required for encrypted backup.");
-      const decrypted = CryptoJS.AES.decrypt(fileText, password);
-      jsonText = decrypted.toString(CryptoJS.enc.Utf8);
-      if (!jsonText)
-        throw new Error("Incorrect password or corrupted backup file.");
-    } else {
-      // Plain .json
-      jsonText = await file.text();
+    // Only require password for .enc files
+    if (file.name.endsWith(".enc") && !password) {
+      throw new Error("Password is required for restore.");
     }
-
-    const blob = new Blob([jsonText], { type: "application/json" });
+    // Send file and password as form fields
     const formData = new FormData();
-    formData.append("file", blob, "restore.json");
-    const token = getToken(); // <-- Add this line
+    formData.append("file", file, file.name);
+    formData.append("password", password || "");
+    const token = getToken();
     try {
       await offlineAxiosRequest(
         {
@@ -137,13 +88,15 @@ export function useBackupRestoreAPI() {
     access_token: string,
     backupPassword: string
   ): Promise<string> => {
+    if (!backupPassword)
+      throw new Error("Password is required for Drive backup.");
     try {
       const token = getToken();
       const response = await offlineAxiosRequest(
         {
           method: "POST",
           url: "/api/backup_drive",
-          data: { access_token },
+          data: { access_token, password: backupPassword },
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -167,15 +120,17 @@ export function useBackupRestoreAPI() {
   // Restore from Google Drive
   const restoreFromDrive = async (
     access_token: string,
-    file_id: string
+    file_id: string,
+    password: string
   ): Promise<boolean> => {
+    if (!password) throw new Error("Password is required for Drive restore.");
     try {
       const token = getToken();
       await offlineAxiosRequest(
         {
           method: "POST",
           url: "/api/restore_drive",
-          data: { access_token, file_id },
+          data: { access_token, file_id, password },
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -196,5 +151,79 @@ export function useBackupRestoreAPI() {
     }
   };
 
-  return { backup, restore, backupToDrive, restoreFromDrive };
+  const backupToS3 = async (
+    backupPassword: string,
+    filename?: string
+  ): Promise<string> => {
+    if (!backupPassword) throw new Error("Password is required for S3 backup.");
+    try {
+      const token = getToken();
+      const response = await offlineAxiosRequest(
+        {
+          method: "POST",
+          url: "/api/backup_s3",
+          data: { password: backupPassword, ...(filename ? { filename } : {}) },
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        },
+        {
+          showErrorToast: true,
+        }
+      );
+      return response.data.filename;
+    } catch (error: any) {
+      const errData = error?.response?.data;
+      throw new Error(
+        (errData && (errData.detail || JSON.stringify(errData))) ||
+          error.message ||
+          String(error)
+      );
+    }
+  };
+
+  const restoreFromS3 = async (
+    filename: string | undefined,
+    password: string
+  ): Promise<boolean> => {
+    // Only require password for .enc files
+    if (filename && filename.endsWith(".enc") && !password) {
+      throw new Error("Password is required for S3 restore.");
+    }
+    const token = getToken();
+    try {
+      await offlineAxiosRequest(
+        {
+          method: "POST",
+          url: "/api/restore_s3",
+          data: filename ? { filename, password } : { password },
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        },
+        {
+          showErrorToast: true,
+        }
+      );
+      return true;
+    } catch (error: any) {
+      const errData = error?.response?.data;
+      throw new Error(
+        (errData && (errData.detail || JSON.stringify(errData))) ||
+          error.message ||
+          String(error)
+      );
+    }
+  };
+
+  return {
+    backup,
+    restore,
+    backupToDrive,
+    restoreFromDrive,
+    restoreFromS3,
+    backupToS3,
+  };
 }

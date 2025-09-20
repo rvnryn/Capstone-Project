@@ -80,48 +80,80 @@ export default function ViewSupplier() {
     });
   };
 
-  const getMainContentStyles = () =>
-    `transition-all duration-300 pb-8 md:pb-12 pt-28 px-4 sm:px-6 md:px-8 lg:px-10 ${
-      isMobile ? "ml-0" : isMenuOpen ? "ml-64" : "ml-20"
-    }`;
-
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-400 to-yellow-500">
+      <section className="text-white font-poppins">
         <NavigationBar />
-        <main className={getMainContentStyles()}>
-          <div className="max-w-3xl mx-auto">
-            <div className="bg-black rounded-3xl shadow-2xl p-10 flex justify-center items-center">
-              <div className="animate-pulse text-yellow-400 text-xl font-semibold">
-                Loading supplier details...
+        <ResponsiveMain>
+          <main
+            className="pb-2 xs:pb-4 sm:pb-6 md:pb-8 lg:pb-10 xl:pb-12 pt-16 xs:pt-20 sm:pt-24 md:pt-28 px-1 xs:px-2 sm:px-3 md:px-4 lg:px-6 xl:px-8 2xl:px-10"
+            aria-label="View Supplier main content"
+            tabIndex={-1}
+          >
+            <div className="max-w-full sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl 2xl:max-w-4xl mx-auto w-full"></div>
+            <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-xl xs:rounded-2xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8">
+              <div className="flex flex-col items-center justify-center py-4 xs:py-6 sm:py-8 md:py-12">
+                <div className="relative mb-2 xs:mb-3 sm:mb-4">
+                  <div className="absolute inset-0 bg-yellow-400/20 rounded-full blur-sm xs:blur-md sm:blur-lg"></div>
+                  <div className="relative bg-gradient-to-br from-yellow-400 to-yellow-500 p-2 xs:p-2.5 sm:p-3 rounded-full animate-pulse">
+                    <FiEye className="text-black text-lg xs:text-xl sm:text-2xl md:text-3xl" />
+                  </div>
+                </div>
+                <div className="text-center">
+                  <h2 className="text-sm xs:text-base sm:text-lg md:text-xl font-bold text-yellow-400 mb-1 xs:mb-1.5">
+                    Loading Supplier Details
+                  </h2>
+                  <div className="text-gray-400 text-xs xs:text-sm sm:text-base">
+                    Please wait while we fetch the supplier information...
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </main>
-      </div>
+          </main>
+        </ResponsiveMain>
+      </section>
     );
   }
 
   if (!supplier) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-400 to-yellow-500">
+      <section className="text-white font-poppins">
         <NavigationBar />
-        <main className={getMainContentStyles()}>
-          <div className="max-w-3xl mx-auto">
-            <div className="bg-black rounded-3xl shadow-2xl p-10 text-center">
-              <h2 className="text-2xl text-yellow-400 mb-4 font-bold">
-                Supplier Not Found
-              </h2>
-              <button
-                onClick={() => router.push(routes.supplier)}
-                className="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-xl font-semibold transition-all duration-200"
-              >
-                Back to Suppliers
-              </button>
+        <ResponsiveMain>
+          <main
+            className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
+            aria-label="Supplier main content"
+            tabIndex={-1}
+          >
+            <div className="max-w-full sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl 2xl:max-w-4xl mx-auto w-full">
+              <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-xl xs:rounded-2xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8">
+                <div className="text-center py-4 xs:py-6 sm:py-8 md:py-12">
+                  <div className="relative mb-2 xs:mb-3 sm:mb-4">
+                    <div className="absolute inset-0 bg-red-400/20 rounded-full blur-lg"></div>
+                    <div className="relative bg-gradient-to-br from-red-400 to-red-500 p-3 rounded-full">
+                      <FiEye className="text-white text-2xl sm:text-3xl" />
+                    </div>
+                  </div>
+                  <h2 className="text-lg sm:text-xl font-bold text-white mb-2">
+                    Supplier Not Found
+                  </h2>
+                  <div className="text-gray-400 text-xs sm:text-sm mb-6 max-w-md mx-auto leading-relaxed">
+                    The supplier you're looking for could not be found. It may
+                    have been removed or the link is invalid.
+                  </div>
+                  <button
+                    onClick={() => router.push(routes.supplier)}
+                    className="group flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 py-2 sm:px-6 sm:py-3 rounded-lg font-semibold transition-all duration-300 cursor-pointer text-xs sm:text-base shadow-lg hover:shadow-yellow-400/25 mx-auto"
+                  >
+                    <FiArrowLeft className="group-hover:-translate-x-1 transition-transform duration-300" />
+                    Back to Suppliers
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </main>
-      </div>
+          </main>
+        </ResponsiveMain>
+      </section>
     );
   }
 
@@ -136,7 +168,6 @@ export default function ViewSupplier() {
         >
           <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-xl xs:rounded-2xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8">
-              {/* Enhanced Header */}
               <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
                 <div className="relative">
                   <div className="absolute inset-0 bg-yellow-400/20 rounded-full blur-lg"></div>

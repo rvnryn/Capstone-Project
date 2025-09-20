@@ -1,3 +1,4 @@
+"use client";
 import { useState } from "react";
 import axiosInstance from "@/app/lib/axios";
 import { offlineAxiosRequest } from "@/app/utils/offlineAxios";

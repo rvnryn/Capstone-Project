@@ -1,10 +1,19 @@
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query, Depends, Request
+from slowapi.util import get_remote_address
+from slowapi import Limiter
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from typing import List, Dict, Any
 import pandas as pd
 from datetime import datetime, timedelta
 from app.supabase import get_db
+
+# ML imports
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
 router = APIRouter()
 
@@ -279,8 +288,73 @@ def analyze_historical_data(data: List[dict]) -> Dict[str, Any]:
     return analysis
 
 
+# --- ML-based predictive analytics endpoint ---
+@limiter.limit("10/minute")
+@router.get("/predict_next_month_top_sales")
+async def predict_next_month_top_sales(
+    request: Request,
+    top_n: int = Query(3, description="Number of top items to predict"),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Predict next month's top selling products using linear regression on historical sales data.
+    """
+    sales_data = await get_sales_data(
+        session, days=365
+    )  # Use 1 year of data for better seasonality
+    if not sales_data:
+        return {"message": "Not enough historical data for prediction."}
+
+    df = pd.DataFrame(sales_data)
+    df["date"] = pd.to_datetime(df["date"])
+
+    # Prepare prediction for each item
+    predictions = []
+    next_month_start = (
+        datetime.utcnow().replace(day=1) + pd.DateOffset(months=1)
+    ).to_pydatetime()
+    next_month_end = (
+        next_month_start + pd.DateOffset(months=1) - pd.DateOffset(days=1)
+    ).to_pydatetime()
+    days_in_next_month = (next_month_end - next_month_start).days + 1
+
+    for item in df["item"].unique():
+        item_df = df[df["item"] == item].copy()
+        if len(item_df) < 10:
+            continue  # Not enough data for this item
+        # Aggregate by day
+        daily = item_df.groupby("date")["sales"].sum().reset_index()
+        # Convert date to ordinal for regression
+        daily = daily.sort_values("date")
+        X = daily["date"].map(datetime.toordinal).values.reshape(-1, 1)
+        y = daily["sales"].values
+        # Fit linear regression
+        model = LinearRegression()
+        model.fit(X, y)
+        # Predict for each day in next month
+        future_dates = [
+            next_month_start + timedelta(days=i) for i in range(days_in_next_month)
+        ]
+        X_future = np.array([d.toordinal() for d in future_dates]).reshape(-1, 1)
+        y_pred = model.predict(X_future)
+        y_pred = np.clip(y_pred, 0, None)  # No negative sales
+        total_pred_sales = float(np.sum(y_pred))
+        predictions.append({"item": item, "predicted_sales": total_pred_sales})
+
+    # Sort and get top N
+    predictions = sorted(predictions, key=lambda x: x["predicted_sales"], reverse=True)
+    top_predictions = predictions[:top_n]
+
+    return {
+        "message": "Based on historical data, these products are likely to be the top sellers next month.",
+        "top_sellers": top_predictions,
+    }
+
+
+@limiter.limit("10/minute")
 @router.get("/predict_top_sales")
 async def get_top_sales_historical(
+    request: Request,
     timeframe: str = Query("daily"),
     top_n: int = Query(3, description="Number of top items to show"),
     session: AsyncSession = Depends(get_db),
@@ -369,8 +443,10 @@ async def get_top_sales_historical(
     return response
 
 
+@limiter.limit("10/minute")
 @router.get("/historical_analysis")
 async def get_historical_analysis(
+    request: Request,
     days: int = Query(90, description="Number of days to analyze"),
     session: AsyncSession = Depends(get_db),
 ):

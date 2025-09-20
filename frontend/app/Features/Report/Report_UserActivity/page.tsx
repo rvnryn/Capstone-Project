@@ -3,11 +3,9 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
-import UserActivityImg from "@/public/Report_UserActivity.png";
 import * as XLSX from "xlsx";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import dayjs from "dayjs";
-import axios from "@/app/lib/axios";
 import {
   FaSearch,
   FaDownload,
@@ -22,8 +20,10 @@ import { MdCheckCircle, MdAssessment } from "react-icons/md";
 import { TbReportAnalytics } from "react-icons/tb";
 import { FiBarChart } from "react-icons/fi";
 import { useUserActivityLogAPI } from "./hook/use-userActivityLogAPI";
-const CLIENT_ID =
-  "72672884523-epq2tf1eu53h6cvrq6jotgfs9osrnvpe.apps.googleusercontent.com";
+import { saveAs } from "file-saver";
+import { supabase } from "@/app/utils/Server/supabaseClient";
+
+const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID as string;
 const SHEET_RANGE = "Sheet1!A1";
 
 interface GoogleSheetIntegrationProps {
@@ -92,9 +92,26 @@ const Report_UserActivity = () => {
     if (reportDate) params.report_date = reportDate;
     if (role) params.role = role;
     fetchLogs(params);
-  }, [reportDate, role]);
 
-  // Remove redeclaration and update state instead
+    const channel = supabase
+      .channel("user_activity_log_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_activity_log" },
+        () => {
+          const params: any = {};
+          if (reportDate) params.report_date = reportDate;
+          if (role) params.role = role;
+          fetchLogs(params);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [reportDate, role, fetchLogs]);
+
   useEffect(() => {
     setUserActivityData(logs);
   }, [logs]);
@@ -292,8 +309,11 @@ const Report_UserActivity = () => {
     const ws = XLSX.utils.aoa_to_sheet(values);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "User Activity Report");
-    XLSX.writeFile(wb, `User_Activity_Report - ${getFormattedDate()}.xlsx`);
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([wbout], { type: "application/octet-stream" });
+    saveAs(blob, `User_Activity_Report_${getFormattedDate()}.xlsx`);
     setExportSuccess(true);
+    setShowPopup(false);
   };
 
   const appendToGoogleSheet = async (

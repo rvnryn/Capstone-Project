@@ -1,3 +1,8 @@
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi.responses import JSONResponse
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -18,13 +23,32 @@ from .routes import inventory_settings
 from .routes import backup_restore, automaticbackup
 from .routes import inventory_log
 from .routes import userActivity
+from .routes import custom_holiday
+from .routes import ph_holidays
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(check_inventory_alerts, "interval", minutes=5)
-scheduler.start()
-print("Scheduler started and job added")
 
 app = FastAPI()
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+
+# Add rate limit exception handler
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request, exc):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Please try again later."},
+    )
+
+
+from slowapi.middleware import SlowAPIMiddleware
+
+app.add_middleware(SlowAPIMiddleware)
+scheduler = BackgroundScheduler()
+scheduler.add_job(check_inventory_alerts, "interval", minutes=60)
+scheduler.start()
+print("Scheduler started and job added")
 
 
 # Add a global validation error handler for debugging
@@ -63,6 +87,19 @@ app.include_router(backup_restore.router, prefix="/api")
 app.include_router(automaticbackup.router, prefix="/api")
 app.include_router(inventory_log.router, prefix="/api")
 app.include_router(userActivity.router, prefix="/api")
+app.include_router(custom_holiday.router, prefix="/api")
+app.include_router(ph_holidays.router)
+
+# --- Automatic Backup: Load and schedule jobs on startup ---
+from app.routes.automaticbackup import load_and_schedule
+from app.supabase import SessionLocal
+import asyncio
+
+
+@app.on_event("startup")
+async def schedule_backup_jobs():
+    async with SessionLocal() as session:
+        await load_and_schedule(session)
 
 
 @app.get("/health")

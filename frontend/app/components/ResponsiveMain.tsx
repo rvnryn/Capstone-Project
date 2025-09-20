@@ -2,31 +2,36 @@
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { useState, useEffect, useMemo } from "react";
 
-export default function ResponsiveMain({ children }: { children: React.ReactNode }) {
+export default function ResponsiveMain({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [mounted, setMounted] = useState(false);
 
-  const {
-    isMenuOpen,
-    deviceType,
-    orientation,
-    screenSize,
-  } = useNavigation();
+  const { isMenuOpen, deviceType, orientation, screenSize } = useNavigation();
 
   // Calculate dynamic left margin for main content
-  const currentMargin = useMemo(() => {
-    // On mobile/small screens, no margin - sidebar overlays content
-    if (deviceType === "mobile" || screenSize === "xs" || screenSize === "sm") return 0;
-    
-    // On larger screens, margin adjusts for sidebar
-    if (deviceType === "tablet" && orientation === "portrait") return isMenuOpen ? 320 : 64;
-    if (screenSize === "md") return isMenuOpen ? 256 : 64;
-    if (screenSize === "lg") return isMenuOpen ? 288 : 80;
-    if (screenSize === "xl" || screenSize === "2xl" || screenSize === "3xl") return isMenuOpen ? 320 : 96;
-    return isMenuOpen ? 288 : 80;
-  }, [deviceType, screenSize, orientation, isMenuOpen]);
+  // Use the same sidebar width logic as navigation.tsx
+  const getSidebarWidth = () => {
+    if (screenSize === "xs") return isMenuOpen ? 0 : 0;
+    if (screenSize === "sm") return isMenuOpen ? 0 : 0;
+    if (screenSize === "md") return isMenuOpen ? 320 : 64;
+    if (screenSize === "lg") return isMenuOpen ? 352 : 72;
+    if (screenSize === "xl") return isMenuOpen ? 384 : 80;
+    if (screenSize === "2xl" || screenSize === "3xl")
+      return isMenuOpen ? 416 : 80;
+    return isMenuOpen ? 352 : 72;
+  };
 
-  useEffect(() => { 
-    setMounted(true); 
+  const currentMargin = useMemo(() => {
+    // On mobile/small screens, sidebar overlays content, so no margin
+    if (screenSize === "xs" || screenSize === "sm") return 0;
+    return getSidebarWidth();
+  }, [screenSize, isMenuOpen]);
+
+  useEffect(() => {
+    setMounted(true);
   }, []);
 
   // Prevent hydration mismatch by not rendering responsive layout until mounted
@@ -43,12 +48,17 @@ export default function ResponsiveMain({ children }: { children: React.ReactNode
       <div
         id="main-content-wrapper"
         style={{
-          minHeight: '100vh',
+          minHeight: "100vh",
           marginLeft: currentMargin,
-          width: `calc(100% - ${currentMargin}px)`,
-          minWidth: '320px', // Ensure minimum usable width
-          maxWidth: '100vw', // Prevent horizontal overflow
-          overflow: 'hidden', // Prevent content overflow
+          width:
+            screenSize === "xs" || screenSize === "sm"
+              ? "100%"
+              : `calc(100% - ${currentMargin}px)`,
+          minWidth: "0", // Allow shrinking on small screens
+          maxWidth: "100vw",
+          overflow: "hidden",
+          transition:
+            "margin-left 0.3s cubic-bezier(0.4,0,0.2,1), width 0.3s cubic-bezier(0.4,0,0.2,1)",
         }}
       >
         {children}

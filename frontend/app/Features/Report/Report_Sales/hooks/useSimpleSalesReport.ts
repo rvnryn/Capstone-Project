@@ -1,6 +1,19 @@
 import { useState, useCallback } from "react";
 import axios from "@/app/lib/axios";
 
+interface WeeklyForecast {
+  week_start: string;
+  predicted_sales: number;
+  is_holiday_week: number;
+  holiday_type?: "official" | "custom" | null;
+}
+interface HistoricalPrediction {
+  week_start: string;
+  predicted_sales: number;
+  actual_sales: number;
+  is_holiday_week: number;
+  holiday_type?: "official" | "custom" | null;
+}
 interface SalesReportData {
   totalRevenue: number;
   totalOrders: number;
@@ -18,6 +31,8 @@ interface SalesReportData {
     revenue: number;
     orders: number;
   }>;
+  forecast?: WeeklyForecast[];
+  historicalPredictions?: HistoricalPrediction[];
 }
 
 export function useSimpleSalesReport() {
@@ -26,7 +41,11 @@ export function useSimpleSalesReport() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchReportData = useCallback(
-    async (startDate?: string, endDate?: string) => {
+    async (
+      startDate?: string,
+      endDate?: string,
+      options?: { item_name?: string; category?: string }
+    ) => {
       try {
         setLoading(true);
         setError(null);
@@ -36,16 +55,29 @@ export function useSimpleSalesReport() {
         if (startDate) params.append("start_date", startDate);
         if (endDate) params.append("end_date", endDate);
 
+        // Build forecast params
+        const forecastParams = new URLSearchParams();
+        if (options?.item_name)
+          forecastParams.append("item_name", options.item_name);
+        if (options?.category)
+          forecastParams.append("category", options.category);
+
         // Fetch all required data in parallel using axios
-        const [summaryRes, itemsRes, dateRes] = await Promise.all([
+        const [summaryRes, itemsRes, dateRes, forecastRes] = await Promise.all([
           axios.get(`/api/sales-summary?${params.toString()}`),
           axios.get(`/api/sales-by-item?${params.toString()}`),
           axios.get(`/api/sales-by-date?${params.toString()}&grouping=daily`),
+          axios.get(
+            `/api/weekly-sales-forecast${
+              forecastParams.toString() ? `?${forecastParams.toString()}` : ""
+            }`
+          ),
         ]);
 
         const summary = summaryRes.data;
         const items = itemsRes.data;
         const dates = dateRes.data;
+        const forecast = forecastRes.data;
 
         const reportData: SalesReportData = {
           totalRevenue: summary.total_revenue,
@@ -64,7 +96,22 @@ export function useSimpleSalesReport() {
             revenue: day.total_revenue,
             orders: day.orders_count,
           })),
+          forecast: Array.isArray(forecast.forecast)
+            ? forecast.forecast.map((f: any) => ({
+                ...f,
+                holiday_type: f.holiday_type ?? null,
+              }))
+            : [],
+          historicalPredictions: Array.isArray(forecast.historical_predictions)
+            ? forecast.historical_predictions.map((h: any) => ({
+                ...h,
+                holiday_type: h.holiday_type ?? null,
+              }))
+            : [],
         };
+
+        // Debug: Log final reportData
+        console.log("[useSimpleSalesReport] reportData", reportData);
 
         setData(reportData);
         return reportData;
@@ -74,7 +121,7 @@ export function useSimpleSalesReport() {
           err.message ||
           "Failed to fetch report data";
         setError(errorMessage);
-        console.error("Sales report error:", err);
+        console.error("[useSimpleSalesReport] Sales report error:", err);
         return null;
       } finally {
         setLoading(false);

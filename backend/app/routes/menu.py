@@ -1,5 +1,20 @@
 import json
 from fastapi import (
+    APIRouter,
+    HTTPException,
+    Depends,
+    UploadFile,
+    File,
+    Form,
+    Body,
+    BackgroundTasks,
+    Request,
+)
+from slowapi.util import get_remote_address
+from slowapi import Limiter
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
+(
     HTTPException,
     APIRouter,
     UploadFile,
@@ -24,8 +39,10 @@ class MenuItem:
 
 
 # Endpoint: create menu (with image) and its ingredients in one request
+@limiter.limit("10/minute")
 @router.post("/menu/create-with-image-and-ingredients")
 async def create_menu_with_ingredients(
+    request: Request,
     dish_name: str = Form(...),
     category: str = Form(...),
     price: float = Form(...),
@@ -179,6 +196,7 @@ async def create_menu_with_ingredients(
         for ing in ingredients_list:
             name = ing.get("name")
             quantity = ing.get("quantity")
+            measurements = ing.get("measurement") or ing.get("measurements")
             if not name or not quantity:
                 continue
             search_res = (
@@ -226,6 +244,7 @@ async def create_menu_with_ingredients(
                     "ingredient_id": ingredient_id,
                     "ingredient_name": name,
                     "quantity": quantity,
+                    "measurements": measurements,
                 }
             )
         if menu_ingredients:
@@ -731,6 +750,7 @@ async def update_menu_with_image_and_ingredients(
         for ing in ingredients_list:
             name = ing.get("name")
             quantity = ing.get("quantity")
+            measurements = ing.get("measurement") or ing.get("measurements")
             if not name or not quantity:
                 continue
             search_res = (
@@ -778,6 +798,7 @@ async def update_menu_with_image_and_ingredients(
                     "ingredient_id": ingredient_id,
                     "ingredient_name": name,
                     "quantity": quantity,
+                    "measurements": measurements,
                 }
             )
         if menu_ingredients:

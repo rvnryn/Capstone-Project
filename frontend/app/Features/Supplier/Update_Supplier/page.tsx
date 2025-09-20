@@ -81,14 +81,24 @@ export default function EditSupplier() {
     fetchSupplier();
   }, [supplierId, router, getSupplier]);
 
+  const capitalizeWords = (str: string) =>
+    str.replace(/\b\w/g, (char) => char.toUpperCase());
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
     setIsDirty(true);
+
+    // Normalize capitalization for specific fields
+    let newValue = value;
+    if (["supplier_name", "contact_person", "supplies"].includes(name)) {
+      newValue = capitalizeWords(value.toLowerCase());
+    }
+
     setFormData((prev: any) => ({
       ...prev,
-      [name]: value,
+      [name]: newValue,
     }));
   };
 

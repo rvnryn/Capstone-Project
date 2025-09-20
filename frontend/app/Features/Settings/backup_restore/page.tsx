@@ -1,7 +1,7 @@
 "use client";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
-import { FaDatabase } from "react-icons/fa";
+import { FaAws, FaDatabase } from "react-icons/fa";
 import { useRef, useState, useRef as useReactRef, useEffect } from "react";
 import {
   useBackupSchedule,
@@ -28,6 +28,7 @@ declare global {
 }
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+const ENV_BACKUP_PASSWORD = process.env.NEXT_PUBLIC_BACKUP_PASSWORD || "";
 
 const GoogleDriveIntegration = ({
   onSuccess,
@@ -60,12 +61,17 @@ const GoogleDriveIntegration = ({
 };
 
 export default function BackupRestorePage() {
-  // Fixed: All hooks must be called at the top level, before any conditionals (v2)
   const [gDriveAccessToken, setGDriveAccessToken] = useState<string | null>(
     null
   );
-  const { backup, restore, backupToDrive, restoreFromDrive } =
-    useBackupRestoreAPI();
+  const {
+    backup,
+    restore,
+    backupToDrive,
+    restoreFromDrive,
+    backupToS3,
+    restoreFromS3,
+  } = useBackupRestoreAPI();
   const router = useRouter();
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
@@ -105,9 +111,9 @@ export default function BackupRestorePage() {
 
   // Restore flow state
   const [showRestoreSourceModal, setShowRestoreSourceModal] = useState(false);
-  const [restoreSource, setRestoreSource] = useState<null | "local" | "gdrive">(
-    null
-  );
+  const [restoreSource, setRestoreSource] = useState<
+    null | "local" | "gdrive" | "s3"
+  >(null);
   const [pendingRestoreFile, setPendingRestoreFile] = useState<File | null>(
     null
   );
@@ -121,6 +127,13 @@ export default function BackupRestorePage() {
   >(null);
   const showPasswordModal = !!showPasswordModalType;
   const [passwordInput, setPasswordInput] = useState("");
+
+  // State for S3 picker
+  const [showS3FilePicker, setShowS3FilePicker] = useState(false);
+  const [s3Files, setS3Files] = useState<string[]>([]);
+  const [pendingS3FileName, setPendingS3FileName] = useState<string | null>(
+    null
+  );
 
   // History state
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -147,6 +160,50 @@ export default function BackupRestorePage() {
     const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
 
     return `${hour12}:${minuteStr.padStart(2, "0")} ${period}`;
+  };
+
+  const openS3FilePicker = async () => {
+    setShowS3FilePicker(true);
+    try {
+      const res = await fetch("/api/list-s3-backups");
+      const files = await res.json();
+      // Accept both array and { files: [...] }
+      if (Array.isArray(files)) {
+        setS3Files(files);
+      } else if (files && Array.isArray(files.files)) {
+        setS3Files(files.files);
+      } else {
+        setS3Files([]);
+      }
+    } catch (err) {
+      setS3Files([]);
+    }
+  };
+
+  // Function to handle S3 file selection
+  const handleS3FileSelect = (fileName: string) => {
+    setPendingS3FileName(fileName);
+    setShowS3FilePicker(false);
+    setPasswordInput("");
+    setShowPasswordModalType("restore");
+  };
+
+  const handleS3Backup = async () => {
+    setShowBackupChoiceModal(false);
+    setIsBackingUp(true);
+    try {
+      const filename = `backup_${new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")}.json.enc`;
+      await backupToS3(backupPassword, filename);
+      setBackupResultMsg("Backup uploaded to S3 successfully!");
+      setTimeout(() => setBackupResultMsg(""), 4000);
+    } catch (err: any) {
+      setBackupResultMsg("S3 backup failed: " + (err?.message || String(err)));
+      setTimeout(() => setBackupResultMsg(""), 4000);
+    }
+    setIsBackingUp(false);
+    setBackupPassword("");
   };
 
   // Load schedule from backend on mount or when schedule changes
@@ -356,9 +413,6 @@ export default function BackupRestorePage() {
       // Restore all tables
       const tables = [
         "backup_history",
-        "food_trend_ingredients",
-        "food_trend_menu",
-        "food_trends",
         "ingredients",
         "inventory",
         "inventory_log",
@@ -371,9 +425,6 @@ export default function BackupRestorePage() {
         "notification_settings",
         "order_items",
         "orders",
-        "past_inventory_log",
-        "past_order_items",
-        "past_user_activity_log",
         "suppliers",
         "user_activity_log",
         "users",
@@ -408,7 +459,15 @@ export default function BackupRestorePage() {
 
   // Start backup: ask for password
   const handleBackup = () => {
-    setShowPasswordModalType("backup");
+    if (ENV_BACKUP_PASSWORD) {
+      setBackupPassword(ENV_BACKUP_PASSWORD);
+      setShowBackupChoiceModal(true);
+    } else if (backupPassword) {
+      setShowBackupChoiceModal(true);
+    } else {
+      // fallback: prompt for password if none set
+      setShowPasswordModalType("backup");
+    }
   };
 
   // Called when user submits password for backup
@@ -451,7 +510,13 @@ export default function BackupRestorePage() {
     setPendingRestoreFile(file);
     setShowRestoreSourceModal(false);
     setPasswordInput("");
-    setShowPasswordModalType("restore");
+    // Only require password for .enc files
+    if (file.name.endsWith(".enc")) {
+      setShowPasswordModalType("restore");
+    } else {
+      // Immediately restore with empty password for unencrypted files
+      await doRestoreWithPassword("", file);
+    }
   };
 
   // Google Drive file selected (fileId from Picker)
@@ -552,29 +617,32 @@ export default function BackupRestorePage() {
   };
 
   // Called when user submits password for restore
-  const doRestoreWithPassword = async (password: string) => {
+  const doRestoreWithPassword = async (
+    password: string,
+    fileOverride?: File
+  ) => {
     setIsRestoring(true);
     setRestoreError("");
     try {
-      if (restoreSource === "local" && pendingRestoreFile) {
-        setRestoreFileName(pendingRestoreFile.name);
+      const fileToRestore = fileOverride || pendingRestoreFile;
+      if (restoreSource === "local" && fileToRestore) {
+        setRestoreFileName(fileToRestore.name);
         // Only check JSON validity for plain .json files
         if (
-          pendingRestoreFile.name.endsWith(".json") &&
-          !pendingRestoreFile.name.endsWith(".json.enc")
+          fileToRestore.name.endsWith(".json") &&
+          !fileToRestore.name.endsWith(".json.enc")
         ) {
-          const text = await pendingRestoreFile.text();
+          const text = await fileToRestore.text();
           try {
             JSON.parse(text);
           } catch {
             throw new Error("Backup file is not valid JSON.");
           }
         }
-        await restore(password, pendingRestoreFile);
+        await restore(password, fileToRestore);
         setRestoreMsg("Restore successful!");
         setTimeout(() => setRestoreMsg(""), 2000);
       } else if (restoreSource === "gdrive" && pendingGDriveFileId) {
-        // Call backend API to restore from Google Drive
         setRestoreFileName("Google Drive File: " + pendingGDriveFileId);
         if (!gDriveAccessToken) {
           setRestoreError(
@@ -583,8 +651,17 @@ export default function BackupRestorePage() {
           setIsRestoring(false);
           return;
         }
-        await restoreFromDrive(gDriveAccessToken, pendingGDriveFileId);
+        await restoreFromDrive(
+          gDriveAccessToken,
+          pendingGDriveFileId,
+          password
+        );
         setRestoreMsg("Restore from Google Drive successful!");
+        setTimeout(() => setRestoreMsg(""), 2000);
+      } else if (restoreSource === "s3" && pendingS3FileName) {
+        setRestoreFileName(pendingS3FileName);
+        await restoreFromS3(pendingS3FileName, password);
+        setRestoreMsg("Restore from S3 successful!");
         setTimeout(() => setRestoreMsg(""), 2000);
       }
     } catch (err: any) {
@@ -593,6 +670,7 @@ export default function BackupRestorePage() {
     setIsRestoring(false);
     setPendingRestoreFile(null);
     setPendingGDriveFileId(null);
+    setPendingS3FileName(null);
     setRestoreSource(null);
   };
 
@@ -821,7 +899,7 @@ export default function BackupRestorePage() {
                   </div>
                   <div className="relative flex justify-center">
                     <span className="bg-gradient-to-br from-gray-900 to-black px-2 xs:px-3 sm:px-4 text-yellow-400/70 text-xs xs:text-sm">
-                      Backup & Restore Settings
+                      ⚠️ The Backup & Restore Settings is still in development
                     </span>
                   </div>
                 </div>
@@ -1549,6 +1627,15 @@ export default function BackupRestorePage() {
                     Local Download
                   </button>
                   <button
+                    className="w-full bg-gradient-to-r from-green-400 to-green-500 hover:from-green-300 hover:to-green-400 text-black font-semibold px-4 sm:px-6 py-3 rounded-lg sm:rounded-xl transition-all duration-200 hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base min-h-[44px] touch-manipulation cursor-pointer"
+                    onClick={handleS3Backup}
+                    disabled={isBackingUp}
+                    type="button"
+                  >
+                    <FaAws className="text-xl" />
+                    Backup to S3
+                  </button>
+                  <button
                     className="w-full border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold px-4 sm:px-6 py-3 rounded-lg sm:rounded-xl transition-all duration-200 text-sm sm:text-base min-h-[44px] touch-manipulation cursor-pointer"
                     onClick={() => setShowBackupChoiceModal(false)}
                     disabled={isBackingUp}
@@ -1692,6 +1779,16 @@ export default function BackupRestorePage() {
                     Google Drive
                   </button>
                   <button
+                    className="px-8 py-3 rounded-lg border border-green-400 text-green-400 hover:bg-green-400 hover:text-black font-semibold transition-all cursor-pointer"
+                    onClick={() => {
+                      setRestoreSource("s3");
+                      setShowRestoreSourceModal(false);
+                      openS3FilePicker();
+                    }}
+                  >
+                    Amazon S3
+                  </button>
+                  <button
                     className="px-8 py-3 rounded-lg border border-gray-400 text-gray-400 hover:bg-gray-400 hover:text-black font-semibold transition-all cursor-pointer"
                     onClick={() => setShowRestoreSourceModal(false)}
                   >
@@ -1701,6 +1798,38 @@ export default function BackupRestorePage() {
               </div>
             </div>
           )}
+
+          {showS3FilePicker && (
+            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
+              <div className="bg-black p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border-2 border-green-400">
+                <h2 className="text-2xl font-bold text-green-400 font-poppins">
+                  Select S3 Backup File
+                </h2>
+                <div className="flex flex-col gap-4 mt-4">
+                  {s3Files.length === 0 ? (
+                    <span className="text-gray-400">No S3 backups found.</span>
+                  ) : (
+                    s3Files.map((file) => (
+                      <button
+                        key={file}
+                        className="px-6 py-2 rounded-lg border border-green-400 text-green-400 hover:bg-green-400 hover:text-black font-semibold transition-all cursor-pointer"
+                        onClick={() => handleS3FileSelect(file)}
+                      >
+                        {file}
+                      </button>
+                    ))
+                  )}
+                  <button
+                    className="px-8 py-3 rounded-lg border border-gray-400 text-gray-400 hover:bg-gray-400 hover:text-black font-semibold transition-all cursor-pointer"
+                    onClick={() => setShowS3FilePicker(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <input
             ref={fileInputRef}
             id="restore-file"

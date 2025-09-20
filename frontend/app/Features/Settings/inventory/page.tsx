@@ -1,3 +1,4 @@
+// Utility to capitalize the first letter of each word
 "use client";
 import { useRouter } from "next/navigation";
 import { FaTrash, FaWarehouse } from "react-icons/fa";
@@ -25,6 +26,7 @@ const CATEGORIES = [
 ];
 
 export default function InventorySettings() {
+  // ...existing code...
   const { fetchSettings, createSetting, updateSetting, deleteSetting } =
     useInventorySettingsAPI();
   const router = useRouter();
@@ -107,7 +109,8 @@ export default function InventorySettings() {
       category: "",
     });
   };
-
+  const capitalizeWords = (str: string) =>
+    str.replace(/\b\w/g, (char) => char.toUpperCase());
   // Save all changes to Supabase
   const handleConfirmSave = async () => {
     setShowSaveModal(false);
@@ -257,99 +260,201 @@ export default function InventorySettings() {
               <section className="mb-6 sm:mb-8" aria-label="Add ingredient">
                 <form
                   onSubmit={handleAddIngredient}
-                  className="flex flex-col gap-3 mb-4 w-full
-                    sm:flex-row sm:flex-wrap sm:gap-4
-                    md:flex-row md:flex-nowrap md:gap-4"
+                  className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl"
                   role="form"
                 >
-                  <div className="flex flex-col sm:flex-1 min-w-0">
-                    <input
-                      type="text"
-                      placeholder="Ingredient Name"
-                      value={newIngredient.name}
-                      onChange={(e) =>
-                        setNewIngredient((ni: InventorySettingInput) => ({
-                          ...ni,
-                          name: e.target.value,
-                        }))
-                      }
-                      className="bg-gray-800 text-white rounded-xl px-4 py-3 border border-yellow-400 focus:border-yellow-300 focus:ring-2 focus:ring-yellow-200 outline-none text-sm sm:text-base w-full"
-                    />
-                  </div>
-                  <div className="flex flex-col sm:flex-1 min-w-0">
-                    <input
-                      type="text"
-                      placeholder="Default Unit"
-                      value={newIngredient.default_unit}
-                      onChange={(e) =>
-                        setNewIngredient((ni: InventorySettingInput) => ({
-                          ...ni,
-                          default_unit: e.target.value,
-                        }))
-                      }
-                      className="bg-gray-800 text-white rounded-xl px-4 py-3 border border-yellow-400 focus:border-yellow-300 focus:ring-2 focus:ring-yellow-200 outline-none text-sm sm:text-base w-full"
-                    />
-                  </div>
-                  <div className="flex flex-col sm:flex-1 min-w-0">
-                    <select
-                      value={newIngredient.category}
-                      onChange={(e) =>
-                        setNewIngredient((ni: InventorySettingInput) => ({
-                          ...ni,
-                          category: e.target.value,
-                        }))
-                      }
-                      className="bg-gray-800 text-white rounded-xl px-4 py-3 border border-yellow-400 focus:border-yellow-300 focus:ring-2 focus:ring-yellow-200 outline-none text-sm sm:text-base w-full"
-                    >
-                      <option value="">All Categories</option>
-                      {CATEGORIES.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                    {/* Ingredient Name */}
+                    <div className="lg:col-span-2">
+                      <label
+                        htmlFor="ingredient-name"
+                        className="block mb-2 text-sm font-medium text-yellow-300"
+                      >
+                        Ingredient Name *
+                      </label>
+                      <input
+                        type="text"
+                        id="ingredient-name"
+                        placeholder="Enter ingredient name"
+                        value={newIngredient.name}
+                        onChange={(e) =>
+                          setNewIngredient((ni: InventorySettingInput) => ({
+                            ...ni,
+                            name: capitalizeWords(e.target.value.toLowerCase()),
+                          }))
+                        }
+                        className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm placeholder-gray-400 transition-all duration-200 hover:border-gray-500"
+                        autoComplete="off"
+                        required
+                      />
+                    </div>
+
+                    {/* Threshold */}
+                    <div>
+                      <label
+                        htmlFor="threshold"
+                        className="block mb-2 text-sm font-medium text-yellow-300"
+                      >
+                        Low Stock Alert
+                      </label>
+                      <input
+                        type="number"
+                        id="threshold"
+                        min="0"
+                        step="0.1"
+                        placeholder="Alert threshold"
+                        value={
+                          newIngredient.low_stock_threshold === 0
+                            ? ""
+                            : newIngredient.low_stock_threshold
+                        }
+                        onChange={(e) =>
+                          setNewIngredient((ni: InventorySettingInput) => ({
+                            ...ni,
+                            low_stock_threshold: Number(e.target.value) || 0,
+                          }))
+                        }
+                        className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm placeholder-gray-400 transition-all duration-200 hover:border-gray-500"
+                        autoComplete="off"
+                      />
+                    </div>
+
+                    {/* Default Unit */}
+                    <div className="relative">
+                      <label
+                        htmlFor="default-unit"
+                        className="block mb-2 text-sm font-medium text-yellow-300"
+                      >
+                        Unit *
+                      </label>
+                      <select
+                        id="default-unit"
+                        value={newIngredient.default_unit}
+                        onChange={(e) =>
+                          setNewIngredient((ni: InventorySettingInput) => ({
+                            ...ni,
+                            default_unit: e.target.value,
+                          }))
+                        }
+                        className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                        required
+                      >
+                        <option value="" disabled>
+                          Select unit
                         </option>
-                      ))}
-                    </select>
+                        <option value="kg">kg</option>
+                        <option value="g">g</option>
+                        <option value="lbs">lbs</option>
+                        <option value="oz">oz</option>
+                        <option value="l">l</option>
+                        <option value="ml">ml</option>
+                        <option value="pcs">pcs</option>
+                        <option value="pack">pack</option>
+                        <option value="case">case</option>
+                        <option value="dozen">dozen</option>
+                      </select>
+                      {/* Custom dropdown arrow */}
+                      <div className="absolute inset-y-0 top-7 right-0 flex items-center pr-3 pointer-events-none">
+                        <svg
+                          className="w-4 h-4 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {/* Category */}
+                    <div>
+                      <label
+                        htmlFor="category"
+                        className="block mb-2 text-sm font-medium text-yellow-300"
+                      >
+                        Category *
+                      </label>
+                      <div className="relative">
+                        <select
+                          id="category"
+                          value={newIngredient.category}
+                          onChange={(e) =>
+                            setNewIngredient((ni: InventorySettingInput) => ({
+                              ...ni,
+                              category: e.target.value,
+                            }))
+                          }
+                          className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                          required
+                        >
+                          <option value="" disabled>
+                            Select category
+                          </option>
+                          {CATEGORIES.map((cat) => (
+                            <option
+                              key={cat}
+                              value={cat}
+                              className="bg-gray-800 text-white"
+                            >
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                        {/* Custom dropdown arrow */}
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                          <svg
+                            className="w-4 h-4 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 9l-7 7-7-7"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Add Button */}
+                    <div className="sm:col-span-2 lg:col-span-1">
+                      <button
+                        type="submit"
+                        className="w-full h-12 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 4v16m8-8H4"
+                          />
+                        </svg>
+                        Add Ingredient
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex flex-col sm:flex-1 min-w-0">
-                    <input
-                      type="number"
-                      min={1}
-                      placeholder="Threshold"
-                      value={
-                        newIngredient.low_stock_threshold === 0
-                          ? ""
-                          : newIngredient.low_stock_threshold
-                      }
-                      onChange={(e) =>
-                        setNewIngredient((ni: InventorySettingInput) => ({
-                          ...ni,
-                          low_stock_threshold: Number(e.target.value),
-                        }))
-                      }
-                      className="bg-gray-800 text-white rounded-xl px-4 py-3 border border-yellow-400 focus:border-yellow-300 focus:ring-2 focus:ring-yellow-200 outline-none text-sm sm:text-base w-full"
-                    />
-                  </div>
-                  <div className="flex flex-col sm:w-auto">
-                    <button
-                      type="submit"
-                      className="bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-3 rounded-xl font-semibold shadow-lg transition-all duration-200 text-sm sm:text-base w-full sm:w-auto"
-                    >
-                      Add Ingredient
-                    </button>
+
+                  {/* Helper text */}
+                  <div className="mt-4 text-xs text-gray-400">
+                    <span className="text-yellow-400">*</span> Required fields
                   </div>
                 </form>
-                {addError && (
-                  <div
-                    className="text-red-400 mb-4 text-sm font-semibold animate-shake"
-                    role="alert"
-                  >
-                    {addError}
-                  </div>
-                )}
               </section>
-              <section
-                className="bg-gray-800/30 backdrop-blur-sm rounded-lg xs:rounded-xl sm:rounded-2xl shadow-2xl border border-gray-700/50 overflow-hidden"
-                aria-label="Ingredients table"
-              >
+              <section>
                 <div className="overflow-x-auto">
                   <table className="table-auto w-full text-xs xs:text-sm sm:text-base lg:text-lg xl:text-xl text-left border-collapse min-w-[700px]">
                     <caption className="sr-only">Ingredients Table</caption>
@@ -359,10 +464,10 @@ export default function InventorySettings() {
                           Ingredient
                         </th>
                         <th className="px-4 py-3 text-left text-yellow-300 whitespace-nowrap">
-                          Default Unit
+                          Threshold
                         </th>
                         <th className="px-4 py-3 text-left text-yellow-300 whitespace-nowrap">
-                          Threshold
+                          Default Unit
                         </th>
                         <th className="px-4 py-3 text-left text-yellow-300 whitespace-nowrap">
                           Category
@@ -389,7 +494,7 @@ export default function InventorySettings() {
                             key={ing.id}
                             tabIndex={0}
                             aria-label={`Row for ${ing.name}`}
-                            className={`transition-colors duration-150 focus:outline-yellow-300 focus:outline-2 ${
+                            className={`transition-colors duration-150 ${
                               idx % 2 === 0
                                 ? "bg-gray-900/80"
                                 : "bg-gray-800/80"
@@ -403,17 +508,6 @@ export default function InventorySettings() {
                           >
                             <td className="px-4 py-3 text-white font-medium whitespace-nowrap align-middle">
                               {ing.name}
-                            </td>
-                            <td className="px-4 py-3 flex items-center gap-2 align-middle">
-                              <input
-                                type="text"
-                                aria-label={`Default unit for ${ing.name}`}
-                                value={ing.default_unit || ""}
-                                onChange={(e) =>
-                                  handleUnitChange(ing.id, e.target.value)
-                                }
-                                className="w-24 bg-gray-800 text-white rounded-lg px-3 py-1 border border-yellow-400 focus:border-yellow-300 focus:ring-2 focus:ring-yellow-200 outline-none text-sm"
-                              />
                             </td>
                             <td className="px-4 py-3 align-middle">
                               <input
@@ -431,17 +525,58 @@ export default function InventorySettings() {
                                     Number(e.target.value)
                                   )
                                 }
-                                className="w-16 bg-gray-800 text-white rounded-lg px-3 py-1 border border-yellow-400 focus:border-yellow-300 focus:ring-2 focus:ring-yellow-200 outline-none text-sm"
+                                className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
                               />
                             </td>
-                            <td className="px-4 py-3 align-middle">
+                            <td className="px-4 py-3 flex items-center gap-2 align-middle relative">
+                              <select
+                                aria-label={`Default unit for ${ing.name}`}
+                                value={ing.default_unit}
+                                onChange={(e) =>
+                                  handleUnitChange(ing.id, e.target.value)
+                                }
+                                className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                                required
+                              >
+                                <option value="" disabled>
+                                  Select unit
+                                </option>
+                                <option value="kg">kg</option>
+                                <option value="g">g</option>
+                                <option value="lbs">lbs</option>
+                                <option value="oz">oz</option>
+                                <option value="l">l</option>
+                                <option value="ml">ml</option>
+                                <option value="pcs">pcs</option>
+                                <option value="pack">pack</option>
+                                <option value="case">case</option>
+                                <option value="dozen">dozen</option>
+                              </select>
+                              {/* Custom dropdown arrow */}
+                              <div className="absolute inset-y-0 right-7 flex items-center pointer-events-none">
+                                <svg
+                                  className="w-4 h-4 text-gray-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 9l-7 7-7-7"
+                                  />
+                                </svg>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 align-middle relative">
                               <select
                                 aria-label={`Category for ${ing.name}`}
                                 value={ing.category || ""}
                                 onChange={(e) =>
                                   handleCategoryChange(ing.id, e.target.value)
                                 }
-                                className="w-40 bg-gray-800 text-white rounded-lg px-3 py-1 border border-yellow-400 focus:border-yellow-300 focus:ring-2 focus:ring-yellow-200 outline-none text-sm"
+                                className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 pr-7 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
                               >
                                 <option value="">All Categories</option>
                                 {CATEGORIES.map((cat) => (
@@ -450,6 +585,22 @@ export default function InventorySettings() {
                                   </option>
                                 ))}
                               </select>
+                              {/* Custom dropdown arrow */}
+                              <div className="absolute inset-y-0 right-6 flex items-center pointer-events-none">
+                                <svg
+                                  className="w-4 h-4 text-gray-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 9l-7 7-7-7"
+                                  />
+                                </svg>
+                              </div>
                             </td>
                             <td className="px-4 py-3 flex items-center gap-2 align-middle">
                               <button

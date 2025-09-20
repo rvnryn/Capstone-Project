@@ -94,6 +94,7 @@ const Login = () => {
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetStatus, setResetStatus] = useState<string | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { refreshSession } = useAuth();
@@ -138,12 +139,34 @@ const Login = () => {
 
   const handleResetPassword = () => {
     setShowResetModal(true);
+    setResetStatus(null);
+    setResetEmail("");
   };
 
   const handleCloseResetModal = () => {
     setShowResetModal(false);
     setResetStatus(null);
     setResetEmail("");
+    setResetLoading(false);
+  };
+
+  const handleSendResetEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetLoading(true);
+    setResetStatus(null);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/update-password`,
+      });
+      if (error) {
+        setResetStatus(error.message);
+      } else {
+        setResetStatus("Password reset email sent! Check your inbox.");
+      }
+    } catch (err: any) {
+      setResetStatus(err.message || "Failed to send reset email.");
+    }
+    setResetLoading(false);
   };
 
   return (
@@ -271,25 +294,67 @@ const Login = () => {
       )}
 
       {showResetModal && (
-        <Modal
-          message={
-            <div>
-              <h3 className="text-xl font-semibold mb-2 text-white">
-                Reset Password
-              </h3>
-              <p className="text-yellow-200 mb-4">
-                Please contact the Owner to change your password.
-              </p>
-              <button
-                onClick={handleCloseResetModal}
-                className="mt-4 bg-black border border-yellow-400 text-yellow-400 px-4 py-2 rounded-full hover:bg-yellow-400 hover:text-black transition"
+        <div className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-md z-50 px-4 transition-opacity duration-300 animate-fadeIn">
+          <section className="relative bg-gradient-to-br from-gray-900/95 to-black/95 text-white p-8 border-2 border-yellow-400 rounded-3xl shadow-2xl w-full max-w-sm text-center scale-100 animate-popIn">
+            <button
+              onClick={handleCloseResetModal}
+              aria-label="Close modal"
+              className="absolute top-3 right-3 text-yellow-400 hover:text-yellow-300 bg-black/40 rounded-full p-2 transition-colors focus:outline-none"
+            >
+              <svg
+                width="20"
+                height="20"
+                fill="currentColor"
+                viewBox="0 0 20 20"
               >
-                Close
+                <path
+                  d="M6 6l8 8M14 6l-8 8"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+            <h3 className="text-2xl font-bold mb-4 drop-shadow text-yellow-300">
+              Forgot Password
+            </h3>
+            <form onSubmit={handleSendResetEmail} className="space-y-4">
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                required
+                className="w-full bg-gray-900/80 border-2 border-yellow-400 text-white placeholder-gray-400 px-4 py-3 text-base rounded-lg shadow focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-400 transition-all"
+              />
+              <button
+                type="submit"
+                className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-3 px-8 rounded-full transition-all text-lg shadow-lg hover:scale-105 transform focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                disabled={resetLoading}
+              >
+                {resetLoading ? (
+                  <span className="flex items-center justify-center">
+                    <FaSpinner className="animate-spin mr-2" />
+                    Sending...
+                  </span>
+                ) : (
+                  "Send Reset Email"
+                )}
               </button>
-            </div>
-          }
-          onClose={handleCloseResetModal}
-        />
+            </form>
+            {resetStatus && (
+              <div
+                className={`mt-4 text-base font-medium rounded-lg py-2 px-4 ${
+                  resetStatus.includes("sent")
+                    ? "bg-green-600/90 text-white"
+                    : "bg-red-600/90 text-white"
+                }`}
+              >
+                {resetStatus}
+              </div>
+            )}
+          </section>
+        </div>
       )}
     </main>
   );

@@ -1,8 +1,6 @@
 "use client";
-
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
 import { routes } from "@/app/routes/routes";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
@@ -28,6 +26,10 @@ import {
   FiArrowRight,
 } from "react-icons/fi";
 import { useInventoryAPI } from "@/app/Features/Inventory/hook/use-inventoryAPI";
+import {
+  useInventorySettingsAPI,
+  InventorySetting,
+} from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 
 const CATEGORY_OPTIONS = [
   "Meats",
@@ -40,6 +42,9 @@ const CATEGORY_OPTIONS = [
 ];
 
 export default function EditTodayInventoryItem() {
+  const { fetchSettings } = useInventorySettingsAPI();
+  const [settings, setSettings] = useState<InventorySetting[]>([]);
+  const [unit, setUnit] = useState<string>("");
   const router = useRouter();
   const searchParams = useSearchParams();
   const { getTodayItem, updateTodayItem } = useInventoryAPI();
@@ -65,15 +70,16 @@ export default function EditTodayInventoryItem() {
   const [focusedField, setFocusedField] = useState<string>("");
 
   useEffect(() => {
-    const fetchItem = async () => {
+    const fetchAll = async () => {
       if (!itemId) {
         router.push(routes.todays_inventory);
         return;
       }
-
       try {
-        const data = await getTodayItem(itemId);
-
+        const [data, settingsData] = await Promise.all([
+          getTodayItem(itemId),
+          fetchSettings(),
+        ]);
         const mappedItem = {
           id: data.item_id,
           name: data.item_name,
@@ -84,19 +90,24 @@ export default function EditTodayInventoryItem() {
           added: new Date(data.created_at),
           expiration_date: data.expiration_date?.split("T")[0] || "",
         };
-
         setFormData(mappedItem);
         setInitialSettings(mappedItem);
+        setSettings(settingsData);
+        // Find unit from settings
+        const itemName = (data.item_name || "").toString().trim().toLowerCase();
+        const setting = settingsData.find(
+          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+        );
+        setUnit(setting?.default_unit || "");
       } catch (error) {
-        console.error("Error fetching item:", error);
+        console.error("Error fetching item or settings:", error);
         router.push(routes.todays_inventory);
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchItem();
-  }, [itemId, router, getTodayItem]);
+    fetchAll();
+  }, [itemId, router, getTodayItem, fetchSettings]);
 
   const validate = useCallback((data: any) => {
     const newErrors = {
@@ -138,6 +149,9 @@ export default function EditTodayInventoryItem() {
     }
   }, [formData, validate, isSubmitted]);
 
+  const capitalizeWords = (str: string) =>
+    str.replace(/\b\w/g, (char) => char.toUpperCase());
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -145,7 +159,12 @@ export default function EditTodayInventoryItem() {
     setIsDirty(true);
     setFormData((prev: any) => ({
       ...prev,
-      [name]: name === "stock" ? Number(value) : value,
+      [name]:
+        name === "stock"
+          ? Number(value)
+          : typeof value === "string"
+          ? capitalizeWords(value)
+          : value,
     }));
   };
 
@@ -507,27 +526,34 @@ export default function EditTodayInventoryItem() {
                       <span className="text-red-400">*</span>
                     </label>
                     <div className="relative max-w-md">
-                      <input
-                        type="number"
-                        id="stock"
-                        name="stock"
-                        required
-                        min={0}
-                        value={formData.stock === 0 ? "" : formData.stock}
-                        onChange={handleChange}
-                        onFocus={() => handleFocus("stock")}
-                        onBlur={handleBlur}
-                        placeholder="Enter quantity..."
-                        className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
-                          isSubmitted && errors.stock
-                            ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                            : focusedField === "stock"
-                            ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                            : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                        }`}
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          id="stock"
+                          name="stock"
+                          required
+                          min={0}
+                          value={formData.stock === 0 ? "" : formData.stock}
+                          onChange={handleChange}
+                          onFocus={() => handleFocus("stock")}
+                          onBlur={handleBlur}
+                          placeholder="Enter quantity..."
+                          className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
+                            isSubmitted && errors.stock
+                              ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                              : focusedField === "stock"
+                              ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                              : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                          }`}
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                        />
+                        {unit && (
+                          <span className="text-gray-400 text-sm sm:text-base whitespace-nowrap">
+                            {unit}
+                          </span>
+                        )}
+                      </div>
                       {focusedField === "stock" && !errors.stock && (
                         <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                           <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>

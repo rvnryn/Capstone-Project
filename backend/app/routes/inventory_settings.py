@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -6,8 +6,8 @@ from app.routes.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 from app.supabase import supabase, get_db
 
-
 router = APIRouter()
+
 
 class InventorySettingBase(BaseModel):
     name: str
@@ -15,11 +15,14 @@ class InventorySettingBase(BaseModel):
     low_stock_threshold: Optional[int] = None
     category: Optional[str] = None
 
+
 class InventorySettingCreate(InventorySettingBase):
     pass
 
+
 class InventorySettingUpdate(InventorySettingBase):
     pass
+
 
 class InventorySettingOut(InventorySettingBase):
     id: int
@@ -29,10 +32,16 @@ class InventorySettingOut(InventorySettingBase):
     class Config:
         orm_mode = True
 
+
 @router.get("/inventory-settings", response_model=List[InventorySettingOut])
-def get_inventory_settings():
+def get_inventory_settings(request: Request):
     try:
-        response = supabase.table("inventory_settings").select("*").order("id", desc=False).execute()
+        response = (
+            supabase.table("inventory_settings")
+            .select("*")
+            .order("id", desc=False)
+            .execute()
+        )
         if not response.data:
             return []
         return [InventorySettingOut(**item) for item in response.data]
@@ -40,8 +49,17 @@ def get_inventory_settings():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/inventory-settings", response_model=InventorySettingOut, status_code=status.HTTP_201_CREATED)
-async def create_inventory_setting(setting: InventorySettingCreate, user=Depends(require_role("Owner", "General Manager", "Store Manager")), db=Depends(get_db)):
+@router.post(
+    "/inventory-settings",
+    response_model=InventorySettingOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_inventory_setting(
+    request: Request,
+    setting: InventorySettingCreate,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
     try:
         now = datetime.utcnow().isoformat()
         payload = setting.dict()
@@ -49,8 +67,10 @@ async def create_inventory_setting(setting: InventorySettingCreate, user=Depends
         payload["updated_at"] = now
         response = supabase.table("inventory_settings").insert(payload).execute()
         if not response.data:
-            raise HTTPException(status_code=400, detail="Inventory setting creation failed")
-        
+            raise HTTPException(
+                status_code=400, detail="Inventory setting creation failed"
+            )
+
         try:
             user_row = getattr(user, "user_row", user)
             new_activity = UserActivityLog(
@@ -60,7 +80,7 @@ async def create_inventory_setting(setting: InventorySettingCreate, user=Depends
                 activity_date=datetime.utcnow(),
                 report_date=datetime.utcnow(),
                 user_name=user_row.get("name"),
-                role=user_row.get("user_role")
+                role=user_row.get("user_role"),
             )
             db.add(new_activity)
             await db.flush()
@@ -75,14 +95,25 @@ async def create_inventory_setting(setting: InventorySettingCreate, user=Depends
 
 
 @router.put("/inventory-settings/{setting_id}", response_model=InventorySettingOut)
-async def update_inventory_setting(setting_id: int, setting: InventorySettingUpdate, user=Depends(require_role("Owner", "General Manager", "Store Manager")), db=Depends(get_db)):
+async def update_inventory_setting(
+    request: Request,
+    setting_id: int,
+    setting: InventorySettingUpdate,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
     try:
         update_data = setting.dict(exclude_unset=True)
         update_data["updated_at"] = datetime.utcnow().isoformat()
-        response = supabase.table("inventory_settings").update(update_data).eq("id", setting_id).execute()
+        response = (
+            supabase.table("inventory_settings")
+            .update(update_data)
+            .eq("id", setting_id)
+            .execute()
+        )
         if not response.data:
             raise HTTPException(status_code=404, detail="Setting not found")
-        
+
         try:
             user_row = getattr(user, "user_row", user)
             new_activity = UserActivityLog(
@@ -92,7 +123,7 @@ async def update_inventory_setting(setting_id: int, setting: InventorySettingUpd
                 activity_date=datetime.utcnow(),
                 report_date=datetime.utcnow(),
                 user_name=user_row.get("name"),
-                role=user_row.get("user_role")
+                role=user_row.get("user_role"),
             )
             db.add(new_activity)
             await db.flush()
@@ -107,12 +138,19 @@ async def update_inventory_setting(setting_id: int, setting: InventorySettingUpd
 
 
 @router.delete("/inventory-settings/{setting_id}")
-async def delete_inventory_setting(setting_id: int, user=Depends(require_role("Owner", "General Manager", "Store Manager")), db=Depends(get_db)):
+async def delete_inventory_setting(
+    request: Request,
+    setting_id: int,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
     try:
-        response = supabase.table("inventory_settings").delete().eq("id", setting_id).execute()
+        response = (
+            supabase.table("inventory_settings").delete().eq("id", setting_id).execute()
+        )
         if not response.data:
             raise HTTPException(status_code=404, detail="Setting not found")
-        
+
         try:
             user_row = getattr(user, "user_row", user)
             new_activity = UserActivityLog(
@@ -122,7 +160,7 @@ async def delete_inventory_setting(setting_id: int, user=Depends(require_role("O
                 activity_date=datetime.utcnow(),
                 report_date=datetime.utcnow(),
                 user_name=user_row.get("name"),
-                role=user_row.get("user_role")
+                role=user_row.get("user_role"),
             )
             db.add(new_activity)
             await db.flush()

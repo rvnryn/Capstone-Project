@@ -2,10 +2,32 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import {
-  useInventorySettingsAPI,
-  InventorySetting,
-} from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
+// Prefetch helpers
+function usePrefetchInventorySettings(
+  queryClient: ReturnType<typeof useQueryClient>
+) {
+  useEffect(() => {
+    queryClient.prefetchQuery({
+      queryKey: ["inventorySettings"],
+      queryFn: async () => {
+        const res = await fetch("/api/inventory-settings");
+        if (!res.ok) throw new Error("Failed to fetch settings");
+        return res.json();
+      },
+      staleTime: 1000 * 60 * 60 * 12,
+    });
+    queryClient.prefetchQuery({
+      queryKey: ["masterInventory", []],
+      queryFn: async () => {
+        const res = await fetch("/api/inventory-master");
+        if (!res.ok) throw new Error("Failed to fetch inventory");
+        return res.json();
+      },
+      staleTime: 1000 * 60 * 5,
+    });
+  }, [queryClient]);
+}
+import { InventorySetting } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
@@ -47,20 +69,31 @@ type InventoryItem = {
 export default function InventoryPage() {
   const { role } = useAuth();
   console.log("Current role (RBAC check):", role);
-  // Fetch inventory settings (thresholds)
-  const { fetchSettings } = useInventorySettingsAPI();
-  const [settings, setSettings] = useState<InventorySetting[]>([]);
 
-  useEffect(() => {
-    fetchSettings()
-      .then(setSettings)
-      .catch((err) => {
-        console.error("Failed to fetch inventory settings:", err);
-        setSettings([]);
-      });
-  }, [fetchSettings]);
+  // Aggressively cache settings with React Query
+  const {
+    data: settingsRaw,
+    isLoading: isSettingsLoading,
+    isFetching: isSettingsFetching,
+    error: settingsError,
+  } = useQuery<InventorySetting[]>({
+    queryKey: ["inventorySettings"],
+    queryFn: async () => {
+      const res = await fetch("/api/inventory-settings");
+      if (!res.ok) throw new Error("Failed to fetch settings");
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 60 * 12, // 12 hours
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+  const settings: InventorySetting[] = Array.isArray(settingsRaw)
+    ? settingsRaw
+    : [];
 
   const queryClient = useQueryClient();
+  // Prefetch inventory/settings on mount
+  usePrefetchInventorySettings(queryClient);
   const { listItems, deleteItem, transferToToday } = useInventoryAPI();
 
   const [selectedCategory, setSelectedCategory] = useState("");
@@ -83,94 +116,147 @@ export default function InventoryPage() {
   const router = useRouter();
 
   // Fetch master inventory using React Query
-  const { data: inventoryData = [], isLoading } = useQuery<InventoryItem[]>({
+  const { data: inventoryData = [], isLoading } = useQuery<
+    (InventoryItem & { unit?: string })[]
+  >({
     queryKey: ["masterInventory", settings],
-    queryFn: async () => {
+    queryFn: async (): Promise<(InventoryItem & { unit?: string })[]> => {
       try {
         const items = await listItems();
-        return (items ?? []).map((item: any) => {
-          const itemName = (item.item_name || "")
-            .toString()
-            .trim()
-            .toLowerCase();
-          const setting = settings.find(
-            (s) => (s.name || "").toString().trim().toLowerCase() === itemName
-          );
-          // Ensure threshold is a number, fallback to 100 if not set
-          const threshold = Number(setting?.low_stock_threshold);
-          const fallbackThreshold = 100;
-          const useThreshold =
-            !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
-          // Ensure stock is a number
-          const stockQty = Number(item.stock_quantity);
-          // Debug: log the mapping for visual comparison
-          console.log("Inventory:", {
-            itemName: item.item_name,
-            stock: stockQty,
-            matchedSetting: setting?.name,
-            threshold: setting?.low_stock_threshold,
-          });
+        return (items ?? []).map(
+          (item: any): InventoryItem & { unit?: string } => {
+            const itemName = (item.item_name || "")
+              .toString()
+              .trim()
+              .toLowerCase();
+            const setting = settings.find(
+              (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+            );
+            // Ensure threshold is a number, fallback to 100 if not set
+            const threshold = Number(setting?.low_stock_threshold);
+            const fallbackThreshold = 100;
+            const useThreshold =
+              !isNaN(threshold) && threshold > 0
+                ? threshold
+                : fallbackThreshold;
+            // Ensure stock is a number
+            const stockQty = Number(item.stock_quantity);
+            // Get unit of measurement from settings
+            const unit = setting?.default_unit || "";
+            // Debug: log the mapping for visual comparison
+            console.log("Inventory:", {
+              itemName: item.item_name,
+              stock: stockQty,
+              matchedSetting: setting?.name,
+              threshold: setting?.low_stock_threshold,
+              unit,
+            });
 
-          let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
+            let status: "Out Of Stock" | "Critical" | "Low" | "Normal" =
+              "Normal";
 
-          // Determine stock status based on comprehensive business logic
-          if (stockQty === 0) {
-            status = "Out Of Stock";
-          } else if (stockQty <= useThreshold * 0.5) {
-            // Critical: when stock is 50% or less of the threshold
-            status = "Critical";
-          } else if (stockQty <= useThreshold) {
-            // Low: when stock is at or below threshold but above critical
-            status = "Low";
-          } else {
-            // Normal: when stock is above threshold
-            status = "Normal";
+            // Determine stock status based on comprehensive business logic
+            if (stockQty === 0) {
+              status = "Out Of Stock";
+            } else if (stockQty <= useThreshold * 0.5) {
+              // Critical: when stock is 50% or less of the threshold
+              status = "Critical";
+            } else if (stockQty <= useThreshold) {
+              // Low: when stock is at or below threshold but above critical
+              status = "Low";
+            } else {
+              // Normal: when stock is above threshold
+              status = "Normal";
+            }
+            return {
+              ...item,
+              id: item.item_id,
+              name: setting?.name || item.item_name, // Use settings name if available
+              batch: item.created_at,
+              category: item.category,
+              stock: stockQty,
+              status,
+              added: item.created_at ? new Date(item.created_at) : new Date(),
+              expires: item.expiration_date
+                ? new Date(item.expiration_date)
+                : null,
+              unit, // Add unit to item
+            };
           }
-          return {
-            ...item,
-            id: item.item_id,
-            name: setting?.name || item.item_name, // Use settings name if available
-            batch: item.created_at,
-            category: item.category,
-            stock: stockQty,
-            status,
-            added: item.created_at ? new Date(item.created_at) : new Date(),
-            expires: item.expiration_date
-              ? new Date(item.expiration_date)
-              : null,
-          };
-        });
+        );
       } catch (err) {
         console.error("Failed to fetch inventory items:", err);
-        return [];
+        return [] as (InventoryItem & { unit?: string })[];
       }
     },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 
-  // Delete mutation
+  // Delete mutation with optimistic UI
   const deleteMutation = useMutation({
     mutationFn: (id: string | number) => deleteItem(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
+    onMutate: async (id: string | number) => {
+      await queryClient.cancelQueries({ queryKey: ["masterInventory"] });
+      const previousInventory = queryClient.getQueryData<
+        (InventoryItem & { unit?: string })[]
+      >(["masterInventory", settings]);
+      if (previousInventory) {
+        queryClient.setQueryData<(InventoryItem & { unit?: string })[]>(
+          ["masterInventory", settings],
+          previousInventory.filter((item) => item.id !== id)
+        );
+      }
+      return { previousInventory };
     },
-    onError: (error: any) => {
+    onError: (error: any, variables, context) => {
+      if (context?.previousInventory) {
+        queryClient.setQueryData(
+          ["masterInventory", settings],
+          context.previousInventory
+        );
+      }
       alert(
         error?.response?.data?.detail || "Item not found or already deleted."
       );
     },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
+    },
   });
 
-  // Transfer mutation (use hook, not axios)
+  // Transfer mutation with optimistic UI
   const transferMutation = useMutation({
     mutationFn: async ({ id, quantity }: { id: number; quantity: number }) => {
       await transferToToday(id, quantity);
     },
-    onSuccess: () => {
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: ["masterInventory"] });
+      const previousInventory = queryClient.getQueryData<
+        (InventoryItem & { unit?: string })[]
+      >(["masterInventory", settings]);
+      if (previousInventory) {
+        queryClient.setQueryData<(InventoryItem & { unit?: string })[]>(
+          ["masterInventory", settings],
+          previousInventory.filter((item) => item.id !== id)
+        );
+      }
+      return { previousInventory };
+    },
+    onError: (error: any, variables, context) => {
+      if (context?.previousInventory) {
+        queryClient.setQueryData(
+          ["masterInventory", settings],
+          context.previousInventory
+        );
+      }
+      alert(error?.response?.data?.detail || "Transfer failed.");
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
       queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
-    },
-    onError: (error: any) => {
-      alert(error?.response?.data?.detail || "Transfer failed.");
     },
   });
 
@@ -223,16 +309,16 @@ export default function InventoryPage() {
   const summaryStats = useMemo(() => {
     const total = inventoryData.length;
     const outOfStock = inventoryData.filter(
-      (item) => item.status === "Out Of Stock"
+      (item: InventoryItem) => item.status === "Out Of Stock"
     ).length;
-    const criticalStock = inventoryData.filter(
-      (item) => item.status === "Critical"
+    const criticalStock: number = inventoryData.filter(
+      (item: InventoryItem) => item.status === "Critical"
     ).length;
     const lowStock = inventoryData.filter(
-      (item) => item.status === "Low"
+      (item: InventoryItem) => item.status === "Low"
     ).length;
     const normalStock = inventoryData.filter(
-      (item) => item.status === "Normal"
+      (item: InventoryItem) => item.status === "Normal"
     ).length;
     const totalValue = inventoryData.reduce((sum, item) => sum + item.stock, 0);
 
@@ -374,6 +460,7 @@ export default function InventoryPage() {
       return () => clearTimeout(timer);
     }
   }, [transferSuccess]);
+
   return (
     <section className="text-white font-poppins">
       <NavigationBar
@@ -660,6 +747,13 @@ export default function InventoryPage() {
                 className="bg-gray-800/30 backdrop-blur-sm rounded-lg xs:rounded-xl sm:rounded-2xl shadow-2xl border border-gray-700/50 overflow-hidden"
                 aria-label="Inventory table"
               >
+                {/* Show subtle loading settings indicator if settings are loading/fetching */}
+                {(isSettingsLoading || isSettingsFetching) && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-yellow-900/20 text-yellow-300 text-xs sm:text-sm">
+                    <MdCheckCircle className="animate-spin" />
+                    Loading settings...
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="table-auto w-full text-xs xs:text-sm sm:text-base lg:text-lg xl:text-xl text-left border-collapse min-w-[700px]">
                     <caption className="sr-only">
@@ -769,6 +863,11 @@ export default function InventoryPage() {
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
                               <span className="text-white font-semibold text-sm xs:text-base sm:text-lg">
                                 {item.stock}
+                                {item.unit && (
+                                  <span className="ml-1 text-gray-400 text-xs xs:text-sm font-normal">
+                                    {item.unit}
+                                  </span>
+                                )}
                               </span>
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm">
@@ -940,7 +1039,13 @@ export default function InventoryPage() {
                     {itemToTransfer.name}
                   </p>
                   <p className="text-gray-400 text-xs xs:text-sm">
-                    Available: {itemToTransfer.stock} units
+                    Available: {itemToTransfer.stock}
+                    {typeof itemToTransfer.unit === "string" &&
+                      itemToTransfer.unit.trim() !== "" && (
+                        <span className="ml-1 text-gray-400 text-xs xs:text-sm font-normal">
+                          {String(itemToTransfer.unit)}
+                        </span>
+                      )}
                   </p>
                 </section>
                 <div
@@ -953,20 +1058,28 @@ export default function InventoryPage() {
                   >
                     Quantity to Transfer <span className="text-red-400">*</span>
                   </label>
-                  <input
-                    id="transfer-quantity"
-                    type="number"
-                    min={1}
-                    max={itemToTransfer.stock}
-                    value={transferQuantity}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/^0+/, "");
-                      setTransferQuantity(val === "" ? "" : Number(val));
-                    }}
-                    placeholder={`Enter quantity (1-${itemToTransfer.stock})`}
-                    className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
-                    aria-label="Quantity to transfer"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="transfer-quantity"
+                      type="number"
+                      min={1}
+                      max={itemToTransfer.stock}
+                      value={transferQuantity}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/^0+/, "");
+                        setTransferQuantity(val === "" ? "" : Number(val));
+                      }}
+                      placeholder={`Enter quantity (1-${itemToTransfer.stock})`}
+                      className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
+                      aria-label="Quantity to transfer"
+                    />
+                    {typeof itemToTransfer.unit === "string" &&
+                      itemToTransfer.unit.trim() !== "" && (
+                        <span className="text-gray-400 text-xs xs:text-sm font-normal">
+                          {String(itemToTransfer.unit)}
+                        </span>
+                      )}
+                  </div>
                   <p className="text-xs text-gray-400">
                     This will move the specified quantity to Today's Inventory
                   </p>

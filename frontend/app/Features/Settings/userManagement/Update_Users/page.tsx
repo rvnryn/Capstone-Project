@@ -139,15 +139,26 @@ export default function EditUser() {
     }
   }, [formData, validate, isSubmitted]);
 
+  const capitalizeWords = (str: string) =>
+    str.replace(/\b\w/g, (char) => char.toUpperCase());
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
     setIsDirty(true);
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => {
+      let newValue = value;
+      if (name === "name") {
+        newValue = capitalizeWords(value.trim());
+      } else if (name === "username") {
+        newValue = value.trim().toLowerCase();
+      }
+      return {
+        ...prev,
+        [name]: newValue,
+      };
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
 import {
@@ -38,7 +38,6 @@ import {
 } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 import { useInventoryAPI } from "../hook/use-inventoryAPI";
 import axios from "@/app/lib/axios";
-import { tree } from "next/dist/build/templates/app-page";
 type InventoryItem = {
   id: number;
   name: string;
@@ -49,7 +48,8 @@ type InventoryItem = {
   added: string | Date;
   expires?: string | Date;
   expiration_date?: string;
-  [key: string]: unknown;
+  unit?: string;
+  [key: string]: string | number | Date | undefined;
 };
 
 export default function SurplusInventoryPage() {
@@ -59,18 +59,34 @@ export default function SurplusInventoryPage() {
   const { isMobile } = useNavigation();
   const { deleteSurplusItem, transferSurplusToToday } = useInventoryAPI();
 
-  // Fetch inventory settings (thresholds)
+  // Aggressively cache settings with React Query, prefetch on mount, avoid unnecessary refetches
   const { fetchSettings } = useInventorySettingsAPI();
-  const [settings, setSettings] = useState<InventorySetting[]>([]);
+  const settingsQuery = useQuery<InventorySetting[]>({
+    queryKey: ["inventorySettings"],
+    queryFn: fetchSettings,
+    staleTime: 1000 * 60 * 60 * 24, // 24 hours
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    retry: 1,
+  });
+  const settings = settingsQuery.data || [];
 
+  // Prefetch settings and inventory on mount for instant navigation
   useEffect(() => {
-    fetchSettings()
-      .then(setSettings)
-      .catch((err) => {
-        console.error("Failed to fetch inventory settings:", err);
-        setSettings([]);
-      });
-  }, [fetchSettings]);
+    queryClient.prefetchQuery({
+      queryKey: ["inventorySettings"],
+      queryFn: fetchSettings,
+    });
+    queryClient.prefetchQuery({
+      queryKey: ["surplusInventory", settings],
+      queryFn: async () => {
+        const response = await axios.get("/api/inventory-surplus");
+        return response.data;
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedBatchDate, setSelectedBatchDate] = useState("");
@@ -103,53 +119,33 @@ export default function SurplusInventoryPage() {
     return response.data;
   };
 
-  const { data: inventoryData = [], isLoading } = useQuery<InventoryItem[]>({
-    queryKey: ["surplusInventory", settings],
+  const inventoryQuery = useQuery<InventoryItem[]>({
+    queryKey: ["surplusInventory"],
     queryFn: async () => {
       const items = await listSurplusItems();
-      return items.map((item: any) => {
-        const itemName = (item.item_name || "").toString().trim().toLowerCase();
-        const setting = settings.find(
-          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
-        );
-        // Ensure threshold is a number, fallback to 100 if not set
-        const threshold = Number(setting?.low_stock_threshold);
-        const fallbackThreshold = 100;
-        const useThreshold =
-          !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
-        // Ensure stock is a number
-        const stockQty = Number(item.stock_quantity);
-
-        let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
-
-        // Determine stock status based on comprehensive business logic
-        if (stockQty === 0) {
-          status = "Out Of Stock";
-        } else if (stockQty <= useThreshold * 0.5) {
-          // Critical: when stock is 50% or less of the threshold
-          status = "Critical";
-        } else if (stockQty <= useThreshold) {
-          // Low: when stock is at or below threshold but above critical
-          status = "Low";
-        } else {
-          // Normal: when stock is above threshold
-          status = "Normal";
-        }
-
-        return {
-          ...item,
-          id: item.item_id,
-          name: setting?.name || item.item_name, // Use settings name if available
-          batch: item.batch_date,
-          category: item.category,
-          stock: stockQty,
-          status,
-          added: item.created_at ? new Date(item.created_at) : new Date(),
-          expires: item.expiration_date ? new Date(item.expiration_date) : null,
-        };
-      });
+      return items.map((item: any) => ({
+        ...item,
+        id: item.item_id,
+        name: item.item_name,
+        batch: item.batch_date,
+        category: item.category,
+        stock: Number(item.stock_quantity),
+        status: "Normal", // placeholder, will be recomputed
+        added: item.created_at ? new Date(item.created_at) : new Date(),
+        expires: item.expiration_date ? new Date(item.expiration_date) : null,
+        unit: "", // placeholder, will be recomputed
+      }));
     },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    retry: 1,
   });
+  const inventoryData: InventoryItem[] = Array.isArray(inventoryQuery.data)
+    ? inventoryQuery.data
+    : [];
+  const isLoading = inventoryQuery.isLoading;
 
   const transferToTodayMutation = useMutation({
     mutationFn: async ({ id, quantity }: { id: number; quantity: number }) => {
@@ -184,6 +180,40 @@ export default function SurplusInventoryPage() {
 
   const confirmTransfer = async () => {
     if (!itemToTransfer || !transferQuantity || transferQuantity <= 0) return;
+    // Optimistically update cache with correct status logic
+    queryClient.setQueryData(["surplusInventory", settings], (oldData = []) => {
+      return (oldData as InventoryItem[]).map((item: InventoryItem) => {
+        if (item.id === itemToTransfer.id) {
+          // Calculate new stock after transfer
+          const newStock = item.stock - Number(transferQuantity);
+          // Find settings for this item
+          const itemName = (item.name || "").toString().trim().toLowerCase();
+          const setting = settings.find(
+            (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+          );
+          const threshold = Number(setting?.low_stock_threshold);
+          const fallbackThreshold = 100;
+          const useThreshold =
+            !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
+          let status = "Normal";
+          if (newStock <= 0) {
+            status = "Out Of Stock";
+          } else if (newStock <= useThreshold * 0.5) {
+            status = "Critical";
+          } else if (newStock <= useThreshold) {
+            status = "Low";
+          } else {
+            status = "Normal";
+          }
+          return {
+            ...item,
+            stock: newStock < 0 ? 0 : newStock,
+            status,
+          };
+        }
+        return item;
+      });
+    });
     await transferToTodayMutation.mutateAsync({
       id: itemToTransfer.id,
       quantity: Number(transferQuantity),
@@ -239,8 +269,40 @@ export default function SurplusInventoryPage() {
     ).filter((date) => date !== "N/A");
   };
 
+  // Always recompute status/unit for all items based on latest settings and stock
+  const recomputedData = useMemo(() => {
+    return inventoryData.map((item) => {
+      const itemName = (item.name || "").toString().trim().toLowerCase();
+      const setting = settings.find(
+        (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+      );
+      const threshold = Number(setting?.low_stock_threshold);
+      const fallbackThreshold = 100;
+      const useThreshold =
+        !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
+      let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
+      if (item.stock === 0) {
+        status = "Out Of Stock";
+      } else if (item.stock <= useThreshold * 0.5) {
+        status = "Critical";
+      } else if (item.stock <= useThreshold) {
+        status = "Low";
+      } else {
+        status = "Normal";
+      }
+      // Show placeholder if settings are not loaded yet
+      const unit =
+        setting?.default_unit || (settingsQuery.isLoading ? "..." : "-");
+      return {
+        ...item,
+        status,
+        unit,
+      } as InventoryItem;
+    });
+  }, [inventoryData, settings, settingsQuery.isLoading]);
+
   const filtered = useMemo(() => {
-    return inventoryData.filter((item) => {
+    return recomputedData.filter((item) => {
       const matchesCategory =
         !selectedCategory || item.category === selectedCategory;
       const matchesBatch =
@@ -253,7 +315,7 @@ export default function SurplusInventoryPage() {
 
       return matchesCategory && matchesBatch && matchesSearch;
     });
-  }, [inventoryData, selectedCategory, selectedBatchDate, searchQuery]);
+  }, [recomputedData, selectedCategory, selectedBatchDate, searchQuery]);
 
   const sortedData = useMemo(() => {
     console.log("useMemo running with sortConfig:", sortConfig);
@@ -359,6 +421,9 @@ export default function SurplusInventoryPage() {
       return () => clearTimeout(timer);
     }
   }, [transferSuccess]);
+
+  // Show loader only until inventory is loaded (show table instantly, even if settings are loading)
+  const isInventoryLoading = isLoading;
 
   return (
     <section className="text-white font-poppins">
@@ -489,7 +554,9 @@ export default function SurplusInventoryPage() {
                         className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
                       >
                         <option value="">All Categories</option>
-                        {getUniqueCategories(inventoryData).map((category) => (
+                        {getUniqueCategories(
+                          inventoryData as InventoryItem[]
+                        ).map((category) => (
                           <option key={category} value={category}>
                             {category}
                           </option>
@@ -510,7 +577,9 @@ export default function SurplusInventoryPage() {
                         className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
                       >
                         <option value="">All Batches</option>
-                        {getUniqueBatchDates(inventoryData).map((date) => (
+                        {getUniqueBatchDates(
+                          inventoryData as InventoryItem[]
+                        ).map((date) => (
                           <option key={date} value={date}>
                             {date}
                           </option>
@@ -556,182 +625,195 @@ export default function SurplusInventoryPage() {
                 aria-label="Inventory table"
               >
                 <div className="overflow-x-auto">
-                  <table className="table-auto w-full text-xs xs:text-sm sm:text-base lg:text-lg xl:text-xl text-left border-collapse min-w-[700px]">
-                    <caption className="sr-only">
-                      Surplus Inventory Table
-                    </caption>
-                    <thead className="bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
-                      <tr>
-                        {columns.map((col) => (
-                          <th
-                            key={col.key}
-                            onClick={() =>
-                              col.key !== "actions" && requestSort(col.key)
-                            }
-                            className={`px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 text-left font-semibold cursor-pointer select-none whitespace-nowrap text-xs xs:text-sm sm:text-base lg:text-lg transition-colors ${
-                              col.key !== "actions"
-                                ? "text-gray-300 hover:text-yellow-400"
-                                : "text-gray-300"
-                            } ${
-                              sortConfig.key === col.key
-                                ? "text-yellow-400"
-                                : ""
-                            }`}
-                            scope="col"
-                          >
-                            <div className="flex items-center gap-1 xs:gap-2">
-                              {col.label}
-                              {sortConfig.key === col.key &&
-                                col.key !== "actions" && (
-                                  <span className="text-yellow-400">
-                                    {sortConfig.direction === "asc" ? "↑" : "↓"}
-                                  </span>
-                                )}
-                              {col.key !== "actions" &&
-                                sortConfig.key !== col.key && (
-                                  <FaSort className="text-gray-500 text-xs opacity-50" />
-                                )}
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {isLoading ? (
-                        <tr>
-                          <td
-                            colSpan={9}
-                            className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-8 xs:py-10 sm:py-12 md:py-14 lg:py-16 text-center"
-                          >
-                            <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                              <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                              <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                                Loading inventory data...
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : sortedData.length > 0 ? (
-                        sortedData.map((item: InventoryItem, index) => (
-                          <tr
-                            key={
-                              item.id ??
-                              `${item.name}-${item.batch}-${Math.random()}`
-                            }
-                            className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
-                              index % 2 === 0
-                                ? "bg-gray-800/20"
-                                : "bg-gray-900/20"
-                            }`}
-                            onClick={() => {
-                              router.push(routes.ViewSurplusInventory(item.id));
-                            }}
-                          >
-                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
-                              {item.id}
-                            </td>
-                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap">
-                              <div className="flex items-center gap-1 xs:gap-2 sm:gap-3">
-                                <div className="w-1.5 xs:w-2 h-1.5 xs:h-2 rounded-full bg-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                <span className="text-white group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
-                                  {item.name}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm sm:text-base">
-                              {formatDateOnly(item.batch)}
-                            </td>
-                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300">
-                              <span className="px-1 xs:px-2 py-0.5 xs:py-1 bg-gray-700/50 rounded-md xs:rounded-lg text-xs font-medium">
-                                {item.category}
-                              </span>
-                            </td>
-                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
-                              <span
-                                className={`px-1.5 xs:px-2 sm:px-3 py-0.5 xs:py-1 rounded-full text-xs font-bold border ${
-                                  item.status === "Out Of Stock"
-                                    ? "bg-gray-500/20 text-gray-400 border-gray-500/30"
-                                    : item.status === "Critical"
-                                    ? "bg-red-500/20 text-red-400 border-red-500/30"
-                                    : item.status === "Low"
-                                    ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
-                                    : "bg-green-500/20 text-green-400 border-green-500/30"
-                                }`}
-                              >
-                                {item.status}
-                              </span>
-                            </td>
-                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
-                              <span className="text-white font-semibold text-sm xs:text-base sm:text-lg">
-                                {item.stock}
-                              </span>
-                            </td>
-                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm">
-                              {formatDateTime(item.added)}
-                            </td>
-                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm">
-                              {formatDateOnly(item.expires)}
-                            </td>
-                            <td className="px-3 xl:px-4 py-3 whitespace-nowrap">
-                              <div className="flex items-center gap-1 xl:gap-2">
-                                {/* Only Owner, General Manager, Store Manager can delete */}
-                                {[
-                                  "Owner",
-                                  "General Manager",
-                                  "Store Manager",
-                                ].includes(role || "") && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setItemToDelete(item.id);
-                                      setShowDeleteModal(true);
-                                    }}
-                                    className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-all duration-200 cursor-pointer border border-red-500/20 hover:border-red-500/40"
-                                    title="Delete"
-                                    aria-label="Delete item"
-                                  >
-                                    <FaTrash className="text-xs xs:text-sm" />
-                                  </button>
-                                )}
-                                {/* All roles can transfer */}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setItemToTransfer(item);
-                                    setShowTransferModal(true);
-                                  }}
-                                  className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-all duration-200 cursor-pointer border border-blue-500/20 hover:border-blue-500/40"
-                                  title="Transfer to Today's Inventory"
-                                  aria-label="Transfer item"
-                                >
-                                  <FaExchangeAlt className="text-xs xs:text-sm" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td
-                            colSpan={9}
-                            className="px-4 xl:px-6 py-12 xl:py-16 text-center"
-                          >
-                            <div className="flex flex-col items-center gap-4">
-                              <MdInventory className="text-6xl text-gray-600" />
-                              <div>
-                                <h3 className="text-gray-400 font-medium mb-2">
-                                  No items found
-                                </h3>
-                                <p className="text-gray-500 text-sm">
-                                  Try adjusting your search or filter criteria
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
+                  {isInventoryLoading ? (
+                    <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
+                      <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+                      <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                        Loading inventory data...
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {settingsQuery.isLoading && (
+                        <div className="text-yellow-400 text-xs mb-2">
+                          Loading settings...
+                        </div>
                       )}
-                    </tbody>
-                  </table>
+                      <table className="table-auto w-full text-xs xs:text-sm sm:text-base lg:text-lg xl:text-xl text-left border-collapse min-w-[700px]">
+                        <caption className="sr-only">
+                          Surplus Inventory Table
+                        </caption>
+                        <thead className="bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
+                          <tr>
+                            {columns.map((col) => (
+                              <th
+                                key={col.key}
+                                onClick={() =>
+                                  col.key !== "actions" && requestSort(col.key)
+                                }
+                                className={`px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 text-left font-semibold cursor-pointer select-none whitespace-nowrap text-xs xs:text-sm sm:text-base lg:text-lg transition-colors ${
+                                  col.key !== "actions"
+                                    ? "text-gray-300 hover:text-yellow-400"
+                                    : "text-gray-300"
+                                } ${
+                                  sortConfig.key === col.key
+                                    ? "text-yellow-400"
+                                    : ""
+                                }`}
+                                scope="col"
+                              >
+                                <div className="flex items-center gap-1 xs:gap-2">
+                                  {col.label}
+                                  {sortConfig.key === col.key &&
+                                    col.key !== "actions" && (
+                                      <span className="text-yellow-400">
+                                        {sortConfig.direction === "asc"
+                                          ? "↑"
+                                          : "↓"}
+                                      </span>
+                                    )}
+                                  {col.key !== "actions" &&
+                                    sortConfig.key !== col.key && (
+                                      <FaSort className="text-gray-500 text-xs opacity-50" />
+                                    )}
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedData.length > 0 ? (
+                            sortedData.map((item: InventoryItem, index) => (
+                              <tr
+                                key={
+                                  item.id ??
+                                  `${item.name}-${item.batch}-${Math.random()}`
+                                }
+                                className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
+                                  index % 2 === 0
+                                    ? "bg-gray-800/20"
+                                    : "bg-gray-900/20"
+                                }`}
+                                onClick={() => {
+                                  router.push(
+                                    routes.ViewSurplusInventory(item.id)
+                                  );
+                                }}
+                              >
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
+                                  {item.id}
+                                </td>
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap">
+                                  <div className="flex items-center gap-1 xs:gap-2 sm:gap-3">
+                                    <div className="w-1.5 xs:w-2 h-1.5 xs:h-2 rounded-full bg-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    <span className="text-white group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
+                                      {item.name}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm sm:text-base">
+                                  {formatDateOnly(item.batch)}
+                                </td>
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300">
+                                  <span className="px-1 xs:px-2 py-0.5 xs:py-1 bg-gray-700/50 rounded-md xs:rounded-lg text-xs font-medium">
+                                    {item.category}
+                                  </span>
+                                </td>
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
+                                  <span
+                                    className={`px-1.5 xs:px-2 sm:px-3 py-0.5 xs:py-1 rounded-full text-xs font-bold border ${
+                                      item.status === "Out Of Stock"
+                                        ? "bg-gray-500/20 text-gray-400 border-gray-500/30"
+                                        : item.status === "Critical"
+                                        ? "bg-red-500/20 text-red-400 border-red-500/30"
+                                        : item.status === "Low"
+                                        ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                                        : "bg-green-500/20 text-green-400 border-green-500/30"
+                                    }`}
+                                  >
+                                    {item.status}
+                                  </span>
+                                </td>
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
+                                  <span className="text-white font-semibold text-sm xs:text-base sm:text-lg">
+                                    {item.stock}
+                                    {typeof item.unit === "string" &&
+                                      item.unit.trim() !== "" && (
+                                        <span className="ml-1 text-gray-400 text-xs xs:text-sm font-normal">
+                                          {item.unit}
+                                        </span>
+                                      )}
+                                  </span>
+                                </td>
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm">
+                                  {formatDateTime(item.added)}
+                                </td>
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm">
+                                  {formatDateOnly(item.expires)}
+                                </td>
+                                <td className="px-3 xl:px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-1 xl:gap-2">
+                                    {/* Only Owner, General Manager, Store Manager can delete */}
+                                    {[
+                                      "Owner",
+                                      "General Manager",
+                                      "Store Manager",
+                                    ].includes(role || "") && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setItemToDelete(item.id);
+                                          setShowDeleteModal(true);
+                                        }}
+                                        className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-all duration-200 cursor-pointer border border-red-500/20 hover:border-red-500/40"
+                                        title="Delete"
+                                        aria-label="Delete item"
+                                      >
+                                        <FaTrash className="text-xs xs:text-sm" />
+                                      </button>
+                                    )}
+                                    {/* All roles can transfer */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setItemToTransfer(item);
+                                        setShowTransferModal(true);
+                                      }}
+                                      className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-all duration-200 cursor-pointer border border-blue-500/20 hover:border-blue-500/40"
+                                      title="Transfer to Today's Inventory"
+                                      aria-label="Transfer item"
+                                    >
+                                      <FaExchangeAlt className="text-xs xs:text-sm" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td
+                                colSpan={9}
+                                className="px-4 xl:px-6 py-12 xl:py-16 text-center"
+                              >
+                                <div className="flex flex-col items-center gap-4">
+                                  <MdInventory className="text-6xl text-gray-600" />
+                                  <div>
+                                    <h3 className="text-gray-400 font-medium mb-2">
+                                      No items found
+                                    </h3>
+                                    <p className="text-gray-500 text-sm">
+                                      Try adjusting your search or filter
+                                      criteria
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </>
+                  )}
                 </div>
               </section>
             </article>
@@ -819,7 +901,13 @@ export default function SurplusInventoryPage() {
                     {itemToTransfer.name}
                   </p>
                   <p className="text-gray-400 text-xs xs:text-sm">
-                    Available: {itemToTransfer.stock} units
+                    Available: {itemToTransfer.stock}
+                    {typeof itemToTransfer.unit === "string" &&
+                      itemToTransfer.unit.trim() !== "" && (
+                        <span className="ml-1 text-gray-400 text-xs xs:text-sm font-normal">
+                          {String(itemToTransfer.unit)}
+                        </span>
+                      )}
                   </p>
                 </section>
                 <div className="text-left space-y-1 xs:space-y-2">
@@ -829,15 +917,23 @@ export default function SurplusInventoryPage() {
                   >
                     Quantity to Transfer
                   </label>
-                  <input
-                    id="transfer-quantity"
-                    type="number"
-                    min={1}
-                    value={itemToTransfer.stock}
-                    disabled
-                    className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-gray-400 border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
-                    aria-label="Quantity to transfer"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="transfer-quantity"
+                      type="number"
+                      min={1}
+                      value={itemToTransfer.stock}
+                      disabled
+                      className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-gray-400 border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
+                      aria-label="Quantity to transfer"
+                    />
+                    {typeof itemToTransfer.unit === "string" &&
+                      itemToTransfer.unit.trim() !== "" && (
+                        <span className="text-gray-400 text-xs xs:text-sm font-normal">
+                          {String(itemToTransfer.unit)}
+                        </span>
+                      )}
+                  </div>
                   <p className="text-xs text-gray-400">
                     All available units will be moved to Today's Inventory.
                   </p>
