@@ -1,31 +1,6 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-// Prefetch helpers
-function usePrefetchInventorySettings(
-  queryClient: ReturnType<typeof useQueryClient>
-) {
-  useEffect(() => {
-    queryClient.prefetchQuery({
-      queryKey: ["inventorySettings"],
-      queryFn: async () => {
-        const res = await fetch("/api/inventory-settings");
-        if (!res.ok) throw new Error("Failed to fetch settings");
-        return res.json();
-      },
-      staleTime: 1000 * 60 * 60 * 12,
-    });
-    queryClient.prefetchQuery({
-      queryKey: ["masterInventory", []],
-      queryFn: async () => {
-        const res = await fetch("/api/inventory-master");
-        if (!res.ok) throw new Error("Failed to fetch inventory");
-        return res.json();
-      },
-      staleTime: 1000 * 60 * 5,
-    });
-  }, [queryClient]);
-}
 import { InventorySetting } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 
 import { useRouter } from "next/navigation";
@@ -65,6 +40,8 @@ type InventoryItem = {
   [key: string]: unknown;
 };
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
 export default function InventoryPage() {
   const { role } = useAuth();
   console.log("Current role (RBAC check):", role);
@@ -78,7 +55,7 @@ export default function InventoryPage() {
   } = useQuery<InventorySetting[]>({
     queryKey: ["inventorySettings"],
     queryFn: async () => {
-      const res = await fetch("/api/inventory-settings");
+      const res = await fetch(`${API_BASE_URL}/api/inventory-settings`);
       if (!res.ok) throw new Error("Failed to fetch settings");
       return res.json();
     },
@@ -89,6 +66,31 @@ export default function InventoryPage() {
   const settings: InventorySetting[] = Array.isArray(settingsRaw)
     ? settingsRaw
     : [];
+
+  function usePrefetchInventorySettings(
+    queryClient: ReturnType<typeof useQueryClient>
+  ) {
+    useEffect(() => {
+      queryClient.prefetchQuery({
+        queryKey: ["inventorySettings"],
+        queryFn: async () => {
+          const res = await fetch(`${API_BASE_URL}/api/inventory-settings`);
+          if (!res.ok) throw new Error("Failed to fetch settings");
+          return res.json();
+        },
+        staleTime: 1000 * 60 * 60 * 12,
+      });
+      queryClient.prefetchQuery({
+        queryKey: ["masterInventory", []],
+        queryFn: async () => {
+          const res = await fetch(`${API_BASE_URL}/api/inventory-master`);
+          if (!res.ok) throw new Error("Failed to fetch inventory");
+          return res.json();
+        },
+        staleTime: 1000 * 60 * 5,
+      });
+    }, [queryClient]);
+  }
 
   const queryClient = useQueryClient();
   // Prefetch inventory/settings on mount

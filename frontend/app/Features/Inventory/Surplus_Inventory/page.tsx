@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
@@ -51,6 +50,8 @@ type InventoryItem = {
   [key: string]: string | number | Date | undefined;
 };
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
 export default function SurplusInventoryPage() {
   const { user, role } = useAuth();
   const router = useRouter();
@@ -80,7 +81,9 @@ export default function SurplusInventoryPage() {
     queryClient.prefetchQuery({
       queryKey: ["surplusInventory", settings],
       queryFn: async () => {
-        const response = await axios.get("/api/inventory-surplus");
+        const response = await axios.get(
+          `${API_BASE_URL}/api/inventory-surplus`
+        );
         return response.data;
       },
     });
@@ -113,7 +116,7 @@ export default function SurplusInventoryPage() {
   }, [isMobile]);
 
   const listSurplusItems = async () => {
-    const response = await axios.get("/api/inventory-surplus");
+    const response = await axios.get(`${API_BASE_URL}/api/inventory-surplus`);
     return response.data;
   };
 

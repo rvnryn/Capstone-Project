@@ -1,29 +1,6 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
-// Prefetch helpers
-function usePrefetchInventorySettings(
-  queryClient: ReturnType<typeof useQueryClient>
-) {
-  useEffect(() => {
-    queryClient.prefetchQuery({
-      queryKey: ["inventorySettings"],
-      queryFn: async () => {
-        const res = await axios.get("/api/inventory-settings");
-        return res.data;
-      },
-      staleTime: 1000 * 60 * 60 * 12,
-    });
-    queryClient.prefetchQuery({
-      queryKey: ["todayInventory", []],
-      queryFn: async () => {
-        const res = await axios.get("/api/inventory-today");
-        return res.data;
-      },
-      staleTime: 1000 * 60 * 5,
-    });
-  }, [queryClient]);
-}
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
 import {
@@ -71,6 +48,8 @@ type InventoryItem = {
   [key: string]: unknown;
 };
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
 export default function TodayInventoryPage() {
   const { user, role } = useAuth();
   const router = useRouter();
@@ -89,16 +68,41 @@ export default function TodayInventoryPage() {
   } = useQuery<InventorySetting[]>({
     queryKey: ["inventorySettings"],
     queryFn: async () => {
-      const res = await axios.get("/api/inventory-settings");
+      const res = await axios.get(`${API_BASE_URL}/api/inventory-settings`);
       return res.data;
     },
     staleTime: 1000 * 60 * 60 * 12, // 12 hours
     refetchOnReconnect: false,
     refetchOnMount: false,
   });
+
   const settings: InventorySetting[] = Array.isArray(settingsRaw)
     ? settingsRaw
     : [];
+
+  // Prefetch helpers
+  function usePrefetchInventorySettings(
+    queryClient: ReturnType<typeof useQueryClient>
+  ) {
+    useEffect(() => {
+      queryClient.prefetchQuery({
+        queryKey: ["inventorySettings"],
+        queryFn: async () => {
+          const res = await axios.get(`${API_BASE_URL}/api/inventory-settings`);
+          return res.data;
+        },
+        staleTime: 1000 * 60 * 60 * 12,
+      });
+      queryClient.prefetchQuery({
+        queryKey: ["todayInventory", []],
+        queryFn: async () => {
+          const res = await axios.get(`${API_BASE_URL}/api/inventory-today`);
+          return res.data;
+        },
+        staleTime: 1000 * 60 * 5,
+      });
+    }, [queryClient]);
+  }
 
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedBatchDate, setSelectedBatchDate] = useState("");
@@ -128,7 +132,7 @@ export default function TodayInventoryPage() {
   }, [isMobile]);
 
   const listTodayItems = async () => {
-    const response = await axios.get("/api/inventory-today");
+    const response = await axios.get(`${API_BASE_URL}/api/inventory-today`);
     return response.data;
   };
 

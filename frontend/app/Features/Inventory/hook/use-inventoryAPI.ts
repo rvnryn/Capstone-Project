@@ -40,6 +40,7 @@ export function useInventoryAPI() {
   // Get offline queue functions
   const { addOfflineAction, isOnline } = useOfflineQueue();
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+  
   // Helper function to handle offline write operations
   const handleOfflineWriteOperation = useCallback(
     async (
