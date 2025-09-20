@@ -162,6 +162,7 @@ export default function ReportSales() {
         allWeeksMap.set(f.week_start, f);
       }
     });
+
     const allWeeks = Array.from(allWeeksMap.values()).sort((a, b) =>
       a.week_start.localeCompare(b.week_start)
     );
