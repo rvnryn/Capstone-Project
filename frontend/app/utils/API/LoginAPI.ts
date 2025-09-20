@@ -1,9 +1,9 @@
 "use client";
-import axios from "@/app/lib/axios";
+import axiosInstance from "@/app/lib/axios";
 
 export async function loginUser(email: string, password: string) {
   try {
-    const response = await axios.post("/api/auth/login", {
+    const response = await axiosInstance.post("/api/auth/login", {
       email,
       password,
     });
@@ -20,7 +20,7 @@ export async function logoutUser() {
   const token = localStorage.getItem("token");
   if (!token) return;
   try {
-    await axios.post(
+    await axiosInstance.post(
       "/api/auth/logout",
       {},
       {

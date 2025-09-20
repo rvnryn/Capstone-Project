@@ -42,6 +42,7 @@ const AuthContext = createContext<AuthContextType>({
     throw new Error("Function not implemented.");
   },
 });
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export const useAuth = () => useContext(AuthContext);
 
@@ -123,7 +124,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       const res = await offlineAxiosRequest(
         {
           method: "GET",
-          url: "/api/auth/session",
+          url: `${API_BASE_URL}/api/auth/session`,
           headers: { Authorization: `Bearer ${session.access_token}` },
         },
         {
