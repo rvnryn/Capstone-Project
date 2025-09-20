@@ -1,0 +1,15 @@
+# Ignore secrets and sensitive files
+backend/app/credentials.json
+backend/.env
+frontend/.env
+*.env
+*.key
+*.pem
+*.p12
+*.crt
+*.cer
+*.der
+*.pfx
+.env.*
+# Ignore VSCode settings
+.vscode/

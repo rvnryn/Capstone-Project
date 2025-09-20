@@ -65,7 +65,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://cardiacdelights-inventorymanagement.vercel.app",
+        "https://cardiacdelights.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
