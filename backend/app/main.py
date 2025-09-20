@@ -65,7 +65,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://cardiacdelights.app",
+        "https://www.cardiacdelights.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
