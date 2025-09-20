@@ -158,13 +158,16 @@ export default function AddInventoryItem() {
   const capitalizeWords = (str: string) =>
     str.replace(/\b\w/g, (char) => char.toUpperCase());
 
-  const handleChange = useCallback(
+   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value, type } = e.target;
       setIsDirty(true);
       setFormData((prev) => ({
         ...prev,
-        [name]: type === "number" ? value : capitalizeWords(value),
+        [name]:
+          type === "number"
+            ? value === "" ? 0 : Number(value)
+            : capitalizeWords(value),
       }));
     },
     []
