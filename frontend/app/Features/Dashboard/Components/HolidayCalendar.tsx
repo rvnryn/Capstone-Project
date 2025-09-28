@@ -22,7 +22,7 @@ interface Props {
   onDelete?: (holiday: HolidayEvent) => void;
   year?: number; // Optionally specify year for PH holidays
 }
-
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const HolidayCalendar: React.FC<Props> = ({
   holidays,
   onAdd,
@@ -36,7 +36,9 @@ const HolidayCalendar: React.FC<Props> = ({
     const fetchPH = async () => {
       try {
         const y = year || new Date().getFullYear();
-        const res = await axios.get(`/api/holidays/philippines?year=${y}`);
+        const res = await axios.get(
+          `${API_BASE_URL}/api/holidays/philippines?year=${y}`
+        );
         setPhHolidays(
           (res.data || []).map((h: any) => ({
             id: `ph-${h.date}`,
