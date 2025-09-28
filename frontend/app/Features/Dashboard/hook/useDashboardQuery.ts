@@ -4,6 +4,7 @@ import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 export function useDashboardQuery() {
   const queryClient = useQueryClient();
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+  console.log("API_BASE_URL (runtime):", API_BASE_URL);
   // Low Stock
   const lowStock = useQuery({
     queryKey: ["dashboard", "low-stock"],
