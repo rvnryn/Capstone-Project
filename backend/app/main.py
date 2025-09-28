@@ -115,14 +115,6 @@ from app.routes.backup_restore import load_and_schedule
 from app.supabase import SessionLocal
 
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    print(f"Unhandled error: {exc}")
-    return PlainTextResponse(
-        str(exc), status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
-
-
 @app.on_event("startup")
 async def schedule_backup_jobs():
     print("Starting backup job scheduling...")
