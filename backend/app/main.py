@@ -54,10 +54,6 @@ async def skip_options_for_limiter(request, call_next):
         return await call_next(request)
     return await call_next(request)
 
-
-app.add_middleware(SlowAPIMiddleware)
-
-
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request, exc):
     return JSONResponse(
