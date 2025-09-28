@@ -19,10 +19,10 @@ export interface BackupScheduleSettings {
   time_of_day: string;
 }
 
-// Fetch the current backup schedule
+// Fetch the current backup schedule (matches backend: GET /schedule)
 export function useBackupSchedule() {
   const { data, error, mutate, isLoading } = useSWR<BackupSchedule>(
-    `${API_BASE_URL}/api/backup/schedule`,
+    `${API_BASE_URL}/api/schedule`,
     async (url: string) => {
       const res = await offlineAxiosRequest(
         {
@@ -46,12 +46,12 @@ export function useBackupSchedule() {
   };
 }
 
-// Update the backup schedule
+// Update the backup schedule (matches backend: POST /schedule)
 export async function updateBackupSchedule(settings: BackupScheduleSettings) {
   const res = await offlineAxiosRequest(
     {
       method: "POST",
-      url: `${API_BASE_URL}/api/backup/schedule`,
+      url: `${API_BASE_URL}/api/schedule`,
       data: settings,
     },
     {

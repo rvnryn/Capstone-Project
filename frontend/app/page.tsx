@@ -216,9 +216,9 @@ const Login = () => {
             <input
               id="username"
               type="text"
-              placeholder="Enter your email or username"
+              placeholder="enter your email or username"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value.toLowerCase())}
               required
               autoComplete="username"
               className="w-full bg-gray-900/80 border-2 border-yellow-400 text-white placeholder-gray-400 px-4 py-3 text-base rounded-lg shadow focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-400 transition-all"

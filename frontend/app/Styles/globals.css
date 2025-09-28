@@ -113,7 +113,8 @@
   * {
     @apply border-border outline-ring/50;
   }
-  html, body {
+  html,
+  body {
     background: #000 !important;
     @apply bg-background text-foreground;
   }
@@ -127,12 +128,12 @@
   [data-testid*="install"] {
     display: none !important;
   }
-  
+
   /* Hide Edge's install banner */
   .ms-appx-web-install-banner {
     display: none !important;
   }
-  
+
   /* Hide Firefox's install banner */
   .install-app-banner {
     display: none !important;

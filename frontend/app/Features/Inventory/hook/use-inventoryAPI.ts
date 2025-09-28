@@ -34,13 +34,25 @@ export type AddInventoryPayload = {
   expiration_date: string | null;
 };
 
+export interface SpoilageItem {
+  spoilage_id: string | number;
+  item_id: string | number;
+  item_name: string;
+  quantity_spoiled: number;
+  spoilage_date: string;
+  reason?: string | null;
+  user_id?: string | number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type UpdateInventoryPayload = Partial<AddInventoryPayload>;
 
 export function useInventoryAPI() {
   // Get offline queue functions
   const { addOfflineAction, isOnline } = useOfflineQueue();
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
-  
+
   // Helper function to handle offline write operations
   const handleOfflineWriteOperation = useCallback(
     async (
@@ -522,6 +534,78 @@ export function useInventoryAPI() {
     []
   );
 
+  const listSpoilage = useCallback(async () => {
+    try {
+      const response = await offlineAxiosRequest<SpoilageItem[]>(
+        {
+          method: "GET",
+          url: `${API_BASE_URL}/api/inventory-spoilage`,
+        },
+        {
+          cacheKey: "inventory-spoilage-list",
+          cacheHours: 2,
+          showErrorToast: true,
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error(
+        "Inventory Spoilage API list error:",
+        error.response?.data || error.message
+      );
+      throw error;
+    }
+  }, []);
+
+  const transferToSpoilage = useCallback(
+    async (id: string | number, quantity: number, reason?: string) => {
+      return handleOfflineWriteOperation(
+        () =>
+          offlineAxiosRequest(
+            {
+              method: "POST",
+              url: `${API_BASE_URL}/api/inventory/${id}/transfer-to-spoilage`,
+              data: { quantity, reason },
+            },
+            {
+              showErrorToast: true,
+            }
+          ),
+        {
+          action: "transfer-to-spoilage",
+          endpoint: `${API_BASE_URL}/api/inventory/${id}/transfer-to-spoilage`,
+          method: "POST",
+          payload: { id, quantity, reason },
+        }
+      );
+    },
+    [handleOfflineWriteOperation]
+  );
+
+  const deleteSpoilage = useCallback(
+    async (spoilage_id: string | number) => {
+      return handleOfflineWriteOperation(
+        () =>
+          offlineAxiosRequest(
+            {
+              method: "DELETE",
+              url: `${API_BASE_URL}/api/inventory-spoilage/${spoilage_id}`,
+            },
+            {
+              showErrorToast: true,
+            }
+          ),
+        {
+          action: "delete-spoilage-item",
+          endpoint: `${API_BASE_URL}/api/inventory-spoilage/${spoilage_id}`,
+          method: "DELETE",
+          payload: { spoilage_id },
+        }
+      );
+    },
+    [handleOfflineWriteOperation]
+  );
+
   return {
     getItem,
     addItem,
@@ -544,5 +628,9 @@ export function useInventoryAPI() {
     transferToToday,
     transferToSurplus,
     transferSurplusToToday,
+
+    listSpoilage,
+    transferToSpoilage,
+    deleteSpoilage,
   };
 }

@@ -173,6 +173,17 @@ export const offlineAxiosRequest = async <T = any>(
   try {
     // Import and use regular axios
     const axiosInstance = (await import("@/app/lib/axios")).default;
+
+    // If config.data is FormData, ensure Content-Type is not set (let browser set it)
+    if (
+      config.data instanceof FormData &&
+      config.headers &&
+      config.headers["Content-Type"]
+    ) {
+      // Remove Content-Type so browser/axios can set correct boundary
+      delete config.headers["Content-Type"];
+    }
+
     const response = await axiosInstance(config);
 
     // Cache successful responses if cacheKey provided

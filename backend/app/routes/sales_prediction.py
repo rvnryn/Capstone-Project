@@ -33,7 +33,7 @@ async def get_sales_data(session: AsyncSession, days: int = 90):
         ORDER BY DATE(created_at) DESC, SUM(quantity) DESC
     """
     )
-    result = await session.execute(query, {"since": since})
+    result = await session.execute(query, {"since": str(since)})
     rows = result.fetchall()
     print(f"[DEBUG] Raw query results: {len(rows)} rows")
 

@@ -1103,6 +1103,25 @@ const NavigationBar = ({
               <div className="w-6 h-0.5 bg-gradient-to-r from-transparent via-red-400/15 to-transparent rounded-full opacity-50"></div>
             </div>
           )}
+          {/* Privacy Policy Link */}
+          <div
+            className={`mt-2 flex justify-center ${
+              isMenuOpen || isMobile ? "" : "px-1"
+            }`}
+          >
+            <a
+              href="/privacy-policy"
+              target="_self"
+              className="text-xs text-yellow-300 hover:text-yellow-400 underline transition-colors duration-200 py-2"
+              style={{
+                display: "block",
+                textAlign: "center",
+                width: isMenuOpen || isMobile ? "100%" : "3.5rem",
+              }}
+            >
+              Privacy Policy
+            </a>
+          </div>
         </footer>
       </aside>
 

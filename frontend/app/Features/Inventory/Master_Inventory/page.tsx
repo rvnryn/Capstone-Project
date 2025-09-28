@@ -12,6 +12,7 @@ import {
   FaExchangeAlt,
   FaPlus,
   FaSort,
+  FaBiohazard,
 } from "react-icons/fa";
 import { MdInventory, MdWarning, MdCheckCircle } from "react-icons/md";
 import {
@@ -95,7 +96,8 @@ export default function InventoryPage() {
   const queryClient = useQueryClient();
   // Prefetch inventory/settings on mount
   usePrefetchInventorySettings(queryClient);
-  const { listItems, deleteItem, transferToToday } = useInventoryAPI();
+  const { listItems, deleteItem, transferToToday, transferToSpoilage } =
+    useInventoryAPI();
 
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedBatchDate, setSelectedBatchDate] = useState("");
@@ -113,6 +115,13 @@ export default function InventoryPage() {
   const [transferQuantity, setTransferQuantity] = useState<number | "">("");
   const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  const [showSpoilageModal, setShowSpoilageModal] = useState(false);
+  const [itemToSpoilage, setItemToSpoilage] = useState<InventoryItem | null>(
+    null
+  );
+  const [spoilageQuantity, setSpoilageQuantity] = useState<number | "">("");
+  const [spoilageReason, setSpoilageReason] = useState<string>("");
 
   const router = useRouter();
 
@@ -261,6 +270,46 @@ export default function InventoryPage() {
     },
   });
 
+  const spoilageMutation = useMutation({
+    mutationFn: async ({
+      id,
+      quantity,
+      reason,
+    }: {
+      id: number;
+      quantity: number;
+      reason?: string;
+    }) => {
+      await transferToSpoilage(id, quantity, reason);
+    },
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: ["masterInventory"] });
+      const previousInventory = queryClient.getQueryData<
+        (InventoryItem & { unit?: string })[]
+      >(["masterInventory", settings]);
+      if (previousInventory) {
+        queryClient.setQueryData<(InventoryItem & { unit?: string })[]>(
+          ["masterInventory", settings],
+          previousInventory.filter((item) => item.id !== id)
+        );
+      }
+      return { previousInventory };
+    },
+    onError: (error: any, variables, context) => {
+      if (context?.previousInventory) {
+        queryClient.setQueryData(
+          ["masterInventory", settings],
+          context.previousInventory
+        );
+      }
+      alert(error?.response?.data?.detail || "Spoilage transfer failed.");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] });
+    },
+  });
+
   const formatDateTime = (date: string | Date | null): string => {
     if (!date) return "-";
     const dt = typeof date === "string" ? new Date(date) : date;
@@ -334,18 +383,20 @@ export default function InventoryPage() {
   }, [inventoryData]);
 
   const filtered = useMemo(() => {
-    return inventoryData.filter(
-      (item) =>
-        (!selectedCategory || item.category === selectedCategory) &&
-        (!selectedBatchDate ||
-          formatDateOnly(item.batch) === selectedBatchDate) &&
-        (!searchQuery ||
-          [item.name, item.status, item.id?.toString()]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase()))
-    );
+    return inventoryData
+      .filter(
+        (item) =>
+          (!selectedCategory || item.category === selectedCategory) &&
+          (!selectedBatchDate ||
+            formatDateOnly(item.batch) === selectedBatchDate) &&
+          (!searchQuery ||
+            [item.name, item.status, item.id?.toString()]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase()))
+      )
+      .filter((item) => item.stock > 0 && item.status !== "Out Of Stock");
   }, [inventoryData, selectedCategory, selectedBatchDate, searchQuery]);
 
   const sortedData = useMemo(() => {
@@ -412,6 +463,28 @@ export default function InventoryPage() {
       key,
       direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
     }));
+  };
+
+  const confirmSpoilage = async () => {
+    if (!itemToSpoilage || !spoilageQuantity || spoilageQuantity <= 0) return;
+    await spoilageMutation.mutateAsync({
+      id: itemToSpoilage.id,
+      quantity: Number(spoilageQuantity),
+      reason: spoilageReason,
+    });
+    setShowSpoilageModal(false);
+    setItemToSpoilage(null);
+    setSpoilageQuantity("");
+    setSpoilageReason("");
+    queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
+    queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] });
+  };
+
+  const handleCloseSpoilageModal = () => {
+    setShowSpoilageModal(false);
+    setItemToSpoilage(null);
+    setSpoilageQuantity("");
+    setSpoilageReason("");
   };
 
   const confirmDelete = async () => {
@@ -927,6 +1000,20 @@ export default function InventoryPage() {
                                 >
                                   <FaExchangeAlt className="text-xs xs:text-sm" />
                                 </button>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setItemToSpoilage(item);
+                                    setShowSpoilageModal(true);
+                                  }}
+                                  className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 hover:text-pink-300 transition-all duration-200 cursor-pointer border border-pink-500/20 hover:border-pink-500/40"
+                                  title="Transfer to Spoilage"
+                                  aria-label="Transfer to Spoilage"
+                                >
+                                  <FaBiohazard className="text-xs xs:text-sm" />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -1124,6 +1211,115 @@ export default function InventoryPage() {
                     Cancel
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {showSpoilageModal && itemToSpoilage && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="spoilage-dialog-title"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <form
+              method="dialog"
+              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-gray-700/50 text-center space-y-4 sm:space-y-6 max-w-sm sm:max-w-md w-full"
+              onSubmit={(e) => e.preventDefault()}
+            >
+              <div className="flex justify-center mb-2 xs:mb-3 sm:mb-4">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-pink-500/20 rounded-full blur-lg xs:blur-xl"></div>
+                  <div className="relative bg-gradient-to-br from-pink-500 to-pink-600 p-2 xs:p-3 sm:p-4 rounded-full">
+                    <FaBiohazard className="text-white text-lg xs:text-xl sm:text-2xl md:text-3xl" />
+                  </div>
+                </div>
+              </div>
+              <h2
+                id="spoilage-dialog-title"
+                className="text-base xs:text-lg sm:text-xl md:text-2xl font-bold text-transparent bg-gradient-to-r from-pink-400 to-pink-500 bg-clip-text font-poppins"
+              >
+                Transfer to Spoilage
+              </h2>
+              <p className="text-gray-300 text-xs xs:text-sm sm:text-base">
+                Enter the quantity and reason for spoilage.
+              </p>
+              <div className="text-left space-y-1 xs:space-y-2">
+                <label
+                  className="block text-gray-300 font-medium text-xs xs:text-sm sm:text-base"
+                  htmlFor="spoilage-quantity"
+                >
+                  Quantity to Spoil <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="spoilage-quantity"
+                  type="number"
+                  min={1}
+                  max={itemToSpoilage.stock}
+                  value={spoilageQuantity}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/^0+/, "");
+                    setSpoilageQuantity(val === "" ? "" : Number(val));
+                  }}
+                  placeholder={`Enter quantity (1-${itemToSpoilage.stock})`}
+                  className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
+                  aria-label="Quantity to spoil"
+                />
+                <label
+                  className="block text-gray-300 font-medium text-xs xs:text-sm sm:text-base mt-2"
+                  htmlFor="spoilage-reason"
+                >
+                  Reason (optional)
+                </label>
+                <input
+                  id="spoilage-reason"
+                  type="text"
+                  value={spoilageReason}
+                  onChange={(e) => setSpoilageReason(e.target.value)}
+                  placeholder="e.g. Expired, Damaged, etc."
+                  className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
+                  aria-label="Spoilage reason"
+                />
+              </div>
+              <div className="flex flex-col sm:flex-row justify-center gap-2 xs:gap-3 sm:gap-4 pt-1 xs:pt-2">
+                <button
+                  type="button"
+                  onClick={confirmSpoilage}
+                  disabled={
+                    !spoilageQuantity ||
+                    spoilageQuantity <= 0 ||
+                    spoilageQuantity > itemToSpoilage.stock ||
+                    spoilageMutation.status === "pending"
+                  }
+                  className={`group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl font-semibold transition-all duration-300 order-2 sm:order-1 text-xs xs:text-sm sm:text-base ${
+                    !spoilageQuantity ||
+                    spoilageQuantity <= 0 ||
+                    spoilageQuantity > itemToSpoilage.stock ||
+                    spoilageMutation.status === "pending"
+                      ? "bg-gray-600/50 text-gray-400 cursor-not-allowed border-2 border-gray-600/50"
+                      : "bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-400 hover:to-pink-500 text-white border-2 border-pink-500/70 hover:border-pink-400/70 cursor-pointer"
+                  }`}
+                >
+                  {spoilageMutation.status === "pending" ? (
+                    <>
+                      <div className="w-3 xs:w-4 h-3 xs:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Transferring...
+                    </>
+                  ) : (
+                    <>
+                      <FaBiohazard className="group-hover:rotate-180 transition-transform duration-300" />
+                      Transfer
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseSpoilageModal}
+                  className="group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold transition-all duration-300 order-1 sm:order-2 cursor-pointer text-xs xs:text-sm sm:text-base"
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           </div>

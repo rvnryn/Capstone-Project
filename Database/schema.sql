@@ -22,19 +22,12 @@ CREATE TABLE public.backup_schedule (
   time_of_day character varying,
   CONSTRAINT backup_schedule_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.food_trend_ingredients (
-  trend_id integer NOT NULL,
-  ingredient_id integer NOT NULL,
-  CONSTRAINT food_trend_ingredients_pkey PRIMARY KEY (trend_id, ingredient_id),
-  CONSTRAINT fk_ingredient_id FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(ingredient_id),
-  CONSTRAINT fk_trend_id FOREIGN KEY (trend_id) REFERENCES public.top_sales(trend_id)
-);
-CREATE TABLE public.food_trend_menu (
-  trend_id integer NOT NULL,
-  menu_id integer NOT NULL,
-  CONSTRAINT food_trend_menu_pkey PRIMARY KEY (menu_id, trend_id),
-  CONSTRAINT fk_menu_id FOREIGN KEY (menu_id) REFERENCES public.menu(menu_id),
-  CONSTRAINT fk_trend_menu FOREIGN KEY (trend_id) REFERENCES public.top_sales(trend_id)
+CREATE TABLE public.custom_holidays (
+  id integer NOT NULL DEFAULT nextval('custom_holidays_id_seq'::regclass),
+  date date NOT NULL UNIQUE,
+  name character varying NOT NULL,
+  description text,
+  CONSTRAINT custom_holidays_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.ingredients (
   ingredient_id integer NOT NULL DEFAULT nextval('ingredients_ingredient_id_seq'::regclass),
@@ -182,38 +175,6 @@ CREATE TABLE public.orders (
   customer_notes text,
   receipt_email character varying,
   CONSTRAINT orders_pkey PRIMARY KEY (order_id)
-);
-CREATE TABLE public.past_inventory_log (
-  log_id integer NOT NULL DEFAULT nextval('inventory_log_log_id_seq'::regclass),
-  item_id integer,
-  action_type character varying,
-  action_quantity numeric,
-  remaining_stock numeric,
-  action_date timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-  user_id integer,
-  CONSTRAINT past_inventory_log_pkey PRIMARY KEY (log_id),
-  CONSTRAINT past_inventory_log_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.inventory(item_id),
-  CONSTRAINT past_inventory_log_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id)
-);
-CREATE TABLE public.past_order_items (
-  order_item_id integer NOT NULL DEFAULT nextval('order_items_order_item_id_seq'::regclass),
-  order_id integer,
-  menu_id integer,
-  quantity integer NOT NULL,
-  price numeric NOT NULL,
-  subtotal numeric DEFAULT ((quantity)::numeric * price),
-  CONSTRAINT past_order_items_pkey PRIMARY KEY (order_item_id),
-  CONSTRAINT past_order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id),
-  CONSTRAINT past_order_items_menu_id_fkey FOREIGN KEY (menu_id) REFERENCES public.menu(menu_id)
-);
-CREATE TABLE public.past_user_activity_log (
-  activity_id integer NOT NULL DEFAULT nextval('user_activity_log_activity_id_seq'::regclass),
-  user_id integer,
-  action_type character varying,
-  description text,
-  activity_date timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT past_user_activity_log_pkey PRIMARY KEY (activity_id),
-  CONSTRAINT past_user_activity_log_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id)
 );
 CREATE TABLE public.suppliers (
   supplier_id integer NOT NULL DEFAULT nextval('suppliers_supplier_id_seq'::regclass),

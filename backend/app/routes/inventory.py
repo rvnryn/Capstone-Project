@@ -1,10 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Body
 from slowapi.util import get_remote_address
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request
 from slowapi.util import get_remote_address
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from fastapi import Request
 from datetime import datetime, date
 from pydantic import BaseModel
@@ -178,6 +178,11 @@ class SurplusItemUpdate(BaseModel):
     stock_status: Optional[str] = None
     stock_quantity: Optional[float] = None
     expiration_date: Optional[date] = None
+
+
+class SpoilageRequest(BaseModel):
+    quantity: float
+    reason: Optional[str] = None
 
 
 @limiter.limit("10/minute")
@@ -959,3 +964,201 @@ async def transfer_to_surplus(
     except Exception as e:
         print("🔥 Error during transfer_to_surplus:", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@limiter.limit("10/minute")
+@router.get("/inventory-spoilage")
+async def list_spoilage(
+    request: Request,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, le=100),
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
+    try:
+
+        @run_blocking
+        def _fetch():
+            return (
+                supabase.table("inventory_spoilage")
+                .select("*")
+                .range(skip, skip + limit - 1)
+                .execute()
+            )
+
+        items = await _fetch()
+        # Log user activity
+        try:
+            user_row = getattr(user, "user_row", user)
+            new_activity = UserActivityLog(
+                user_id=user_row.get("user_id"),
+                action_type="list spoilage inventory",
+                description=f"Listed spoilage inventory items (skip={skip}, limit={limit})",
+                activity_date=datetime.utcnow(),
+                report_date=datetime.utcnow(),
+                user_name=user_row.get("name"),
+                role=user_row.get("user_role"),
+            )
+            db.add(new_activity)
+            await db.flush()
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to record spoilage inventory list activity: {e}")
+
+        # If you want to include the new columns in the response, make sure they are present in the table and returned by supabase.
+        return items.data
+    except Exception as e:
+        logger.exception("Error listing inventory_spoilage")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@limiter.limit("10/minute")
+@router.post("/inventory/{item_id}/transfer-to-spoilage")
+async def transfer_to_spoilage(
+    request: Request,
+    item_id: int,
+    req: SpoilageRequest = Body(...),
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
+    try:
+
+        @run_blocking
+        def _fetch():
+            return (
+                supabase.table("inventory")
+                .select("*")
+                .eq("item_id", item_id)
+                .single()
+                .execute()
+            )
+
+        response = await _fetch()
+        item = response.data
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found in inventory")
+        spoil_quantity = req.quantity
+        if spoil_quantity <= 0 or spoil_quantity > item["stock_quantity"]:
+            raise HTTPException(status_code=400, detail="Invalid spoilage quantity")
+        now = datetime.utcnow().isoformat()
+        # Insert into inventory_spoilage
+        spoilage_payload = {
+            "item_id": item["item_id"],
+            "item_name": item["item_name"],
+            "quantity_spoiled": spoil_quantity,
+            "spoilage_date": now[:10],
+            "reason": req.reason,
+            "user_id": getattr(user, "user_row", user).get("user_id"),
+            "batch_date": item.get("batch_date"),
+            "expiration_date": item.get("expiration_date"),
+            "category": item.get("category"),
+            "created_at": now,
+            "updated_at": now,
+        }
+        # Ensure spoilage_id is never set in the insert payload
+        if "spoilage_id" in spoilage_payload:
+            del spoilage_payload["spoilage_id"]
+
+        @run_blocking
+        def _insert_spoilage():
+            return (
+                supabase.table("inventory_spoilage").insert(spoilage_payload).execute()
+            )
+
+        spoilage_response = await _insert_spoilage()
+        # Update or delete inventory
+        new_stock = item["stock_quantity"] - spoil_quantity
+        if spoil_quantity >= item["stock_quantity"] or new_stock <= 0:
+            # Delete the item from master inventory
+            @run_blocking
+            def _delete_item():
+                return (
+                    supabase.table("inventory")
+                    .delete()
+                    .eq("item_id", item_id)
+                    .execute()
+                )
+
+            await _delete_item()
+        else:
+            threshold = await get_threshold_for_item(item["item_name"])
+            new_status = calculate_stock_status(new_stock, threshold)
+
+            @run_blocking
+            def _update():
+                return (
+                    supabase.table("inventory")
+                    .update(
+                        {
+                            "stock_quantity": new_stock,
+                            "stock_status": new_status,
+                            "updated_at": now,
+                        }
+                    )
+                    .eq("item_id", item_id)
+                    .execute()
+                )
+
+            await _update()
+        # Log user activity
+        await log_user_activity(
+            db,
+            user,
+            "transfer inventory to spoilage",
+            f"Transferred {spoil_quantity} of Id {item['item_id']} | item {item['item_name']} to Spoilage. Reason: {req.reason or 'N/A'}",
+        )
+        return {
+            "message": "Item transferred to Spoilage",
+            "data": spoilage_response.data,
+        }
+    except Exception as e:
+        logger.exception("Error during transfer_to_spoilage")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@limiter.limit("10/minute")
+@router.delete("/inventory-spoilage/{spoilage_id}")
+async def delete_spoilage_item(
+    request: Request,
+    spoilage_id: int,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
+    try:
+
+        @run_blocking
+        def _delete():
+            return (
+                supabase.table("inventory_spoilage")
+                .delete()
+                .eq("spoilage_id", spoilage_id)
+                .execute()
+            )
+
+        response = await _delete()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Spoilage record not found")
+        # Log user activity
+        try:
+            user_row = getattr(user, "user_row", user)
+            new_activity = UserActivityLog(
+                user_id=user_row.get("user_id"),
+                action_type="delete spoilage inventory",
+                description=f"Deleted spoilage inventory record: {spoilage_id}",
+                activity_date=datetime.utcnow(),
+                report_date=datetime.utcnow(),
+                user_name=user_row.get("name"),
+                role=user_row.get("user_role"),
+            )
+            db.add(new_activity)
+            await db.flush()
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to record spoilage inventory delete activity: {e}")
+        return {
+            "message": "Spoilage record deleted successfully",
+            "data": response.data,
+        }
+    except Exception as e:
+        logger.exception("Error deleting spoilage record")
+        raise HTTPException(status_code=500, detail="Internal server error")

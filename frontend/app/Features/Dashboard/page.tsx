@@ -1,10 +1,8 @@
 "use client";
-
 import annotationPlugin from "chartjs-plugin-annotation";
 import { useEffect, useState, useRef } from "react";
 import { useDashboardQuery } from "./hook/useDashboardQuery";
 import HolidayFormModal from "./Components/HolidayFormModal";
-import { useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useSimpleSalesReport } from "../Report/Report_Sales/hooks/useSimpleSalesReport";
 import {
@@ -46,6 +44,7 @@ import {
   MdWarning,
 } from "react-icons/md";
 import { HiSparkles } from "react-icons/hi";
+import { GiBiohazard } from "react-icons/gi";
 
 export default function Dashboard() {
   // Ref to store last chart data for deep comparison
@@ -92,9 +91,11 @@ export default function Dashboard() {
   // Use React Query for real-time inventory data
   const {
     lowStock,
+    outOfStock,
     expiring,
     surplus,
     expired,
+    spoilage,
     customHolidays,
     addHoliday,
     editHoliday,
@@ -115,8 +116,14 @@ export default function Dashboard() {
     expired.dataUpdatedAt ||
     null;
 
-  // Define variables for low stock and expiring ingredients
-  const lowStockIngredients = lowStock.data || [];
+  // Define variables for low stock, out of stock, and expiring ingredients
+  type InventoryIngredient = {
+    item_id: string | number;
+    item_name: string;
+    [key: string]: any;
+  };
+  const lowStockIngredients: InventoryIngredient[] = lowStock.data || [];
+  const outOfStockItems = outOfStock?.data || [];
   const expiringIngredients = expiring.data || [];
   const expiredItem = expired.data || [];
 
@@ -124,6 +131,8 @@ export default function Dashboard() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalEdit, setModalEdit] = useState<null | any>(null);
   const [modalDate, setModalDate] = useState<string | null>(null);
+
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Open add modal
   const handleAddHoliday = (date: string) => {
@@ -168,8 +177,8 @@ export default function Dashboard() {
     setModalEdit(null);
     setModalDate(null);
   };
-  // Interactive calendar section for custom holidays
 
+  // Interactive calendar section for custom holidays
   useEffect(() => {
     const topN = topItemsCount;
     const filteredData = predictionData.slice(0, topN);
@@ -499,8 +508,10 @@ export default function Dashboard() {
     };
   }, [prediction.data, loading, filterType, topItemsCount]);
 
-  // End of useEffect for top sales chart
-  // <-- Add this closing brace to end the useEffect, restoring function structure
+  type InventoryItem = {
+    item_id: string | number;
+    [key: string]: any;
+  };
 
   const renderFilterButtons = () => (
     <div className="w-full sm:w-auto">
@@ -883,113 +894,123 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Offline Data Banner */}
-              {inventoryFromCache && (
-                <OfflineDataBanner
-                  dataType="dashboard and inventory"
+              <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Offline Data Banner */}
+                {inventoryFromCache && (
+                  <OfflineDataBanner
+                    dataType="dashboard and inventory"
+                    isFromCache={inventoryFromCache}
+                  />
+                )}
+                <OfflineCard
                   isFromCache={inventoryFromCache}
-                  className="mb-4"
-                />
-              )}
-
-              {!isOnline && (
-                <aside
-                  className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg mb-4"
-                  aria-live="polite"
+                  lastUpdated={
+                    lastDataUpdate ? String(lastDataUpdate) : undefined
+                  }
+                  dataType="inventory"
                 >
-                  <div className="flex items-center">
-                    <FiWifiOff className="text-yellow-600 mr-2" />
-                    <div>
-                      <p className="text-yellow-800 font-medium text-sm">
-                        You're currently offline
-                      </p>
-                      <p className="text-yellow-700 text-xs mt-1">
-                        Some data may be from cache. Connection will restore
-                        automatically.
-                      </p>
-                    </div>
-                  </div>
-                </aside>
-              )}
+                  <StatCard
+                    icon={
+                      <FaClock className="text-red-400 text-lg sm:text-xl" />
+                    }
+                    title="Expired Items"
+                    count={expiredItem.length}
+                    color="border-l-red-500"
+                    bgColor="bg-black/75"
+                  />
+                </OfflineCard>
 
-              <p className="text-lg sm:text-xl md:text-2xl text-gray-700 font-medium leading-relaxed">
-                Monitor your inventory stock and historical sales performance
-              </p>
+                <OfflineCard
+                  isFromCache={inventoryFromCache}
+                  lastUpdated={
+                    lastDataUpdate ? String(lastDataUpdate) : undefined
+                  }
+                  dataType="inventory"
+                >
+                  <StatCard
+                    icon={
+                      <FaClock className="text-amber-400 text-lg sm:text-xl" />
+                    }
+                    title="Expiring Soon"
+                    count={expiringIngredients.length}
+                    color="border-l-amber-500"
+                    bgColor="bg-black/75"
+                  />
+                </OfflineCard>
+
+                <OfflineCard
+                  isFromCache={inventoryFromCache}
+                  lastUpdated={
+                    lastDataUpdate ? String(lastDataUpdate) : undefined
+                  }
+                  dataType="inventory"
+                >
+                  <StatCard
+                    icon={
+                      <GiBiohazard className="text-pink-400 text-lg sm:text-xl" />
+                    }
+                    title="Spoilage"
+                    count={spoilage?.data?.length ?? 0}
+                    color="border-l-pink-500"
+                    bgColor="bg-black/75"
+                  />
+                </OfflineCard>
+
+                <OfflineCard
+                  isFromCache={inventoryFromCache}
+                  lastUpdated={
+                    lastDataUpdate ? String(lastDataUpdate) : undefined
+                  }
+                  dataType="inventory"
+                >
+                  <StatCard
+                    icon={
+                      <FaExclamationTriangle className="text-yellow-400 text-lg sm:text-xl" />
+                    }
+                    title="Low Stock Items"
+                    count={lowStockIngredients.length}
+                    color="border-l-yellow-500"
+                    bgColor="bg-black/75"
+                  />
+                </OfflineCard>
+
+                <OfflineCard
+                  isFromCache={inventoryFromCache}
+                  lastUpdated={
+                    lastDataUpdate ? String(lastDataUpdate) : undefined
+                  }
+                  dataType="inventory"
+                >
+                  <StatCard
+                    icon={
+                      <FaWarehouse className="text-green-400 text-lg sm:text-xl" />
+                    }
+                    title="Surplus Items"
+                    count={surplus.data?.length ?? 0}
+                    color="border-l-green-500"
+                    bgColor="bg-black/75"
+                  />
+                </OfflineCard>
+
+                <OfflineCard
+                  isFromCache={inventoryFromCache}
+                  lastUpdated={
+                    lastDataUpdate ? String(lastDataUpdate) : undefined
+                  }
+                  dataType="inventory"
+                >
+                  <StatCard
+                    icon={
+                      <FaBoxes className="text-orange-400 text-lg sm:text-xl" />
+                    }
+                    title="Out of Stock"
+                    count={outOfStockItems.length}
+                    color="border-l-orange-500"
+                    bgColor="bg-black/75"
+                  />
+                </OfflineCard>
+              </section>
             </header>
-
-            {/* Stats Cards */}
-            <section
-              aria-label="Inventory Stats"
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8"
-            >
-              <OfflineCard
-                isFromCache={inventoryFromCache}
-                lastUpdated={
-                  lastDataUpdate ? String(lastDataUpdate) : undefined
-                }
-                dataType="inventory"
-              >
-                <StatCard
-                  icon={<FaClock className="text-red-400 text-lg sm:text-xl" />}
-                  title="Expired Items"
-                  count={expiredItem.length}
-                  color="border-l-red-500"
-                  bgColor="bg-black/75"
-                />
-              </OfflineCard>
-
-              <OfflineCard
-                isFromCache={inventoryFromCache}
-                lastUpdated={
-                  lastDataUpdate ? String(lastDataUpdate) : undefined
-                }
-                dataType="inventory"
-              >
-                <StatCard
-                  icon={<FaClock className="text-red-400 text-lg sm:text-xl" />}
-                  title="Expiring Soon"
-                  count={expiringIngredients.length}
-                  color="border-l-red-500"
-                  bgColor="bg-black/75"
-                />
-              </OfflineCard>
-
-              <OfflineCard
-                isFromCache={inventoryFromCache}
-                lastUpdated={
-                  lastDataUpdate ? String(lastDataUpdate) : undefined
-                }
-                dataType="inventory"
-              >
-                <StatCard
-                  icon={
-                    <FaExclamationTriangle className="text-orange-400 text-lg sm:text-xl" />
-                  }
-                  title="Low Stock Items"
-                  count={lowStockIngredients.length}
-                  color="border-l-orange-500"
-                  bgColor="bg-black/75"
-                />
-              </OfflineCard>
-
-              <OfflineCard
-                isFromCache={inventoryFromCache}
-                lastUpdated={
-                  lastDataUpdate ? String(lastDataUpdate) : undefined
-                }
-                dataType="inventory"
-              >
-                <StatCard
-                  icon={
-                    <FaWarehouse className="text-yellow-400 text-lg sm:text-xl" />
-                  }
-                  title="Surplus Items"
-                  count={surplus.data?.length ?? 0}
-                  color="border-l-yellow-500"
-                  bgColor="bg-black/75"
-                />
-              </OfflineCard>
-            </section>
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">
               <section className="xl:col-span-8 flex flex-col gap-4 sm:gap-6">
@@ -1008,7 +1029,9 @@ export default function Dashboard() {
                           Top Selling Items
                         </h2>
                         <p className="text-gray-400 text-xs sm:text-sm">
-                          Track your top performing items
+                          View sales trends for your top selling items. Analyze
+                          performance by day, week, or month to identify
+                          bestsellers and optimize inventory.
                         </p>
                       </div>
                     </div>
@@ -1059,7 +1082,7 @@ export default function Dashboard() {
                 <section
                   aria-label="ML Sales Forecast"
                   className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl 
-             p-4 sm:p-6 border border-gray-500/40 flex flex-col"
+             p-4 sm:p-6 flex flex-col"
                 >
                   s{/* Header */}
                   <header className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1090,7 +1113,9 @@ export default function Dashboard() {
                           </span>
                         </h2>
                         <p className="text-gray-400 text-xs sm:text-sm mt-0.5">
-                          Actual vs Predicted Sales
+                          Compare actual sales with machine learning predictions
+                          for each week. Highlighted weeks indicate official or
+                          custom holidays.
                         </p>
                       </div>
                     </div>
@@ -1144,7 +1169,8 @@ export default function Dashboard() {
                         Expired Stock
                       </h2>
                       <p className="text-pink-200 text-xs sm:text-sm">
-                        Items that have already expired and need to be removed
+                        These items have passed their expiration date and should
+                        be discarded or removed from inventory immediately.
                       </p>
                     </div>
                   </header>
@@ -1265,41 +1291,42 @@ export default function Dashboard() {
                 {/* Expiring Ingredients Table */}
                 <section
                   aria-label="Expiring Ingredients"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-orange-500/60"
+                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-amber-700"
                 >
                   <header className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
-                    <div className="p-1.5 sm:p-2 bg-orange-700/30 rounded-lg">
-                      <FaClock className="text-orange-400 text-lg sm:text-xl" />
+                    <div className="p-1.5 sm:p-2 bg-amber-700/30 rounded-lg">
+                      <FaClock className="text-amber-400 text-lg sm:text-xl" />
                     </div>
                     <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-orange-400">
+                      <h2 className="text-lg sm:text-xl font-bold text-amber-400">
                         Expiring Soon
                       </h2>
-                      <p className="text-orange-200 text-xs sm:text-sm">
-                        Items requiring immediate attention
+                      <p className="text-amber-200 text-xs sm:text-sm">
+                        These items are approaching their expiration date and
+                        should be used or restocked soon to prevent waste.
                       </p>
                     </div>
                   </header>
                   <div className="overflow-x-auto rounded-lg">
                     <table className="min-w-full text-xs sm:text-sm">
                       <thead>
-                        <tr className="bg-orange-900/40 border-b border-orange-500/40">
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-orange-300">
+                        <tr className="bg-amber-900/40 border-b border-amber-500/40">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300">
                             Id
                           </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-orange-300">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300">
                             Name
                           </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-orange-300 hidden sm:table-cell">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300 hidden sm:table-cell">
                             Category
                           </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-orange-300">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300">
                             Stock
                           </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-orange-300 hidden md:table-cell">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300 hidden md:table-cell">
                             Batch Date
                           </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-orange-300">
+                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300">
                             Expires
                           </th>
                         </tr>
@@ -1309,10 +1336,10 @@ export default function Dashboard() {
                           <tr>
                             <td
                               colSpan={6}
-                              className="py-6 sm:py-8 px-4 text-center text-orange-200"
+                              className="py-6 sm:py-8 px-4 text-center text-amber-200"
                             >
                               <div className="flex flex-col items-center justify-center gap-2 w-full">
-                                <FaClock className="text-orange-400 text-xl sm:text-2xl" />
+                                <FaClock className="text-amber-400 text-xl sm:text-2xl" />
                                 <p className="text-sm">
                                   No expiring ingredients found
                                 </p>
@@ -1338,7 +1365,7 @@ export default function Dashboard() {
                                   item.id ||
                                   `${item.item_name}-${item.expiration_date}-${idx}`
                                 }
-                                className="border-b border-orange-900/40 hover:bg-orange-900/10 transition-colors duration-200"
+                                className="border-b border-amber-900/40 hover:bg-amber-900/10 transition-colors duration-200"
                               >
                                 <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
                                   <div className="truncate max-w-[120px] sm:max-w-none">
@@ -1350,15 +1377,15 @@ export default function Dashboard() {
                                     {item.item_name}
                                   </div>
                                 </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-orange-200 hidden sm:table-cell">
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-amber-200 hidden sm:table-cell">
                                   {item.category || "N/A"}
                                 </td>
                                 <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
-                                  <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-orange-700/30 text-orange-200 rounded-full text-xs font-medium">
+                                  <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-amber-700/30 text-amber-200 rounded-full text-xs font-medium">
                                     {item.stock_quantity}
                                   </span>
                                 </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-orange-200 hidden md:table-cell">
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-amber-200 hidden md:table-cell">
                                   {item.batch_date
                                     ? new Date(
                                         item.batch_date
@@ -1369,7 +1396,7 @@ export default function Dashboard() {
                                       })
                                     : "N/A"}
                                 </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-orange-200">
+                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-amber-200">
                                   <div className="text-xs">
                                     {item.expiration_date
                                       ? new Date(
@@ -1391,6 +1418,78 @@ export default function Dashboard() {
                         )}
                       </tbody>
                     </table>
+                  </div>
+                </section>
+
+                <section
+                  aria-label="Spoilage List"
+                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-pink-400"
+                >
+                  <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                    <div className="p-1.5 sm:p-2 bg-pink-700/30 rounded-lg">
+                      <GiBiohazard className="text-pink-300 text-base sm:text-lg" />
+                    </div>
+                    <div>
+                      <h2 className="text-base sm:text-lg font-bold text-pink-200">
+                        Spoilage
+                      </h2>
+                      <p className="text-pink-400 text-xs">
+                        Items listed here have been marked as spoiled or wasted
+                        due to damage, contamination, or expiration. Review and
+                        address these records to minimize future losses.
+                      </p>
+                    </div>
+                  </header>
+                  <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
+                    {!spoilage?.data || spoilage.data.length === 0 ? (
+                      <div className="text-center py-3 sm:py-4">
+                        <GiBiohazard className="text-pink-500 text-lg sm:text-xl mx-auto mb-2" />
+                        <p className="text-pink-400 text-xs sm:text-sm">
+                          No spoilage records
+                        </p>
+                      </div>
+                    ) : (
+                      spoilage.data.map(
+                        (
+                          item: {
+                            id?: string | number;
+                            item_name?: string;
+                            quantity?: number;
+                            reason?: string;
+                            date_spoiled?: string;
+                          },
+                          idx: number
+                        ) => (
+                          <div
+                            key={item.id || `${item.item_name}-${idx}`}
+                            className="bg-pink-700/10 border border-pink-700/20 rounded-lg p-2 sm:p-3 hover:bg-pink-700/15 transition-colors duration-200"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-semibold text-pink-200 truncate">
+                                  {item.item_name}
+                                </div>
+                                <div className="text-xs text-pink-300">
+                                  Qty: {item.quantity}
+                                  {item.reason && (
+                                    <span className="ml-2 text-pink-400">
+                                      ({item.reason})
+                                    </span>
+                                  )}
+                                </div>
+                                {item.date_spoiled && (
+                                  <div className="text-xs text-pink-400">
+                                    {new Date(
+                                      item.date_spoiled
+                                    ).toLocaleDateString()}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      )
+                    )}
                   </div>
                 </section>
               </section>
@@ -1426,6 +1525,88 @@ export default function Dashboard() {
                   )}
                 </section>
 
+                {/* Out of Stock List */}
+                <section
+                  aria-label="Out of Stock"
+                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-orange-400"
+                >
+                  <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                    <div className="p-1.5 sm:p-2 bg-orange-700/30 rounded-lg">
+                      <FaBoxes className="text-orange-300 text-base sm:text-lg" />
+                    </div>
+                    <div>
+                      <h2 className="text-base sm:text-lg font-bold text-orange-200">
+                        Out of Stock
+                      </h2>
+                      <p className="text-orange-400 text-xs">
+                        These items are currently out of stock and unavailable
+                        for use or sale. Please reorder or restock as soon as
+                        possible to avoid disruptions.
+                      </p>
+                    </div>
+                  </header>
+                  <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
+                    {!outOfStockItems.length ? (
+                      <div className="text-center py-3 sm:py-4">
+                        <FaBoxes className="text-orange-500 text-lg sm:text-xl mx-auto mb-2" />
+                        <p className="text-orange-400 text-xs sm:text-sm">
+                          No items are currently out of stock
+                        </p>
+                      </div>
+                    ) : (
+                      outOfStockItems.map(
+                        (
+                          item: {
+                            id?: string | number;
+                            item_id?: string | number;
+                            item_name?: string;
+                            stock_quantity?: number;
+                            expiration_date?: string;
+                          },
+                          idx: number
+                        ) => (
+                          <div
+                            key={item.id || `${item.item_name}-${idx}`}
+                            className="bg-orange-700/10 border border-orange-700/20 rounded-lg p-2 sm:p-3 hover:bg-orange-700/15 transition-colors duration-200"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-white text-xs sm:text-sm truncate">
+                                  <span className="text-orange-300 font-semibold">
+                                    ID:
+                                  </span>{" "}
+                                  {item.item_id}
+                                  <span className="mx-1 text-orange-400">
+                                    |
+                                  </span>
+                                  <span className="font-semibold">
+                                    {item.item_name}
+                                  </span>
+                                </p>
+                                <p className="text-orange-300 text-xs">
+                                  Stock: {item.stock_quantity}
+                                </p>
+                              </div>
+                              <div className="text-right flex-shrink-0 ml-2">
+                                <p className="text-orange-400 text-xs">
+                                  {item.expiration_date
+                                    ? new Date(
+                                        item.expiration_date
+                                      ).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                      })
+                                    : "N/A"}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      )
+                    )}
+                  </div>
+                </section>
+
                 {/* Low Stock */}
                 <section
                   aria-label="Low Stock"
@@ -1439,7 +1620,10 @@ export default function Dashboard() {
                       <h2 className="text-base sm:text-lg font-bold text-yellow-400">
                         Low Stock
                       </h2>
-                      <p className="text-yellow-200 text-xs">Need restocking</p>
+                      <p className="text-yellow-200 text-xs">
+                        These items are running low and may require restocking
+                        soon to avoid shortages.
+                      </p>
                     </div>
                   </header>
                   <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
@@ -1515,7 +1699,11 @@ export default function Dashboard() {
                       <h2 className="text-base sm:text-lg font-bold text-green-400">
                         Surplus Stock
                       </h2>
-                      <p className="text-green-200 text-xs">Excess inventory</p>
+                      <p className="text-green-200 text-xs">
+                        These items have higher than usual stock levels.
+                        Consider using them in promotions or recipes to optimize
+                        inventory and reduce waste.
+                      </p>
                     </div>
                   </header>
                   <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">

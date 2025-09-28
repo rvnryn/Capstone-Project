@@ -7,6 +7,7 @@ export const routes = {
   master_inventory: "/Features/Inventory/Master_Inventory",
   todays_inventory: "/Features/Inventory/Today_Inventory",
   surplus_inventory: "/Features/Inventory/Surplus_Inventory",
+  spoilage_inventory: "/Features/Inventory/Spoilage_Inventory",
   addInventory: "/Features/Inventory/Master_Inventory/Add_Inventory",
   UpdateInventory: (id: number | string) =>
     `/Features/Inventory/Master_Inventory/Update_Inventory?id=${id}`,
@@ -18,6 +19,8 @@ export const routes = {
     `/Features/Inventory/Today_Inventory/View_Today_Inventory?id=${id}`,
   ViewSurplusInventory: (id: number | string) =>
     `/Features/Inventory/Surplus_Inventory/View_Surplus_Inventory?id=${id}`,
+  ViewSpoilageInventory: (id: number | string) =>
+    `/Features/Inventory/Spoilage_Inventory/View_Spoilage_Inventory?id=${id}`,
   report: "/Features/Report",
   salesReport: "/Features/Report/Report_Sales",
   inventoryReport: "/Features/Report/Report_Inventory",

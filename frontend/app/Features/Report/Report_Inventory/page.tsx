@@ -24,6 +24,11 @@ import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import dayjs from "dayjs";
 import { useInventoryReportAPI } from "./hook/use-inventoryreport";
+import { useRouter } from "next/navigation";
+import {
+  useEffect as useSpoilageEffect,
+  useState as useSpoilageState,
+} from "react";
 import axiosInstance from "@/app/lib/axios";
 import { supabase } from "@/app/utils/Server/supabaseClient";
 import { useAuth } from "@/app/context/AuthContext";
@@ -78,6 +83,19 @@ const GoogleSheetIntegration = ({
 };
 
 export default function ReportInventory() {
+  // Spoilage items state
+  const [spoilageItems, setSpoilageItems] = useSpoilageState<any[]>([]);
+  // Spoilage summary state
+  const [spoilageSummary, setSpoilageSummary] = useSpoilageState<number | null>(
+    null
+  );
+  const [spoilageLoading, setSpoilageLoading] = useSpoilageState(false);
+  const router = useRouter();
+  const { fetchSpoilageSummary } = useInventoryReportAPI();
+
+  // Additional filter states (move these above useSpoilageEffect to avoid TDZ)
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [reportDate, setReportDate] = useState("");
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const { user } = useAuth();
@@ -111,15 +129,12 @@ export default function ReportInventory() {
   const [showPopup, setShowPopup] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [groupedView] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [period, setPeriod] = useState("all"); // 💡 Smart Balance: Default to all time
-
   // Additional filter states
+  const [categoryFilter, setCategoryFilter] = useState(""); // <-- Add this line
   const [stockStatusFilter, setStockStatusFilter] = useState("");
   const [expirationFilter, setExpirationFilter] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [period, setPeriod] = useState("all");
+
   const [sortConfig, setSortConfig] = useState({
     key: "",
     direction: "asc",
@@ -190,6 +205,64 @@ export default function ReportInventory() {
       console.error("Error fetching inventory:", error);
     }
   }, [fetchLogs, saveLogs, user]);
+
+  // Fetch spoilage summary and items when date range or period changes
+  useSpoilageEffect(() => {
+    let isMounted = true;
+    async function loadSpoilage() {
+      setSpoilageLoading(true);
+      try {
+        // Use startDate/endDate if set, else use period
+        let start = startDate;
+        let end = endDate;
+        if (!start && !end && period !== "all") {
+          // Calculate start/end from period
+          const now = dayjs();
+          if (period === "weekly") {
+            start = now.subtract(7, "day").format("YYYY-MM-DD");
+            end = now.format("YYYY-MM-DD");
+          } else if (period === "monthly") {
+            start = now.startOf("month").format("YYYY-MM-DD");
+            end = now.format("YYYY-MM-DD");
+          } else if (period === "yearly") {
+            start = now.startOf("year").format("YYYY-MM-DD");
+            end = now.format("YYYY-MM-DD");
+          }
+        }
+        const data: any = await fetchSpoilageSummary(start, end);
+        // Save spoilage items for table
+        if (Array.isArray(data)) {
+          if (isMounted) setSpoilageItems(data);
+        } else {
+          if (isMounted) setSpoilageItems([]);
+        }
+        // Sum quantity_spoiled for summary
+        let total = 0;
+        if (Array.isArray(data)) {
+          total = data.reduce(
+            (sum, rec) => sum + (rec.quantity_spoiled || 0),
+            0
+          );
+        } else if (typeof data === "number") {
+          total = data;
+        } else if (data && typeof data.total_quantity_spoiled === "number") {
+          total = data.total_quantity_spoiled;
+        }
+        if (isMounted) setSpoilageSummary(total);
+      } catch (e) {
+        if (isMounted) {
+          setSpoilageSummary(null);
+          setSpoilageItems([]);
+        }
+      } finally {
+        if (isMounted) setSpoilageLoading(false);
+      }
+    }
+    loadSpoilage();
+    return () => {
+      isMounted = false;
+    };
+  }, [startDate, endDate, period, fetchSpoilageSummary]);
 
   useEffect(() => {
     load();
@@ -306,16 +379,41 @@ export default function ReportInventory() {
     [period]
   );
 
-  // 💡 Smart Balance: Choose data source - live inventory or historical data
+  // 💡 Smart Balance: Choose data source - live inventory or historical data, and append spoilage items
   const dataSource = useMemo(() => {
     const sourceData = isHistoricalMode ? historicalInventory : inventory;
-
-    // Apply period filters to the selected data source
-    if (period !== "all") {
-      return sourceData.filter((item) => matchesPeriod(item.report_date));
-    }
-    return sourceData;
-  }, [inventory, historicalInventory, isHistoricalMode, period, matchesPeriod]);
+    let mainData =
+      period !== "all"
+        ? sourceData.filter((item) => matchesPeriod(item.report_date))
+        : sourceData;
+    // Add spoilage items as rows with status 'Spoilage'
+    const spoilageRows = spoilageItems.map((rec) => ({
+      id: rec.item_id || rec.id,
+      name: rec.item_name || rec.name,
+      inStock: 0,
+      wastage: rec.quantity_spoiled || 0,
+      stock: "Spoiled", // Change status to 'Spoiled' for spoiled items
+      report_date: rec.spoilage_date || rec.created_at || "",
+      category: rec.category ? rec.category : "Spoilage",
+      expiration_date: rec.expiration_date,
+      // Use batch_date as batch_id, formatted as date string if present
+      batch_id: rec.batch_date
+        ? new Date(rec.batch_date).toLocaleDateString()
+        : rec.batch_id || "N/A",
+      created_at: rec.created_at,
+      updated: rec.updated_at,
+    }));
+    // Avoid duplicate IDs (if any)
+    const allRows = [...mainData, ...spoilageRows];
+    return allRows;
+  }, [
+    inventory,
+    historicalInventory,
+    isHistoricalMode,
+    period,
+    matchesPeriod,
+    spoilageItems,
+  ]);
 
   const dates = useMemo(
     () =>
@@ -448,37 +546,53 @@ export default function ReportInventory() {
     pastInventory,
   ]);
 
-  const excelValues = useMemo(
-    () => [
-      [
-        "Item ID",
-        "Item Name",
-        "Batch ID",
-        "Batch Date",
-        "Category",
-        "In Stock",
-        "Wastage",
-        "Expiration Date",
-        "Stock Status",
-        "Report Date",
-      ],
-      ...filtered.map((i) => [
-        i.id || "N/A",
-        i.name || "Unknown Item",
-        i.batch_id || "N/A",
-        i.created_at ? new Date(i.created_at).toLocaleDateString() : "N/A",
-        i.category || "No Category",
-        i.inStock || 0,
-        i.wastage || 0,
-        i.expiration_date
-          ? new Date(i.expiration_date).toLocaleDateString()
-          : "N/A",
-        i.stock || "Unknown",
-        i.report_date ? new Date(i.report_date).toLocaleDateString() : "N/A",
-      ]),
-    ],
-    [filtered]
-  );
+  const excelValues = useMemo(() => {
+    // Add spoilage summary row at the top
+    const summaryRow = [
+      "SPOILAGE SUMMARY",
+      spoilageLoading
+        ? "..."
+        : spoilageSummary !== null
+        ? spoilageSummary + " units"
+        : "-",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ];
+    const headerRow = [
+      "Item ID",
+      "Item Name",
+      "Batch ID",
+      "Batch Date",
+      "Category",
+      "In Stock",
+      "Wastage",
+      "Expiration Date",
+      "Stock Status",
+      "Report Date",
+    ];
+    const dataRows = filtered.map((i) => [
+      i.id || "N/A",
+      i.name || "Unknown Item",
+      i.batch_id || "N/A",
+      i.created_at ? new Date(i.created_at).toLocaleDateString() : "N/A",
+      i.category || "No Category",
+      i.inStock || 0,
+      i.wastage || 0,
+      i.expiration_date
+        ? new Date(i.expiration_date).toLocaleDateString()
+        : "N/A",
+      i.stock || "Unknown",
+      i.report_date ? new Date(i.report_date).toLocaleDateString() : "N/A",
+    ]);
+    return [summaryRow, headerRow, ...dataRows];
+  }, [filtered, spoilageSummary, spoilageLoading]);
 
   const exportExcel = () => {
     const ws = XLSX.utils.aoa_to_sheet(excelValues);
@@ -593,8 +707,8 @@ export default function ReportInventory() {
     const data = filtered; // Use individual items, not grouped
     if (!sortConfig.key) return data;
     const sorted = [...data].sort((a, b) => {
-      const aValue = a[sortConfig.key];
-      const bValue = b[sortConfig.key];
+      const aValue = (a as Record<string, any>)[sortConfig.key];
+      const bValue = (b as Record<string, any>)[sortConfig.key];
       if (typeof aValue === "number" && typeof bValue === "number") {
         return sortConfig.direction === "asc"
           ? aValue - bValue
@@ -619,9 +733,6 @@ export default function ReportInventory() {
     setExportSuccess(false);
     setShowPopup(false);
   };
-
-  // Filter inventory by selected date (normalized)
-  // (removed duplicate filteredInventory logic)
 
   return (
     <GoogleOAuthProvider clientId={CLIENT_ID}>
@@ -690,7 +801,63 @@ export default function ReportInventory() {
                         <FiBarChart className="text-blue-400 text-sm 2xs:text-base xs:text-lg sm:text-xl md:text-2xl flex-shrink-0" />
                       </div>
                     </div>
-
+                    {/* Spoilage Summary Card */}
+                    <div className="bg-gradient-to-br from-rose-500/10 to-rose-600/10 border border-rose-500/20 rounded-md 2xs:rounded-lg xs:rounded-lg sm:rounded-xl p-1.5 2xs:p-2 xs:p-2.5 sm:p-3 md:p-4 flex flex-col justify-between">
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs xs:text-sm font-semibold text-rose-400 truncate mb-0.5">
+                            Spoilage
+                          </div>
+                          <div className="text-lg xs:text-xl sm:text-2xl font-bold text-rose-300">
+                            {spoilageLoading ? (
+                              <span className="animate-pulse">...</span>
+                            ) : spoilageSummary !== null ? (
+                              spoilageSummary
+                            ) : (
+                              "-"
+                            )}
+                            <span className="text-xs font-normal text-rose-400 ml-1">
+                              units
+                            </span>
+                          </div>
+                          <button
+                            className="mt-1 text-xs xs:text-sm text-rose-300 hover:text-rose-400 underline underline-offset-2 transition-colors"
+                            onClick={() =>
+                              router.push(
+                                "/Features/Inventory/Spoilage_Inventory"
+                              )
+                            }
+                            type="button"
+                          >
+                            View Details
+                          </button>
+                        </div>
+                        <span className="flex-shrink-0">
+                          <svg
+                            width="28"
+                            height="28"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            className="text-rose-400"
+                          >
+                            <path
+                              d="M12 2v2m0 16v2m8-10h2M2 12H4m15.07-7.07l-1.41 1.41M6.34 17.66l-1.41 1.41m12.02 0l1.41 1.41M6.34 6.34L4.93 4.93"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <circle
+                              cx="12"
+                              cy="12"
+                              r="5"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            />
+                          </svg>
+                        </span>
+                      </div>
+                    </div>
                     <div className="bg-gradient-to-br from-red-500/10 to-red-600/10 border border-red-500/20 rounded-md 2xs:rounded-lg xs:rounded-lg sm:rounded-xl p-1.5 2xs:p-2 xs:p-2.5 sm:p-3 md:p-4">
                       <div className="flex items-center justify-between gap-1">
                         <div className="min-w-0 flex-1">
@@ -1439,17 +1606,23 @@ export default function ReportInventory() {
                                 </span>
                               </td>
                               <td className="px-3 py-3 whitespace-nowrap">
-                                <span
-                                  className={`px-2 py-1 rounded text-xs font-bold ${
-                                    item.stock === "Low"
-                                      ? "bg-red-500/20 text-red-400"
-                                      : item.stock === "Normal"
-                                      ? "bg-blue-500/20 text-blue-400"
-                                      : "bg-green-500/20 text-green-400"
-                                  }`}
-                                >
-                                  {item.stock}
-                                </span>
+                                {item.stock === "Spoiled" ? (
+                                  <span className="bg-rose-700/30 text-rose-300 border border-rose-500/40 px-2 py-1 rounded-full text-xs font-bold">
+                                    Spoiled
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`px-2 py-1 rounded text-xs font-bold ${
+                                      item.stock === "Low"
+                                        ? "bg-red-500/20 text-red-400"
+                                        : item.stock === "Normal"
+                                        ? "bg-blue-500/20 text-blue-400"
+                                        : "bg-green-500/20 text-green-400"
+                                    }`}
+                                  >
+                                    {item.stock}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-3 py-3 whitespace-nowrap text-gray-300 text-xs font-mono">
                                 {item.report_date}
@@ -1625,21 +1798,27 @@ export default function ReportInventory() {
                                   )}
                                 </td>
                                 <td className="px-4 xl:px-6 py-4 xl:py-5 whitespace-nowrap">
-                                  <span
-                                    className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                                      item.stock === "Low"
-                                        ? "bg-red-500/20 text-red-400 border-red-500/30"
+                                  {item.stock === "Spoiled" ? (
+                                    <span className="bg-rose-700/30 text-rose-300 border border-rose-500/40 px-3 py-1 rounded-full text-xs font-bold">
+                                      Spoiled
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                                        item.stock === "Low"
+                                          ? "bg-red-500/20 text-red-400 border-red-500/30"
+                                          : item.stock === "Normal"
+                                          ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                                          : "bg-green-500/20 text-green-400 border-green-500/30"
+                                      }`}
+                                    >
+                                      {item.stock === "Low"
+                                        ? "Critical"
                                         : item.stock === "Normal"
-                                        ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
-                                        : "bg-green-500/20 text-green-400 border-green-500/30"
-                                    }`}
-                                  >
-                                    {item.stock === "Low"
-                                      ? "Critical"
-                                      : item.stock === "Normal"
-                                      ? "Moderate"
-                                      : "Sufficient"}
-                                  </span>
+                                        ? "Moderate"
+                                        : "Sufficient"}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-4 xl:px-6 py-4 xl:py-5 whitespace-nowrap text-gray-300 text-sm">
                                   {new Date(

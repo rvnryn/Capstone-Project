@@ -181,11 +181,55 @@ export function useDashboardQuery() {
     },
   });
 
+  const outOfStock = useQuery({
+    queryKey: ["dashboard", "out-of-stock"],
+    queryFn: async () => {
+      const response = await offlineAxiosRequest(
+        {
+          method: "GET",
+          url: `${API_BASE_URL}/api/dashboard/out-of-stock`,
+        },
+        {
+          cacheKey: "dashboard-out-of-stock",
+          cacheHours: 24,
+          showErrorToast: true,
+          fallbackData: [],
+        }
+      );
+      return response.data;
+    },
+    refetchInterval: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const spoilage = useQuery({
+    queryKey: ["dashboard", "spoilage"],
+    queryFn: async () => {
+      const response = await offlineAxiosRequest(
+        {
+          method: "GET",
+          url: `${API_BASE_URL}/api/dashboard/spoilage`,
+        },
+        {
+          cacheKey: "dashboard-spoilage",
+          cacheHours: 24,
+          showErrorToast: true,
+          fallbackData: [],
+        }
+      );
+      return response.data;
+    },
+    refetchInterval: false,
+    staleTime: 10 * 60 * 1000,
+  });
+
   return {
     lowStock,
+    outOfStock,
     expiring,
     surplus,
     expired,
+    spoilage,
     customHolidays,
     addHoliday,
     editHoliday,

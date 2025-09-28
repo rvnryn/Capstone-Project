@@ -8,7 +8,7 @@ import { routes } from "@/app/routes/routes";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { FaWarehouse, FaChevronRight } from "react-icons/fa";
 import { MdInventory2 } from "react-icons/md";
-import { GiCardboardBoxClosed } from "react-icons/gi";
+import { GiCardboardBoxClosed, GiBiohazard } from "react-icons/gi";
 import { HiSparkles } from "react-icons/hi";
 
 const Inventory = () => {
@@ -17,6 +17,7 @@ const Inventory = () => {
   const Nav_master = () => router.push(routes.master_inventory);
   const Nav_today = () => router.push(routes.todays_inventory);
   const Nav_surplus = () => router.push(routes.surplus_inventory);
+  const Nav_spoilage = () => router.push(routes.spoilage_inventory);
 
   const inventoryButtons = [
     {
@@ -45,6 +46,15 @@ const Inventory = () => {
       color: "from-black to-gray-900",
       hoverColor: "hover:from-gray-900 hover:to-gray-800",
       badge: "Storage",
+    },
+    {
+      title: "Spoilage Inventory",
+      action: Nav_spoilage,
+      icon: <GiBiohazard className="text-4xl" />,
+      description: "Track and review all spoiled or wasted inventory items",
+      color: "from-black to-gray-900",
+      hoverColor: "hover:from-gray-900 hover:to-gray-800",
+      badge: "Spoilage",
     },
   ];
 

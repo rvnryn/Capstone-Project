@@ -83,8 +83,46 @@ export function useInventoryReportAPI() {
     }
   }, []);
 
+  /**
+   * Fetch spoilage summary (total quantity spoiled) from backend inventory API.
+   * Optionally accepts start_date and end_date (YYYY-MM-DD).
+   */
+  const fetchSpoilageSummary = useCallback(
+    async (start_date?: string, end_date?: string) => {
+      const params: Record<string, string> = {};
+      if (start_date) params.start_date = start_date;
+      if (end_date) params.end_date = end_date;
+      try {
+        const response = await offlineAxiosRequest(
+          {
+            method: "GET",
+            url: `${API_BASE_URL}/api/inventory-spoilage`,
+            params,
+          },
+          {
+            cacheKey: `spoilage-summary-${start_date || "all"}-${
+              end_date || "all"
+            }`,
+            cacheHours: 1,
+            showErrorToast: true,
+            fallbackData: [],
+          }
+        );
+        return response.data;
+      } catch (err: any) {
+        console.error("[fetchSpoilageSummary] error:", err);
+        if (err.isOfflineError) {
+          return [];
+        }
+        throw err;
+      }
+    },
+    []
+  );
+
   return {
     fetchLogs,
     saveLogs,
+    fetchSpoilageSummary, // <-- add this to the returned API
   };
 }

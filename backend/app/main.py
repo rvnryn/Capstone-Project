@@ -20,7 +20,7 @@ from .routes import notification
 from app.routes.notification import check_inventory_alerts
 from .routes import users
 from .routes import inventory_settings
-from .routes import backup_restore, automaticbackup
+from .routes import backup_restore
 from .routes import inventory_log
 from .routes import userActivity
 from .routes import custom_holiday
@@ -84,16 +84,14 @@ app.include_router(notification.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(inventory_settings.router, prefix="/api")
 app.include_router(backup_restore.router, prefix="/api")
-app.include_router(automaticbackup.router, prefix="/api")
 app.include_router(inventory_log.router, prefix="/api")
 app.include_router(userActivity.router, prefix="/api")
 app.include_router(custom_holiday.router, prefix="/api")
 app.include_router(ph_holidays.router)
 
 # --- Automatic Backup: Load and schedule jobs on startup ---
-from app.routes.automaticbackup import load_and_schedule
+from app.routes.backup_restore import load_and_schedule
 from app.supabase import SessionLocal
-import asyncio
 
 
 @app.on_event("startup")

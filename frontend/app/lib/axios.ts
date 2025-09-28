@@ -55,6 +55,14 @@ axiosInstance.interceptors.request.use(
       const token = localStorage.getItem("token");
       if (token) config.headers.Authorization = `Bearer ${token}`;
     }
+    // Remove Content-Type if sending FormData so browser/axios sets it correctly
+    if (
+      config.data instanceof FormData &&
+      config.headers &&
+      config.headers["Content-Type"]
+    ) {
+      delete config.headers["Content-Type"];
+    }
     return config;
   },
   (error) => {

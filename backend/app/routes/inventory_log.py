@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Body
 from fastapi.responses import JSONResponse
 from fastapi.exception_handlers import RequestValidationError
 from fastapi.exceptions import RequestValidationError
@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.supabase import (
     get_db,
-)  # You must have a get_db dependency that yields a Session
+)
+import pandas as pd
+from prophet import Prophet
+import matplotlib.pyplot as plt
 
 
 router = APIRouter()
@@ -25,9 +28,6 @@ class InventoryLogEntry(BaseModel):
     wastage: int
     item_name: str
     batch_date: str  # will parse to datetime in route
-
-
-from fastapi import Body
 
 
 @router.put("/inventory-log")
@@ -81,8 +81,8 @@ async def put_inventory_log(
                 ),
                 {
                     **entry_data,
-                    "action_date": action_date_dt,
-                    "batch_date": batch_date_dt,
+                    "action_date": action_date_dt.isoformat(),
+                    "batch_date": batch_date_dt.isoformat(),
                 },
             )
         await db.commit()

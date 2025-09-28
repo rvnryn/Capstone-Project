@@ -46,7 +46,7 @@ async def get_weekly_sales_forecast(
         where_clause = " AND ".join(filters)
         query = text(
             f"""
-            SELECT DATE_TRUNC('week', created_at)::date as week, SUM(subtotal) as total_sales
+            SELECT DATE_TRUNC('week', created_at::timestamp)::date as week, SUM(subtotal) as total_sales
             FROM order_items
             WHERE {where_clause}
             GROUP BY week
@@ -55,7 +55,11 @@ async def get_weekly_sales_forecast(
         )
 
         start_date = (datetime.utcnow() - timedelta(weeks=8)).date()
-        params["start_date"] = start_date
+        # Convert start_date to ISO string if it's a date or datetime
+        if isinstance(start_date, (datetime,)):
+            params["start_date"] = start_date.isoformat()
+        else:
+            params["start_date"] = start_date.strftime("%Y-%m-%d")
         result = await session.execute(query, params)
         rows = result.fetchall()
         if not rows or len(rows) < 4:
@@ -239,7 +243,7 @@ async def get_sales_summary(
                 AVG(subtotal) as avg_order_value,
                 COUNT(DISTINCT item_name) as unique_items_sold
             FROM order_items 
-            WHERE DATE(created_at) BETWEEN :start_date AND :end_date
+            WHERE DATE(created_at) BETWEEN DATE(:start_date) AND DATE(:end_date)
         """
         )
 
@@ -249,8 +253,10 @@ async def get_sales_summary(
             "[SALES SUMMARY] Params:",
             {"start_date": start_datetime, "end_date": end_datetime},
         )
+        # Pass as date objects for asyncpg compatibility
         result = await session.execute(
-            query, {"start_date": start_datetime, "end_date": end_datetime}
+            query,
+            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
         )
         row = result.fetchone()
         print("[SALES SUMMARY] Row:", row)

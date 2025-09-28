@@ -3,13 +3,28 @@ import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export function useBackupRestoreAPI() {
+  // Delete backup from Supabase Storage
+  const deleteBackup = async (filename: string): Promise<void> => {
+    if (!filename) throw new Error("No filename provided for delete.");
+    await offlineAxiosRequest(
+      {
+        method: "DELETE",
+        url: `${API_BASE_URL}/api/delete-backup?filename=${encodeURIComponent(
+          filename
+        )}`,
+      },
+      {
+        showErrorToast: true,
+      }
+    );
+  };
   // Download backup from FastAPI, encrypt if password provided
   const getToken = () =>
     typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
+  // Download backup from FastAPI Supabase endpoint
   const backup = async (password: string): Promise<void> => {
     if (!password) throw new Error("Password is required for backup.");
-    // Request backup from backend, passing password as query param (required)
     const response = await offlineAxiosRequest<{ data: Blob; headers?: any }>(
       {
         method: "GET",
@@ -28,7 +43,6 @@ export function useBackupRestoreAPI() {
     if (!response.data) {
       throw new Error("Backup not available offline");
     }
-    // Use filename from content-disposition header if available
     let filename = `backup-${new Date().toISOString().replace(/[:.]/g, "-")}`;
     const disposition =
       response.data.headers?.["content-disposition"] ||
@@ -39,9 +53,16 @@ export function useBackupRestoreAPI() {
     } else {
       filename += ".json.enc";
     }
-    const blob = new Blob([response.data.data], {
-      type: (response.data.data as Blob).type || "application/octet-stream",
-    });
+    // Defensive: fallback to application/octet-stream if type is missing
+    let blobType = "application/octet-stream";
+    if (
+      response.data.data &&
+      typeof response.data.data === "object" &&
+      "type" in response.data.data
+    ) {
+      blobType = (response.data.data as Blob).type || blobType;
+    }
+    const blob = new Blob([response.data.data], { type: blobType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -52,16 +73,14 @@ export function useBackupRestoreAPI() {
     URL.revokeObjectURL(url);
   };
 
-  // Upload restore file to FastAPI, decrypt and decompress if needed
+  // Restore backup from Supabase endpoint
   const restore = async (password: string, file: File): Promise<boolean> => {
     if (!file || !file.name) {
       throw new Error("No file selected for restore or file is invalid.");
     }
-    // Only require password for .enc files
     if (file.name.endsWith(".enc") && !password) {
       throw new Error("Password is required for restore.");
     }
-    // Send file and password as form fields
     const formData = new FormData();
     formData.append("file", file, file.name);
     formData.append("password", password || "");
@@ -88,122 +107,42 @@ export function useBackupRestoreAPI() {
     return true;
   };
 
-  const backupToDrive = async (
-    access_token: string,
-    backupPassword: string
-  ): Promise<string> => {
-    if (!backupPassword)
-      throw new Error("Password is required for Drive backup.");
-    try {
-      const token = getToken();
-      const response = await offlineAxiosRequest(
-        {
-          method: "POST",
-          url: `${API_BASE_URL}/api/backup_drive`,
-          data: { access_token, password: backupPassword },
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        },
-        {
-          showErrorToast: true,
-        }
-      );
-      return response.data.file_id;
-    } catch (error: any) {
-      const errData = error?.response?.data;
-      throw new Error(
-        (errData && (errData.detail || JSON.stringify(errData))) ||
-          error.message ||
-          String(error)
-      );
-    }
+  // List backups from Supabase Storage
+  const listBackups = async (): Promise<string[]> => {
+    const response = await offlineAxiosRequest(
+      {
+        method: "GET",
+        url: `${API_BASE_URL}/api/list-backups`,
+      },
+      {
+        showErrorToast: true,
+      }
+    );
+    return response.data.files || [];
   };
 
-  // Restore from Google Drive
-  const restoreFromDrive = async (
-    access_token: string,
-    file_id: string,
+  // Restore backup from user-uploaded file (local restore)
+  const restoreLocal = async (
+    file: File,
     password: string
   ): Promise<boolean> => {
-    if (!password) throw new Error("Password is required for Drive restore.");
-    try {
-      const token = getToken();
-      await offlineAxiosRequest(
-        {
-          method: "POST",
-          url: `${API_BASE_URL}/api/restore_drive`,
-          data: { access_token, file_id, password },
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        },
-        {
-          showErrorToast: true,
-        }
-      );
-      return true;
-    } catch (error: any) {
-      const errData = error?.response?.data;
-      throw new Error(
-        (errData && (errData.detail || JSON.stringify(errData))) ||
-          error.message ||
-          String(error)
-      );
+    if (!file || !file.name)
+      throw new Error("No file selected for local restore.");
+    if (file.name.endsWith(".enc") && !password) {
+      throw new Error("Password is required for restore.");
     }
-  };
-
-  const backupToS3 = async (
-    backupPassword: string,
-    filename?: string
-  ): Promise<string> => {
-    if (!backupPassword) throw new Error("Password is required for S3 backup.");
-    try {
-      const token = getToken();
-      const response = await offlineAxiosRequest(
-        {
-          method: "POST",
-          url: `${API_BASE_URL}/api/backup_s3`,
-          data: { password: backupPassword, ...(filename ? { filename } : {}) },
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        },
-        {
-          showErrorToast: true,
-        }
-      );
-      return response.data.filename;
-    } catch (error: any) {
-      const errData = error?.response?.data;
-      throw new Error(
-        (errData && (errData.detail || JSON.stringify(errData))) ||
-          error.message ||
-          String(error)
-      );
-    }
-  };
-
-  const restoreFromS3 = async (
-    filename: string | undefined,
-    password: string
-  ): Promise<boolean> => {
-    // Only require password for .enc files
-    if (filename && filename.endsWith(".enc") && !password) {
-      throw new Error("Password is required for S3 restore.");
-    }
+    const formData = new FormData();
+    formData.append("file", file, file.name);
+    formData.append("password", password || "");
     const token = getToken();
     try {
       await offlineAxiosRequest(
         {
           method: "POST",
-          url: `${API_BASE_URL}/api/restore_s3`,
-          data: filename ? { filename, password } : { password },
+          url: `${API_BASE_URL}/api/restore-local`,
+          data: formData,
           headers: {
-            "Content-Type": "application/json",
+            // Do NOT set Content-Type, browser will set it for FormData
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         },
@@ -211,23 +150,20 @@ export function useBackupRestoreAPI() {
           showErrorToast: true,
         }
       );
-      return true;
     } catch (error: any) {
       const errData = error?.response?.data;
       throw new Error(
-        (errData && (errData.detail || JSON.stringify(errData))) ||
-          error.message ||
-          String(error)
+        (errData && errData.detail) || "Restore from local backup failed"
       );
     }
+    return true;
   };
 
   return {
     backup,
     restore,
-    backupToDrive,
-    restoreFromDrive,
-    restoreFromS3,
-    backupToS3,
+    restoreLocal,
+    listBackups,
+    deleteBackup,
   };
 }
