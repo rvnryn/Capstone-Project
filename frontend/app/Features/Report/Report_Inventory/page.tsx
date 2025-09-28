@@ -382,7 +382,7 @@ export default function ReportInventory() {
   // 💡 Smart Balance: Choose data source - live inventory or historical data, and append spoilage items
   const dataSource = useMemo(() => {
     const sourceData = isHistoricalMode ? historicalInventory : inventory;
-    let mainData =
+    const mainData =
       period !== "all"
         ? sourceData.filter((item) => matchesPeriod(item.report_date))
         : sourceData;
