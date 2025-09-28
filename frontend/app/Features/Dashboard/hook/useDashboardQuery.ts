@@ -154,7 +154,6 @@ export function useDashboardQuery() {
         },
         { showErrorToast: true }
       );
-      console.log('API_URL', process.env.NEXT_PUBLIC_API_URL);
       return response.data;
     },
     onSuccess: () => {
