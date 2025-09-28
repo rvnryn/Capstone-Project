@@ -6,7 +6,7 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { createPortal } from "react-dom";
-import { FaCircle } from "react-icons/fa";
+import { FaCircle, FaSquare } from "react-icons/fa";
 
 export interface HolidayEvent {
   id: number | string;
@@ -52,21 +52,30 @@ const HolidayCalendar: React.FC<Props> = ({
     fetchPH();
   }, [year]);
   // Merge custom and PH holidays for calendar
+  // Colorblind-friendly palette
+  const cbColors = {
+    ph: { bg: "#0072B2", border: "#0072B2", text: "#fff", icon: "#E69F00" }, // blue/orange
+    custom: { bg: "#CC79A7", border: "#CC79A7", text: "#fff", icon: "#009E73" }, // purple/teal
+  };
   const events = useMemo(
     () =>
-      [...holidays, ...phHolidays].map((h) => ({
-        id: String(h.id),
-        title: h.name,
-        start: h.date,
-        allDay: true,
-        extendedProps: {
-          description: h.description,
-          isPH: String(h.id).startsWith("ph-"),
-        },
-        backgroundColor: String(h.id).startsWith("ph-") ? "#2563eb" : "#22d3ee",
-        borderColor: String(h.id).startsWith("ph-") ? "#2563eb" : "#22d3ee",
-        textColor: "#fff",
-      })),
+      [...holidays, ...phHolidays].map((h) => {
+        const isPH = String(h.id).startsWith("ph-");
+        const color = isPH ? cbColors.ph : cbColors.custom;
+        return {
+          id: String(h.id),
+          title: h.name,
+          start: h.date,
+          allDay: true,
+          extendedProps: {
+            description: h.description,
+            isPH,
+          },
+          backgroundColor: color.bg,
+          borderColor: color.border,
+          textColor: color.text,
+        };
+      }),
     [holidays, phHolidays]
   );
 
@@ -89,29 +98,47 @@ const HolidayCalendar: React.FC<Props> = ({
   return (
     <div
       className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-slate-900/95 to-slate-800/90 shadow-2xl h-full flex flex-col overflow-hidden w-full max-w-full min-w-0"
-      style={{ minHeight: "320px", height: "100%", maxHeight: "480px" }}
+      style={{
+        minHeight: "320px",
+        height: "100%",
+        maxHeight: "480px",
+        boxSizing: "border-box",
+      }}
+      role="region"
+      aria-label="Holiday Calendar"
     >
       {/* Header with Legend */}
-      <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-2 xs:gap-3 p-2 xs:p-3 sm:p-4 border-b border-blue-500/20 bg-gradient-to-br from-black/95 to-slate-800 backdrop-blur">
+      <div
+        className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-2 xs:gap-3 p-2 xs:p-3 sm:p-4 border-b border-blue-500/20 bg-gradient-to-br from-black/95 to-slate-800 backdrop-blur"
+        style={{ boxSizing: "border-box", width: "100%" }}
+      >
         <h3 className="text-white font-bold text-xs xs:text-sm sm:text-base flex items-center gap-2">
           <FaCircle className="text-yellow-400 text-xs xs:text-xs sm:text-sm" />
           Events Calendar
         </h3>
         <div className="flex flex-wrap items-center gap-2 xs:gap-3 text-[10px] xs:text-xs sm:text-sm">
           <span className="flex items-center gap-1 text-blue-200">
-            <FaCircle className="text-blue-400 text-[7px] xs:text-[8px] sm:text-[10px]" />{" "}
-            PH Holiday
+            <FaCircle className="text-[#E69F00] text-[8px]" />
+            <span className="ml-1">PH Holiday</span>
           </span>
           <span className="flex items-center gap-1 text-cyan-200">
-            <FaCircle className="text-cyan-400 text-[7px] xs:text-[8px] sm:text-[10px]" />
-            Custom Event
+            <FaSquare className="text-[#009E73] text-[8px]" />
+            <span className="ml-1">Custom Event</span>
           </span>
         </div>
       </div>
 
       {/* Calendar */}
-      <div className="flex-1 min-h-[180px] sm:min-h-[260px] md:min-h-[320px] w-full max-w-full">
+      <div
+        className="flex-1 min-h-[180px] sm:min-h-[260px] md:min-h-[320px] w-full max-w-full overflow-x-auto"
+        style={{ boxSizing: "border-box" }}
+      >
         <style>{`
+        /* Responsive calendar container */
+        .fc {
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
         /* General text color */
         .fc, 
         .fc .fc-toolbar-title,
@@ -182,7 +209,7 @@ const HolidayCalendar: React.FC<Props> = ({
         }
 
         /* Responsive tweaks for smallest screens */
-        @media (max-width: 500px) {
+        @media (max-width: 700px) {
           .fc .fc-toolbar {
             flex-wrap: wrap !important;
             gap: 0.2rem !important;
@@ -220,8 +247,12 @@ const HolidayCalendar: React.FC<Props> = ({
             min-width: 0 !important;
             padding: 0 !important;
           }
+          .fc .fc-daygrid-day {
+            min-width: 44px !important;
+            min-height: 44px !important;
+          }
         }
-        @media (max-width: 340px) {
+        @media (max-width: 400px) {
           .fc .fc-toolbar-title {
             font-size: 0.7rem !important;
           }
@@ -234,6 +265,20 @@ const HolidayCalendar: React.FC<Props> = ({
           .fc .fc-col-header-cell-cushion, .fc .fc-daygrid-day-number {
             font-size: 0.6rem !important;
           }
+        }
+        /* Scroll for event overflow on mobile */
+        .fc .fc-daygrid-day-events {
+          max-height: 2.2em !important;
+          overflow-y: auto !important;
+          scrollbar-width: thin !important;
+        }
+        /* Smooth transitions for hover/focus */
+        .fc-event, .fc-daygrid-day {
+          transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+        }
+        /* Touch-friendly tooltips */
+        .fc-event .group-hover\:flex, .fc-event .group-focus\:flex {
+          display: flex !important;
         }
       `}</style>
 
@@ -265,27 +310,42 @@ const HolidayCalendar: React.FC<Props> = ({
           }
           eventContent={(arg) => {
             const isPH = arg.event.extendedProps.isPH;
+            const color = isPH ? cbColors.ph : cbColors.custom;
             return (
-              <div className="flex items-center gap-1 group cursor-pointer relative">
-                <FaCircle
-                  className={
-                    isPH
-                      ? "text-blue-400 text-[7px] xs:text-[8px]"
-                      : "text-cyan-400 text-[7px] xs:text-[8px]"
-                  }
-                />
+              <div
+                className="flex items-center gap-1 group cursor-pointer relative focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                tabIndex={0}
+                aria-label={
+                  isPH
+                    ? `PH Holiday: ${arg.event.title}`
+                    : `Custom Event: ${arg.event.title}`
+                }
+                style={{ minWidth: 0, maxWidth: "100%" }}
+              >
+                {isPH ? (
+                  <FaCircle className="text-[#E69F00] text-[8px]" />
+                ) : (
+                  <FaSquare className="text-[#009E73] text-[8px]" />
+                )}
                 <span
                   className={`font-semibold text-[9px] xs:text-[10px] sm:text-xs truncate ${
-                    isPH ? "text-blue-100" : "text-cyan-100"
+                    isPH ? "text-blue-100" : "text-purple-100"
                   }`}
+                  style={{
+                    textShadow: "0 1px 2px #000",
+                    minWidth: 0,
+                    maxWidth: "100%",
+                  }}
                 >
                   {arg.event.title}
                 </span>
                 {/* Tooltip */}
                 <div
-                  className="absolute z-50 hidden group-hover:flex flex-col bg-gradient-to-br from-black/95 to-slate-800
+                  className="absolute z-50 hidden group-hover:flex group-focus:flex flex-col bg-gradient-to-br from-black/95 to-slate-800
                            text-white text-xs rounded-lg px-2 xs:px-3 py-2 shadow-xl border border-blue-700 
                            top-full left-0 mt-2 w-max min-w-[120px] xs:min-w-[160px] sm:min-w-[180px] max-w-[180px] xs:max-w-[220px] sm:max-w-[240px]"
+                  role="tooltip"
+                  style={{ wordBreak: "break-word", pointerEvents: "auto" }}
                 >
                   <div className="font-bold text-yellow-300">
                     {arg.event.title}
@@ -296,7 +356,9 @@ const HolidayCalendar: React.FC<Props> = ({
                     </div>
                   )}
                   <div className="text-blue-300">
-                    {isPH ? "🇵🇭 PH Holiday" : "✨ Custom Event"}
+                    {isPH
+                      ? "🇵🇭 PH Holiday (colorblind safe)"
+                      : "✨ Custom Event (colorblind safe)"}
                   </div>
                   <div className="text-slate-400 mt-1">
                     {arg.event.start?.toLocaleDateString()}
@@ -309,10 +371,10 @@ const HolidayCalendar: React.FC<Props> = ({
             "!rounded-lg !bg-slate-900/70 hover:!bg-slate-800 transition-colors duration-150 border border-blue-900/30"
           }
           eventClassNames={(arg) => [
-            "rounded-full px-1.5 xs:px-2 py-0.5 sm:py-1 text-[9px] xs:text-[10px] sm:text-xs font-semibold shadow-sm border-0",
+            "rounded-full px-1.5 xs:px-2 py-0.5 sm:py-1 text-[9px] xs:text-[10px] sm:text-xs font-semibold shadow-sm border-0 focus:outline-none focus:ring-2 focus:ring-yellow-400",
             arg.event.extendedProps.isPH
-              ? "bg-blue-400/90 text-white"
-              : "bg-cyan-400/90 text-white",
+              ? "bg-[#0072B2] text-white border-[#E69F00]"
+              : "bg-[#CC79A7] text-white border-[#009E73]",
           ]}
         />
       </div>

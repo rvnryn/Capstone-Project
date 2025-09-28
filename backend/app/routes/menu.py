@@ -319,8 +319,9 @@ def get_menu():
     if not data:
         return []
 
-    # Get all menu_ids
+    # Get all menu_ids, filter out None
     menu_ids = [item.get("id") or item.get("menu_id") for item in data]
+    menu_ids = [mid for mid in menu_ids if mid is not None]
     # Fetch all menu_ingredients for these menu_ids
     if menu_ids:
         ing_res = (
