@@ -94,75 +94,76 @@ export default function AddInventoryItem() {
   }, [fetchSettings]);
 
   // Validation logic
-  const validate = useCallback((data: typeof formData) => {
-    const newErrors = {
-      name: "",
-      category: "",
-      stock: "",
-      expiration_date: "",
-    };
+  const validate = useCallback(
+    (data: typeof formData) => {
+      const newErrors = {
+        name: "",
+        category: "",
+        stock: "",
+        expiration_date: "",
+      };
 
-    // Name validation
-    if (!data.name.trim()) {
-      newErrors.name = "Item name is required.";
-    } else if (data.name.trim().length < 2) {
-      newErrors.name = "Item name must be at least 2 characters.";
-    } else if (!/^[a-zA-Z0-9\s]+$/.test(data.name.trim())) {
-      newErrors.name =
-        "Item name can only contain letters, numbers, and spaces.";
-    }
-
-    // Category validation
-    if (!data.category) {
-      newErrors.category = "Category is required.";
-    } else if (!CATEGORY_OPTIONS.includes(data.category)) {
-      newErrors.category = "Invalid category selected.";
-    }
-
-    // Stock validation
-<<<<<<< HEAD
-    if (data.stock === null || data.stock === undefined) {
-=======
-    if (
-      data.stock === null ||
-      data.stock === undefined
-    ) {
->>>>>>> 5cc2c958108089375cab98b6f0b8d2570f7cd487
-      newErrors.stock = "Quantity in stock is required.";
-    } else if (
-      !Number.isInteger(data.stock) ||
-      data.stock < 1
-    ) {
-      newErrors.stock = "Quantity must be a positive integer.";
-    }
-
-
-    // Expiration date validation (required)
-    if (!data.expiration_date) {
-      newErrors.expiration_date = "Expiration date is required.";
-    } else {
-      const today = new Date();
-      const expDate = new Date(data.expiration_date);
-      today.setHours(0, 0, 0, 0);
-      expDate.setHours(0, 0, 0, 0);
-      if (expDate < today) {
-        newErrors.expiration_date = "Expiration date cannot be in the past.";
+      // Name validation
+      if (!data.name.trim()) {
+        newErrors.name = "Item name is required.";
+      } else if (data.name.trim().length < 2) {
+        newErrors.name = "Item name must be at least 2 characters.";
+      } else if (!/^[a-zA-Z0-9\s]+$/.test(data.name.trim())) {
+        newErrors.name =
+          "Item name can only contain letters, numbers, and spaces.";
       }
-    }
 
-    return newErrors;
-  }, []);
+      // Category validation
+      if (!data.category) {
+        newErrors.category = "Category is required.";
+      } else if (!CATEGORY_OPTIONS.includes(data.category)) {
+        newErrors.category = "Invalid category selected.";
+      }
+
+      // Stock validation
+      if (data.stock === null || data.stock === undefined) {
+        newErrors.stock = "Quantity in stock is required.";
+      } else if (!Number.isInteger(data.stock)) {
+        newErrors.stock = "Quantity must be an integer.";
+      } else if (data.stock < 1) {
+        newErrors.stock = "Quantity must be a positive integer.";
+      }
+
+      // Expiration date validation (required)
+      if (!data.expiration_date) {
+        newErrors.expiration_date = "Expiration date is required.";
+      } else {
+        const today = new Date();
+        const expDate = new Date(data.expiration_date);
+        today.setHours(0, 0, 0, 0);
+        expDate.setHours(0, 0, 0, 0);
+        if (expDate < today) {
+          newErrors.expiration_date = "Expiration date cannot be in the past.";
+        }
+      }
+
+      return newErrors;
+    },
+    [CATEGORY_OPTIONS]
+  );
 
   useEffect(() => {
     if (isSubmitted) {
-      setErrors(validate(formData));
+      setErrors(
+        validate(formData) ?? {
+          name: "",
+          category: "",
+          stock: "",
+          expiration_date: "",
+        }
+      );
     }
   }, [formData, validate, isSubmitted]);
 
   const capitalizeWords = (str: string) =>
     str.replace(/\b\w/g, (char) => char.toUpperCase());
 
-   const handleChange = useCallback(
+  const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value, type } = e.target;
       setIsDirty(true);
@@ -170,13 +171,9 @@ export default function AddInventoryItem() {
         ...prev,
         [name]:
           type === "number"
-<<<<<<< HEAD
             ? value === ""
               ? 0
               : Number(value)
-=======
-            ? value === "" ? 0 : Number(value)
->>>>>>> 5cc2c958108089375cab98b6f0b8d2570f7cd487
             : capitalizeWords(value),
       }));
     },
@@ -202,7 +199,12 @@ export default function AddInventoryItem() {
     setIsSubmitted(true);
     setIsSubmitting(true);
 
-    const validationErrors = validate(formData);
+    const validationErrors = validate(formData) ?? {
+      name: "",
+      category: "",
+      stock: "",
+      expiration_date: "",
+    };
     setErrors(validationErrors);
 
     if (
