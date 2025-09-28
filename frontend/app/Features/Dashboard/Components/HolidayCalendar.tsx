@@ -23,7 +23,7 @@ interface Props {
   year?: number; // Optionally specify year for PH holidays
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const HolidayCalendar: React.FC<Props> = ({
   holidays,
   onAdd,
@@ -46,7 +46,7 @@ const HolidayCalendar: React.FC<Props> = ({
             id: `ph-${h.date}`,
             date: h.date,
             name: h.name,
-            description: "Philippine Holiday",
+            description: h.type === "official" ? "Philippine Holiday" : h.name,
           }))
         );
       } catch (e) {
