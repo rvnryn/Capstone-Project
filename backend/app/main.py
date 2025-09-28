@@ -29,11 +29,35 @@ from .routes import ph_holidays
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://www.cardiacdelights.app",
+        "https://cardiacdelights.app",
+        "http://localhost:3000",
+    ],
+    allow_origin_regex=r"https://.*\.cardiacdelights\.app",
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
+
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 
 
-# Add rate limit exception handler
+@app.middleware("http")
+async def skip_options_for_limiter(request, call_next):
+    # Let CORS preflights pass untouched
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    return await call_next(request)
+
+
+app.add_middleware(SlowAPIMiddleware)
+
+
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request, exc):
     return JSONResponse(
@@ -60,17 +84,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "body": exc.body},
     )
 
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://www.cardiacdelights.app",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 app.include_router(auth_routes.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
