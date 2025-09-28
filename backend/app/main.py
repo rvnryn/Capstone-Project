@@ -96,7 +96,7 @@ app.include_router(backup_restore.router, prefix="/api")
 app.include_router(inventory_log.router, prefix="/api")
 app.include_router(userActivity.router, prefix="/api")
 app.include_router(custom_holiday.router, prefix="/api")
-app.include_router(ph_holidays.router)
+app.include_router(ph_holidays.router, prefix="/api")
 
 # Global error handler for debugging deployment issues
 from fastapi.responses import PlainTextResponse

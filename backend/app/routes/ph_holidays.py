@@ -3,7 +3,7 @@ from datetime import date
 import holidays
 from typing import List
 
-router = APIRouter(prefix="/api/holidays", tags=["holidays"])
+router = APIRouter(tags=["holidays"])
 
 
 @router.get("/philippines", response_model=List[dict])

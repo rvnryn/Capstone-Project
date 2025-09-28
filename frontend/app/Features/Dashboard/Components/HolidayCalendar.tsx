@@ -37,7 +37,7 @@ const HolidayCalendar: React.FC<Props> = ({
     const fetchPH = async () => {
       try {
         const y = year || new Date().getFullYear();
-        const url = `${API_BASE_URL}/api/holidays/philippines?year=${y}`;
+        const url = `${API_BASE_URL}/api/philippines?year=${y}`;
         const res = await axios.get(url);
         console.log("PH Holidays API URL:", url);
         console.log("PH Holidays API response:", res.data);
