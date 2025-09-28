@@ -120,11 +120,22 @@ export default function AddInventoryItem() {
     }
 
     // Stock validation
+<<<<<<< HEAD
     if (data.stock === null || data.stock === undefined) {
+=======
+    if (
+      data.stock === null ||
+      data.stock === undefined
+    ) {
+>>>>>>> 5cc2c958108089375cab98b6f0b8d2570f7cd487
       newErrors.stock = "Quantity in stock is required.";
-    } else if (!Number.isInteger(data.stock) || data.stock < 1) {
+    } else if (
+      !Number.isInteger(data.stock) ||
+      data.stock < 1
+    ) {
       newErrors.stock = "Quantity must be a positive integer.";
     }
+
 
     // Expiration date validation (required)
     if (!data.expiration_date) {
@@ -151,7 +162,7 @@ export default function AddInventoryItem() {
   const capitalizeWords = (str: string) =>
     str.replace(/\b\w/g, (char) => char.toUpperCase());
 
-  const handleChange = useCallback(
+   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value, type } = e.target;
       setIsDirty(true);
@@ -159,9 +170,13 @@ export default function AddInventoryItem() {
         ...prev,
         [name]:
           type === "number"
+<<<<<<< HEAD
             ? value === ""
               ? 0
               : Number(value)
+=======
+            ? value === "" ? 0 : Number(value)
+>>>>>>> 5cc2c958108089375cab98b6f0b8d2570f7cd487
             : capitalizeWords(value),
       }));
     },
