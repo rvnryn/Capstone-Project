@@ -49,13 +49,9 @@ app.state.limiter = limiter
 
 @app.middleware("http")
 async def skip_options_for_limiter(request, call_next):
-    # Let CORS preflights pass untouched
     if request.method == "OPTIONS":
         return await call_next(request)
     return await call_next(request)
-
-
-app.add_middleware(SlowAPIMiddleware)
 
 
 @app.exception_handler(RateLimitExceeded)
@@ -102,15 +98,30 @@ app.include_router(userActivity.router, prefix="/api")
 app.include_router(custom_holiday.router, prefix="/api")
 app.include_router(ph_holidays.router)
 
-# --- Automatic Backup: Load and schedule jobs on startup ---
+# Global error handler for debugging deployment issues
+from fastapi.responses import PlainTextResponse
+from fastapi import status
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"Unhandled error: {exc}")
+    return PlainTextResponse(
+        str(exc), status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
+
+
 from app.routes.backup_restore import load_and_schedule
 from app.supabase import SessionLocal
 
 
 @app.on_event("startup")
 async def schedule_backup_jobs():
+    print("Starting backup job scheduling...")
     async with SessionLocal() as session:
+        print("Session started for backup scheduling")
         await load_and_schedule(session)
+    print("Backup job scheduling complete")
 
 
 @app.get("/health")
