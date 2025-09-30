@@ -26,10 +26,7 @@ const toastConfig = {
 };
 
 const axiosInstance = axios.create({
-  baseURL:
-    process.env.NODE_ENV === "production"
-      ? "https://api.cardiacdelights.app"
-      : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
   timeout: 0,
   headers: { "Content-Type": "application/json" },
 });

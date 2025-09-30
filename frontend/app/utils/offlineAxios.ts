@@ -1,9 +1,4 @@
-/**
- * Offline-aware axios utility
- * This provides a simple way to make axios requests that work offline
- */
-
-import { toast } from "react-toastify";
+ import { toast } from "react-toastify";
 
 // Define the return type for offline-aware requests
 interface OfflineAxiosResponse<T = any> {
