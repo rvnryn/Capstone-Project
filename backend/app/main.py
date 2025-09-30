@@ -47,13 +47,6 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 
 
-@app.middleware("http")
-async def skip_options_for_limiter(request, call_next):
-    if request.method == "OPTIONS":
-        return await call_next(request)
-    return await call_next(request)
-
-
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request, exc):
     return JSONResponse(
