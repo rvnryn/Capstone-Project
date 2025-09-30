@@ -71,6 +71,11 @@ async def get_weekly_sales_forecast(
         df = df.sort_values("week")
         df["week_num"] = (df["week"] - df["week"].min()).dt.days // 7
 
+        # Drop rows with NaN total_sales (prevents model.fit error)
+        df = df.dropna(subset=["total_sales"])
+        if df.empty or len(df) < 4:
+            return {"error": "Not enough clean historical data for weekly forecasting."}
+
         # Use holidays library for Philippine holidays
         ph_holidays = holidays.country_holidays(
             "PH", years=range(df["week"].min().year, df["week"].max().year + 3)
@@ -346,15 +351,14 @@ async def get_sales_by_item(
         for row in result.fetchall():
             items.append(
                 {
-                    "item_name": row.item_name,
-                    "category": row.category,
-                    "total_quantity": row.total_quantity,
-                    "total_revenue": float(row.total_revenue),
-                    "avg_price": float(row.avg_price),
-                    "orders_count": row.orders_count,
+                    "item_name": getattr(row, "item_name", "") or "",
+                    "category": getattr(row, "category", "") or "",
+                    "total_quantity": row.total_quantity if row.total_quantity is not None else 0,
+                    "total_revenue": float(row.total_revenue) if row.total_revenue is not None else 0.0,
+                    "avg_price": float(row.avg_price) if row.avg_price is not None else 0.0,
+                    "orders_count": row.orders_count if row.orders_count is not None else 0,
                 }
             )
-
         return {"period": f"{start_date} to {end_date}", "items": items}
     except Exception as e:
         raise HTTPException(
@@ -413,13 +417,12 @@ async def get_sales_by_date(
         for row in result.fetchall():
             sales_data.append(
                 {
-                    "period": row.period.strftime("%Y-%m-%d"),
-                    "orders_count": row.orders_count,
-                    "total_items": row.total_items,
-                    "total_revenue": float(row.total_revenue),
+                    "period": row.period.strftime("%Y-%m-%d") if row.period else "",
+                    "orders_count": row.orders_count if row.orders_count is not None else 0,
+                    "total_items": row.total_items if row.total_items is not None else 0,
+                    "total_revenue": float(row.total_revenue) if row.total_revenue is not None else 0.0,
                 }
             )
-
         return {
             "grouping": grouping,
             "period": f"{start_date} to {end_date}",

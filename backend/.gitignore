@@ -43,4 +43,5 @@ next-env.d.ts
 # .gitignore
 .env
 credentials.json
+__pycache__/ 
 
