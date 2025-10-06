@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import {
   FaSearch,
   FaGoogle,
@@ -607,12 +607,41 @@ export default function ReportInventory() {
     return [summaryRow, headerRow, ...dataRows];
   }, [filtered, spoilageSummary, spoilageLoading]);
 
-  const exportExcel = () => {
-    const ws = XLSX.utils.aoa_to_sheet(excelValues);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Inventory Report");
-    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([wbout], { type: "application/octet-stream" });
+  const exportExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Inventory Report");
+
+    // Add headers and data
+    worksheet.addRows(excelValues);
+
+    // Style the header row (assuming it's the second row after summary)
+    const headerRow = worksheet.getRow(2);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE6E6FA" },
+    };
+
+    // Style the summary row (first row)
+    const summaryRow = worksheet.getRow(1);
+    summaryRow.font = { bold: true, size: 12 };
+    summaryRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFF6B6B" },
+    };
+
+    // Auto-fit columns
+    worksheet.columns.forEach((column) => {
+      column.width = 15;
+    });
+
+    // Generate buffer and save
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
     saveAs(blob, `Inventory_Report_${formatDate()}.xlsx`);
     setExportSuccess(true);
     setShowPopup(false);

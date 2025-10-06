@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import {
   FaSearch,
   FaGoogle,
@@ -513,18 +513,47 @@ export default function ReportSales() {
     ...forecastTableRows,
   ];
 
-  const exportToExcel = () => {
-    // Main sales sheet
-    const ws = XLSX.utils.aoa_to_sheet(values);
-    // Forecast sheet
-    const wsForecast = XLSX.utils.aoa_to_sheet(forecastTable);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Sales Report");
-    XLSX.utils.book_append_sheet(wb, wsForecast, "Sales Forecast");
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
 
-    // Write and save
-    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([wbout], { type: "application/octet-stream" });
+    // Main sales worksheet
+    const salesWorksheet = workbook.addWorksheet("Sales Report");
+    salesWorksheet.addRows(values);
+
+    // Style the header row
+    const salesHeaderRow = salesWorksheet.getRow(1);
+    salesHeaderRow.font = { bold: true };
+    salesHeaderRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE6E6FA" },
+    };
+
+    // Forecast worksheet
+    const forecastWorksheet = workbook.addWorksheet("Sales Forecast");
+    forecastWorksheet.addRows(forecastTable);
+
+    // Style the forecast header row
+    const forecastHeaderRow = forecastWorksheet.getRow(1);
+    forecastHeaderRow.font = { bold: true };
+    forecastHeaderRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFFCC99" },
+    };
+
+    // Auto-fit columns for both sheets
+    [salesWorksheet, forecastWorksheet].forEach((worksheet) => {
+      worksheet.columns.forEach((column) => {
+        column.width = 15;
+      });
+    });
+
+    // Generate buffer and save
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
     saveAs(blob, `Sales_Report_${getFormattedDate()}.xlsx`);
     setExportSuccess(true);
     setShowPopup(false);

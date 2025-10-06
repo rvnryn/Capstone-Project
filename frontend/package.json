@@ -24,6 +24,7 @@
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.13",
     "dotenv": "^16.5.0",
+    "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.23.12",
     "next": "^15.3.4",
@@ -36,8 +37,7 @@
     "react-icons": "^4.12.0",
     "react-toastify": "^11.0.5",
     "swr": "^2.3.6",
-    "tailwindcss": "^4.1.7",
-    "xlsx": "^0.18.5"
+    "tailwindcss": "^4.1.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

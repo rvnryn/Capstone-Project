@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import dayjs from "dayjs";
 import {
@@ -305,12 +305,32 @@ const Report_UserActivity = () => {
     ]),
   ];
 
-  const exportToExcel = () => {
-    const ws = XLSX.utils.aoa_to_sheet(values);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "User Activity Report");
-    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([wbout], { type: "application/octet-stream" });
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("User Activity Report");
+
+    // Add headers and data
+    worksheet.addRows(values);
+
+    // Style the header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE6E6FA" },
+    };
+
+    // Auto-fit columns
+    worksheet.columns.forEach((column) => {
+      column.width = 15;
+    });
+
+    // Generate buffer and save
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
     saveAs(blob, `User_Activity_Report_${getFormattedDate()}.xlsx`);
     setExportSuccess(true);
     setShowPopup(false);
