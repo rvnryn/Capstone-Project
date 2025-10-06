@@ -118,10 +118,15 @@ export default function TodayInventoryPage() {
       queryClient.prefetchQuery({
         queryKey: ["todayInventory", []],
         queryFn: async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
             method: "GET",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
           });
 
@@ -164,10 +169,13 @@ export default function TodayInventoryPage() {
   }, [isMobile]);
 
   const listTodayItems = async () => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
       },
     });
 

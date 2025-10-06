@@ -94,7 +94,16 @@ export default function InventoryPage() {
       queryClient.prefetchQuery({
         queryKey: ["masterInventory", []],
         queryFn: async () => {
-          const res = await fetch(`${API_BASE_URL}/api/inventory-master`);
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
+          const res = await fetch(`${API_BASE_URL}/api/inventory`, {
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          });
           if (!res.ok) throw new Error("Failed to fetch inventory");
           return res.json();
         },

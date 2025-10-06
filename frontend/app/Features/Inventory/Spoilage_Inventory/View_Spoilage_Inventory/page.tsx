@@ -37,12 +37,15 @@ export default function ViewSpoilageInventoryItem() {
         return;
       }
       try {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const response = await fetch(
           `/api/inventory-spoilage?skip=0&limit=100`,
           {
             method: "GET",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
           }
         );

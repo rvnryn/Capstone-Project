@@ -46,11 +46,14 @@ export default function ViewSurplusInventoryItem() {
         return;
       }
       try {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const [responseData, settingsData] = await Promise.all([
           fetch(`/api/inventory-surplus/${itemId}`, {
             method: "GET",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
           }).then(async (response) => {
             if (!response.ok) {

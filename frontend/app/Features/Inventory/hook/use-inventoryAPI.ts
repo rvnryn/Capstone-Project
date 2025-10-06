@@ -90,10 +90,13 @@ export function useInventoryAPI() {
   // INVENTORY
   const getItem = useCallback(async (id: string) => {
     try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
       });
 
@@ -112,10 +115,15 @@ export function useInventoryAPI() {
     async (item: AddInventoryPayload) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(`${API_BASE_URL}/api/inventory`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
             body: JSON.stringify(item),
           });
@@ -149,10 +157,15 @@ export function useInventoryAPI() {
 
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
             method: "PUT",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
             body: JSON.stringify(cleanedItem),
           });
@@ -178,10 +191,15 @@ export function useInventoryAPI() {
     async (id: string | number) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
             method: "DELETE",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
           });
 
@@ -204,10 +222,13 @@ export function useInventoryAPI() {
 
   const listItems = useCallback(async () => {
     try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const response = await fetch(`${API_BASE_URL}/api/inventory`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
       });
 
@@ -225,12 +246,15 @@ export function useInventoryAPI() {
   // INVENTORY TODAY
   const getTodayItem = useCallback(async (id: string) => {
     try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const response = await fetch(
         `${API_BASE_URL}/api/inventory-today/${id}`,
         {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
           },
         }
       );
@@ -250,10 +274,15 @@ export function useInventoryAPI() {
     async (item: AddInventoryPayload) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
             body: JSON.stringify(item),
           });
@@ -287,12 +316,17 @@ export function useInventoryAPI() {
 
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(
             `${API_BASE_URL}/api/inventory-today/${id}`,
             {
               method: "PUT",
               headers: {
                 "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
               },
               body: JSON.stringify(cleanedItem),
             }
@@ -319,12 +353,17 @@ export function useInventoryAPI() {
     async (id: string | number) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(
             `${API_BASE_URL}/api/inventory-today/${id}`,
             {
               method: "DELETE",
               headers: {
                 "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
               },
             }
           );
@@ -348,10 +387,13 @@ export function useInventoryAPI() {
 
   const listTodayItems = useCallback(async () => {
     try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
       });
 
@@ -369,12 +411,15 @@ export function useInventoryAPI() {
   // INVENTORY SURPLUS
   const getSurplusItem = useCallback(async (id: string | number) => {
     try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const response = await fetch(
         `${API_BASE_URL}/api/inventory-surplus/${id}`,
         {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
           },
         }
       );
@@ -394,12 +439,17 @@ export function useInventoryAPI() {
     async (item: AddInventoryPayload) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(
             `${API_BASE_URL}/api/inventory-surplus`,
             {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
               },
               body: JSON.stringify(item),
             }
@@ -434,12 +484,17 @@ export function useInventoryAPI() {
 
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(
             `${API_BASE_URL}/api/inventory-surplus/${id}`,
             {
               method: "PUT",
               headers: {
                 "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
               },
               body: JSON.stringify(cleanedItem),
             }
@@ -466,12 +521,17 @@ export function useInventoryAPI() {
     async (id: string | number) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(
             `${API_BASE_URL}/api/inventory-surplus/${id}`,
             {
               method: "DELETE",
               headers: {
                 "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
               },
             }
           );
@@ -495,10 +555,13 @@ export function useInventoryAPI() {
 
   const listSurplusItems = useCallback(async () => {
     try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const response = await fetch(`${API_BASE_URL}/api/inventory-surplus`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
       });
 
@@ -519,12 +582,17 @@ export function useInventoryAPI() {
     async (id: string | number, quantity: number) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(
             `${API_BASE_URL}/api/inventory/${id}/transfer-to-today`,
             {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
               },
               body: JSON.stringify({ quantity }),
             }
@@ -551,12 +619,17 @@ export function useInventoryAPI() {
     async (id: string | number, quantity: number) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(
             `${API_BASE_URL}/api/inventory-today/${id}/transfer-to-surplus`,
             {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
               },
               body: JSON.stringify({ quantity }),
             }
@@ -582,12 +655,15 @@ export function useInventoryAPI() {
   const transferSurplusToToday = useCallback(
     async (id: string | number, quantity: number) => {
       try {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const response = await fetch(
           `${API_BASE_URL}/api/inventory-surplus/${id}/transfer-to-today`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
             body: JSON.stringify({ quantity }),
           }
@@ -608,10 +684,13 @@ export function useInventoryAPI() {
 
   const listSpoilage = useCallback(async () => {
     try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const response = await fetch(`${API_BASE_URL}/api/inventory-spoilage`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
       });
 
@@ -630,12 +709,17 @@ export function useInventoryAPI() {
     async (id: string | number, quantity: number, reason?: string) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(
             `${API_BASE_URL}/api/inventory/${id}/transfer-to-spoilage`,
             {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
               },
               body: JSON.stringify({ quantity, reason }),
             }
@@ -662,12 +746,17 @@ export function useInventoryAPI() {
     async (spoilage_id: string | number) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(
             `${API_BASE_URL}/api/inventory-spoilage/${spoilage_id}`,
             {
               method: "DELETE",
               headers: {
                 "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
               },
             }
           );

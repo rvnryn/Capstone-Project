@@ -92,10 +92,13 @@ export function useMenuAPI() {
   ) => {
     return handleOfflineWriteOperation(
       async () => {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
           },
           body: JSON.stringify(data),
         });
@@ -122,10 +125,18 @@ export function useMenuAPI() {
   ) => {
     return handleOfflineWriteOperation(
       async () => {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const headers: Record<string, string> = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
         const response = await fetch(
           `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
           {
             method: "PATCH",
+            headers,
             body: form, // FormData automatically sets Content-Type
           }
         );
@@ -148,10 +159,13 @@ export function useMenuAPI() {
   const deleteMenu = async (menu_id: number) => {
     return handleOfflineWriteOperation(
       async () => {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
           method: "DELETE",
           headers: {
             "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
           },
         });
 
@@ -174,10 +188,18 @@ export function useMenuAPI() {
   const addMenuWithImageAndIngredients = async (form: FormData) => {
     return handleOfflineWriteOperation(
       async () => {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const headers: Record<string, string> = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
         const response = await fetch(
           `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
           {
             method: "POST",
+            headers,
             body: form, // FormData automatically sets Content-Type
           }
         );
@@ -223,12 +245,15 @@ export function useMenuAPI() {
   ) => {
     return handleOfflineWriteOperation(
       async () => {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const response = await fetch(
           `${API_BASE_URL}/api/menu/${menu_id}/ingredient/${ingredient_id}`,
           {
             method: "DELETE",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
           }
         );
@@ -251,12 +276,15 @@ export function useMenuAPI() {
   const recalculateStockStatus = async () => {
     return handleOfflineWriteOperation(
       async () => {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const response = await fetch(
           `${API_BASE_URL}/api/menu/recalculate-stock-status`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
           }
         );

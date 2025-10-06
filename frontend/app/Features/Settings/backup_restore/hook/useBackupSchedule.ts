@@ -1,4 +1,5 @@
 import useSWR from "swr";
+import { getToken } from "@/app/lib/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -23,8 +24,13 @@ export function useBackupSchedule() {
   const { data, error, mutate, isLoading } = useSWR<BackupSchedule>(
     `${API_BASE_URL}/api/schedule`,
     async (url: string) => {
+      const token = getToken();
       const response = await fetch(url, {
         method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
       });
 
       if (!response.ok) {
@@ -44,10 +50,12 @@ export function useBackupSchedule() {
 
 // Update the backup schedule (matches backend: POST /schedule)
 export async function updateBackupSchedule(settings: BackupScheduleSettings) {
+  const token = getToken();
   const response = await fetch(`${API_BASE_URL}/api/schedule`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...(token && { Authorization: `Bearer ${token}` }),
     },
     body: JSON.stringify(settings),
   });

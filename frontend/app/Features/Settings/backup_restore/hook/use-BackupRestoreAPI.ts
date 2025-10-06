@@ -7,6 +7,7 @@ export function useBackupRestoreAPI() {
   const deleteBackup = async (filename: string): Promise<void> => {
     if (!filename) throw new Error("No filename provided for delete.");
 
+    const token = getToken();
     const response = await fetch(
       `${API_BASE_URL}/api/delete-backup?filename=${encodeURIComponent(
         filename
@@ -15,6 +16,7 @@ export function useBackupRestoreAPI() {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
       }
     );
@@ -27,12 +29,14 @@ export function useBackupRestoreAPI() {
   const backup = async (password: string): Promise<void> => {
     if (!password) throw new Error("Password is required for backup.");
 
+    const token = getToken();
     const response = await fetch(
       `${API_BASE_URL}/api/backup?password=${encodeURIComponent(password)}`,
       {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
       }
     );
@@ -104,8 +108,13 @@ export function useBackupRestoreAPI() {
 
   // List backups from Supabase Storage
   const listBackups = async (): Promise<string[]> => {
+    const token = getToken();
     const response = await fetch(`${API_BASE_URL}/api/list-backups`, {
       method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
     });
 
     if (!response.ok) {

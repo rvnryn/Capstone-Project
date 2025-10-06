@@ -93,10 +93,15 @@ export function useSupplierAPI() {
     async (supplier: AddSupplierPayload) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(`${API_BASE_URL}/api/suppliers`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
             body: JSON.stringify(supplier),
           });
@@ -122,10 +127,15 @@ export function useSupplierAPI() {
     async (id: number | string, supplier: UpdateSupplierPayload) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(`${API_BASE_URL}/api/suppliers/${id}`, {
             method: "PUT",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
             body: JSON.stringify(supplier),
           });
@@ -151,10 +161,15 @@ export function useSupplierAPI() {
     async (id: number | string) => {
       return handleOfflineWriteOperation(
         async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
           const response = await fetch(`${API_BASE_URL}/api/suppliers/${id}`, {
             method: "DELETE",
             headers: {
               "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
             },
           });
 

@@ -145,10 +145,13 @@ export default function ReportInventory() {
     try {
       const today = new Date().toISOString().slice(0, 10);
       const logs = await fetchLogs(today);
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const masterResponse = await fetch("/api/inventory", {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
       });
 

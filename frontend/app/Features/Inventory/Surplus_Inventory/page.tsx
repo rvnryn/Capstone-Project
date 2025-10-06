@@ -80,10 +80,13 @@ export default function SurplusInventoryPage() {
     queryClient.prefetchQuery({
       queryKey: ["surplusInventory", settings],
       queryFn: async () => {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const response = await fetch(`${API_BASE_URL}/api/inventory-surplus`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
           },
         });
 
@@ -123,10 +126,13 @@ export default function SurplusInventoryPage() {
   }, [isMobile]);
 
   const listSurplusItems = async () => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const response = await fetch(`${API_BASE_URL}/api/inventory-surplus`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
       },
     });
 
