@@ -24,7 +24,6 @@ const nextConfig: NextConfig = {
   },
   // Enhanced PWA support
   experimental: {
-    optimizeCss: true,
     optimizePackageImports: ["@tanstack/react-query"],
   },
   compiler: {
