@@ -30,8 +30,8 @@ import { supabase } from "@/app/utils/Server/supabaseClient";
 import { useAuth } from "@/app/context/AuthContext";
 import { useNavigation, navigationUtils } from "./hook/use-navigation";
 import { usePWA, useOfflineQueue } from "@/app/hooks/usePWA";
-import { OfflineStatusIndicator } from "@/app/components/OfflineComponents";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 type Notification = {
   id: number;
@@ -359,17 +359,11 @@ const NavigationBar = ({
     const userId = user?.user_id || user?.id;
     if (userId && typeof userId === "number") {
       try {
-        const res = await offlineAxiosRequest(
-          {
-            method: "GET",
-            url: `/api/notifications?user_id=${userId}`,
-          },
-          {
-            cacheKey: `notifications-${userId}`,
-            cacheHours: 2,
-          }
+        const res = await fetch(
+          `${API_BASE_URL}/api/notifications?user_id=${userId}`
         );
-        setNotifications(res.data.notifications || []);
+        const data = await res.json();
+        setNotifications(data.notifications || []);
       } catch {
         setNotifications([]);
       }
@@ -525,10 +519,15 @@ const NavigationBar = ({
     const userId = user?.user_id || user?.id;
     if (userId && typeof userId === "number") {
       try {
-        await offlineAxiosRequest({
-          method: "POST",
-          url: `/api/notifications/mark-read?user_id=${userId}&notification_id=${n.id}`,
-        });
+        await fetch(
+          `${API_BASE_URL}/api/notifications/mark-read?user_id=${userId}&notification_id=${n.id}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
         fetchNotifications();
       } catch {}
     }
@@ -542,10 +541,15 @@ const NavigationBar = ({
     const userId = user?.user_id || user?.id;
     if (userId && typeof userId === "number") {
       try {
-        await offlineAxiosRequest({
-          method: "DELETE",
-          url: `/api/notifications?user_id=${userId}&notification_id=${n.id}`,
-        });
+        await fetch(
+          `${API_BASE_URL}/api/notifications?user_id=${userId}&notification_id=${n.id}`,
+          {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
         fetchNotifications();
         // If the removed notification was open in modal, close it
         if (notificationModalState?.id === n.id) {
@@ -561,10 +565,15 @@ const NavigationBar = ({
     const userId = user?.user_id || user?.id;
     if (userId && typeof userId === "number") {
       try {
-        await offlineAxiosRequest({
-          method: "DELETE",
-          url: `/api/notifications/clear-all?user_id=${userId}`,
-        });
+        await fetch(
+          `${API_BASE_URL}/api/notifications/clear-all?user_id=${userId}`,
+          {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
         fetchNotifications();
         setNotificationModal(null); // Close any open notification modal
         setBellOpen(false); // Close the notification dropdown
@@ -1297,7 +1306,7 @@ const NavigationBar = ({
 
                           return (
                             <div
-                              key={n.id}
+                              key={`notification-${n.id}-${n.created_at}`}
                               className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl ${bgColor} flex items-start gap-3 group`}
                               onClick={() => handleNotificationClick(n)}
                             >
@@ -1483,7 +1492,9 @@ const NavigationBar = ({
                     {parseDetails((notificationModalState as any).details).map(
                       (item: any, idx: number) => (
                         <li
-                          key={idx}
+                          key={`${item.item_id || idx}-${item.name || ""}-${
+                            item.batch_date || ""
+                          }`}
                           className="bg-gradient-to-r from-yellow-400/10 via-yellow-300/8 to-yellow-200/5 rounded-lg px-4 py-2 flex flex-col shadow-sm border border-yellow-400/10 hover:border-yellow-400/30 transition-all"
                         >
                           <div className="flex items-center gap-2 font-semibold text-yellow-200">

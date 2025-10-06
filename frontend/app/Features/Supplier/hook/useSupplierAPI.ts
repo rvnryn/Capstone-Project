@@ -1,10 +1,8 @@
-import axios from "@/app/lib/axios";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 import { useOfflineQueue } from "@/app/hooks/usePWA";
 import { useCallback } from "react";
 import { toast } from "react-toastify";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Supplier types
 export interface Supplier {
@@ -31,13 +29,14 @@ export type AddSupplierPayload = {
 export type UpdateSupplierPayload = Partial<AddSupplierPayload>;
 
 export function useSupplierAPI() {
-  // Get offline queue functions
-  const { addOfflineAction, isOnline } = useOfflineQueue();
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+  const { addOfflineAction, getOfflineActions } = useOfflineQueue();
+  const isOnline = typeof window !== "undefined" ? navigator.onLine : true;
 
-  // Helper function to handle offline write operations
+  // Helper function for online/offline write operations
   const handleOfflineWriteOperation = useCallback(
     async (
-      operation: () => Promise<any>,
+      onlineOperation: () => Promise<any>,
       offlineAction: {
         action: string;
         endpoint: string;
@@ -46,40 +45,44 @@ export function useSupplierAPI() {
       }
     ) => {
       if (isOnline) {
-        // Online: Execute the operation immediately
-        return await operation();
+        try {
+          return await onlineOperation();
+        } catch (error) {
+          addOfflineAction(offlineAction.action, {
+            endpoint: offlineAction.endpoint,
+            method: offlineAction.method,
+            payload: offlineAction.payload,
+          });
+          toast.info("Request queued for when connection is restored");
+          throw error;
+        }
       } else {
-        // Offline: Queue the action and show user feedback
         addOfflineAction(offlineAction.action, {
           endpoint: offlineAction.endpoint,
           method: offlineAction.method,
           payload: offlineAction.payload,
         });
-        toast.info("📱 Action queued for when you're back online!", {
-          position: "top-right",
-          autoClose: 3000,
-          theme: "colored",
-        });
-        // Return a mock response to keep UI working
-        return { success: true, queued: true };
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
       }
     },
     [isOnline, addOfflineAction]
   );
+
   const getSupplier = useCallback(async (id: number | string) => {
     try {
-      const response = await offlineAxiosRequest(
-        {
-          method: "GET",
-          url: `${API_BASE_URL}/api/suppliers/${id}`,
+      const response = await fetch(`${API_BASE_URL}/api/suppliers/${id}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          cacheKey: `supplier-${id}`,
-          cacheHours: 24, // Suppliers change less frequently
-          showErrorToast: true,
-        }
-      );
-      return response.data;
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
       console.error(`Failed to fetch supplier ${id}:`, error);
       throw error;
@@ -89,17 +92,21 @@ export function useSupplierAPI() {
   const addSupplier = useCallback(
     async (supplier: AddSupplierPayload) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "POST",
-              url: `${API_BASE_URL}/api/suppliers`,
-              data: supplier,
+        async () => {
+          const response = await fetch(`${API_BASE_URL}/api/suppliers`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+            body: JSON.stringify(supplier),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "add-supplier",
           endpoint: "/api/suppliers",
@@ -114,17 +121,21 @@ export function useSupplierAPI() {
   const updateSupplier = useCallback(
     async (id: number | string, supplier: UpdateSupplierPayload) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "PUT",
-              url: `${API_BASE_URL}/api/suppliers/${id}`,
-              data: supplier,
+        async () => {
+          const response = await fetch(`${API_BASE_URL}/api/suppliers/${id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+            body: JSON.stringify(supplier),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "update-supplier",
           endpoint: `/api/suppliers/${id}`,
@@ -139,16 +150,20 @@ export function useSupplierAPI() {
   const deleteSupplier = useCallback(
     async (id: number | string) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "DELETE",
-              url: `${API_BASE_URL}/api/suppliers/${id}`,
+        async () => {
+          const response = await fetch(`${API_BASE_URL}/api/suppliers/${id}`, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "delete-supplier",
           endpoint: `/api/suppliers/${id}`,
@@ -162,23 +177,20 @@ export function useSupplierAPI() {
 
   const listSuppliers = useCallback(async () => {
     try {
-      const response = await offlineAxiosRequest<Supplier[]>(
-        {
-          method: "GET",
-          url: `${API_BASE_URL}/api/suppliers`,
+      const response = await fetch(`${API_BASE_URL}/api/suppliers`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          cacheKey: "suppliers-list",
-          cacheHours: 24,
-          showErrorToast: true,
-        }
-      );
-      return response.data;
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
-      console.error(
-        "Supplier API list error:",
-        error.response?.data || error.message
-      );
+      console.error("Failed to fetch suppliers:", error);
       throw error;
     }
   }, []);
@@ -189,5 +201,6 @@ export function useSupplierAPI() {
     updateSupplier,
     deleteSupplier,
     listSuppliers,
+    getOfflineActions,
   };
 }

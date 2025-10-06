@@ -1,23 +1,23 @@
 import { useCallback } from "react";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export function useDashboardAPI() {
   // Fetch low stock ingredients with offline support
   const fetchLowStock = useCallback(async () => {
     try {
-      const response = await offlineAxiosRequest(
-        {
-          method: "GET",
-          url: "/api/dashboard/low-stock",
+      const response = await fetch(`${API_BASE_URL}/api/dashboard/low-stock`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          cacheKey: "dashboard-low-stock",
-          cacheHours: 24, // Extend cache to 24 hours for better offline experience
-          showErrorToast: true,
-          fallbackData: [], // Return empty array as fallback
-        }
-      );
-      return response.data;
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
       console.error("Failed to fetch low stock data:", error);
       // Always return empty array for offline scenarios
@@ -29,19 +29,21 @@ export function useDashboardAPI() {
   // Fetch expiring ingredients with offline support
   const fetchExpiring = useCallback(async () => {
     try {
-      const response = await offlineAxiosRequest(
+      const response = await fetch(
+        `${API_BASE_URL}/api/dashboard/expiring-ingredients`,
         {
           method: "GET",
-          url: "/api/dashboard/expiring-ingredients",
-        },
-        {
-          cacheKey: "dashboard-expiring",
-          cacheHours: 12, // Extend cache to 12 hours (still time-sensitive but offline-friendly)
-          showErrorToast: true,
-          fallbackData: [],
+          headers: {
+            "Content-Type": "application/json",
+          },
         }
       );
-      return response.data;
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
       console.error("Failed to fetch expiring ingredients:", error);
       // Always return empty array, never throw to prevent server crashes
@@ -52,19 +54,21 @@ export function useDashboardAPI() {
   // Fetch surplus ingredients with offline support
   const fetchSurplus = useCallback(async () => {
     try {
-      const response = await offlineAxiosRequest(
+      const response = await fetch(
+        `${API_BASE_URL}/api/dashboard/surplus-ingredients`,
         {
           method: "GET",
-          url: "/api/dashboard/surplus-ingredients",
-        },
-        {
-          cacheKey: "dashboard-surplus",
-          cacheHours: 48, // Extend cache to 48 hours (less time-sensitive)
-          showErrorToast: true,
-          fallbackData: [],
+          headers: {
+            "Content-Type": "application/json",
+          },
         }
       );
-      return response.data;
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
       console.error("Failed to fetch surplus ingredients:", error);
       // Always return empty array for robust offline handling
@@ -75,19 +79,21 @@ export function useDashboardAPI() {
   // Fetch expired ingredients with offline support
   const fetchExpired = useCallback(async () => {
     try {
-      const response = await offlineAxiosRequest(
+      const response = await fetch(
+        `${API_BASE_URL}/api/dashboard/expired-ingredients`,
         {
           method: "GET",
-          url: "/api/dashboard/expired-ingredients",
-        },
-        {
-          cacheKey: "dashboard-expired",
-          cacheHours: 24, // Expired items don't change often
-          showErrorToast: true,
-          fallbackData: [],
+          headers: {
+            "Content-Type": "application/json",
+          },
         }
       );
-      return response.data;
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
       console.error("Failed to fetch expired ingredients:", error);
       return [];

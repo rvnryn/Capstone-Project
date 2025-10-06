@@ -1,6 +1,4 @@
 "use client";
-import axiosInstance from "@/app/lib/axios";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 import { useOfflineQueue } from "@/app/hooks/usePWA";
 import { useCallback } from "react";
 import { toast } from "react-toastify";
@@ -49,14 +47,15 @@ export interface SpoilageItem {
 export type UpdateInventoryPayload = Partial<AddInventoryPayload>;
 
 export function useInventoryAPI() {
-  // Get offline queue functions
-  const { addOfflineAction, isOnline } = useOfflineQueue();
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const { addOfflineAction, getOfflineActions } = useOfflineQueue();
+  const isOnline = typeof window !== "undefined" ? navigator.onLine : true;
 
-  // Helper function to handle offline write operations
+  // Helper function for online/offline write operations
   const handleOfflineWriteOperation = useCallback(
     async (
-      operation: () => Promise<any>,
+      onlineOperation: () => Promise<any>,
       offlineAction: {
         action: string;
         endpoint: string;
@@ -65,22 +64,25 @@ export function useInventoryAPI() {
       }
     ) => {
       if (isOnline) {
-        // Online: Execute the operation immediately
-        return await operation();
+        try {
+          return await onlineOperation();
+        } catch (error) {
+          addOfflineAction(offlineAction.action, {
+            endpoint: offlineAction.endpoint,
+            method: offlineAction.method,
+            payload: offlineAction.payload,
+          });
+          toast.info("Request queued for when connection is restored");
+          throw error;
+        }
       } else {
-        // Offline: Queue the action and show user feedback
         addOfflineAction(offlineAction.action, {
           endpoint: offlineAction.endpoint,
           method: offlineAction.method,
           payload: offlineAction.payload,
         });
-        toast.info("📱 Action queued for when you're back online!", {
-          position: "top-right",
-          autoClose: 3000,
-          theme: "colored",
-        });
-        // Return a mock response to keep UI working
-        return { success: true, queued: true };
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
       }
     },
     [isOnline, addOfflineAction]
@@ -88,18 +90,18 @@ export function useInventoryAPI() {
   // INVENTORY
   const getItem = useCallback(async (id: string) => {
     try {
-      const response = await offlineAxiosRequest(
-        {
-          method: "GET",
-          url: `${API_BASE_URL}/api/inventory/${id}`,
+      const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          cacheKey: `${API_BASE_URL}inventory-item-${id}`,
-          cacheHours: 2,
-          showErrorToast: true,
-        }
-      );
-      return response.data;
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
       console.error(`Failed to fetch inventory item ${id}:`, error);
       throw error;
@@ -109,17 +111,21 @@ export function useInventoryAPI() {
   const addItem = useCallback(
     async (item: AddInventoryPayload) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "POST",
-              url: `${API_BASE_URL}/api/inventory`,
-              data: item,
+        async () => {
+          const response = await fetch(`${API_BASE_URL}/api/inventory`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+            body: JSON.stringify(item),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "add-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory`,
@@ -142,17 +148,21 @@ export function useInventoryAPI() {
       };
 
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "PUT",
-              url: `${API_BASE_URL}/api/inventory/${id}`,
-              data: cleanedItem,
+        async () => {
+          const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+            body: JSON.stringify(cleanedItem),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "update-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory/${id}`,
@@ -167,16 +177,20 @@ export function useInventoryAPI() {
   const deleteItem = useCallback(
     async (id: string | number) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "DELETE",
-              url: `${API_BASE_URL}/api/inventory/${id}`,
+        async () => {
+          const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "delete-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory/${id}`,
@@ -190,57 +204,66 @@ export function useInventoryAPI() {
 
   const listItems = useCallback(async () => {
     try {
-      const response = await offlineAxiosRequest<InventoryItem[]>(
-        {
-          method: "GET",
-          url: `${API_BASE_URL}/api/inventory`,
+      const response = await fetch(`${API_BASE_URL}/api/inventory`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          cacheKey: "inventory-list",
-          cacheHours: 2,
-          showErrorToast: true,
-        }
-      );
-      return response.data;
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
-      console.error(
-        "Inventory API list error:",
-        error.response?.data || error.message
-      );
+      console.error("Failed to fetch all inventory items:", error);
       throw error;
     }
   }, []);
 
   // INVENTORY TODAY
   const getTodayItem = useCallback(async (id: string) => {
-    const response = await offlineAxiosRequest<InventoryItem>(
-      {
-        method: "GET",
-        url: `${API_BASE_URL}/api/inventory-today/${id}`,
-      },
-      {
-        cacheKey: `inventory-today-item-${id}`,
-        cacheHours: 2,
-        showErrorToast: true,
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/inventory-today/${id}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    );
-    return response.data;
+
+      return await response.json();
+    } catch (error: any) {
+      console.error(`Failed to fetch today inventory item ${id}:`, error);
+      throw error;
+    }
   }, []);
 
   const addTodayItem = useCallback(
     async (item: AddInventoryPayload) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "POST",
-              url: `${API_BASE_URL}/api/inventory-today`,
-              data: item,
+        async () => {
+          const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+            body: JSON.stringify(item),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "add-today-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory-today`,
@@ -263,17 +286,24 @@ export function useInventoryAPI() {
       };
 
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
+        async () => {
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory-today/${id}`,
             {
               method: "PUT",
-              url: `${API_BASE_URL}/api/inventory-today/${id}`,
-              data: cleanedItem,
-            },
-            {
-              showErrorToast: true,
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(cleanedItem),
             }
-          ),
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "update-today-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory-today/${id}`,
@@ -288,16 +318,23 @@ export function useInventoryAPI() {
   const deleteTodayItem = useCallback(
     async (id: string | number) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
+        async () => {
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory-today/${id}`,
             {
               method: "DELETE",
-              url: `${API_BASE_URL}/api/inventory-today/${id}`,
-            },
-            {
-              showErrorToast: true,
+              headers: {
+                "Content-Type": "application/json",
+              },
             }
-          ),
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "delete-today-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory-today/${id}`,
@@ -311,57 +348,69 @@ export function useInventoryAPI() {
 
   const listTodayItems = useCallback(async () => {
     try {
-      const response = await offlineAxiosRequest<InventoryItem[]>(
-        {
-          method: "GET",
-          url: `${API_BASE_URL}/api/inventory-today`,
+      const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          cacheKey: "inventory-today-list",
-          cacheHours: 2,
-          showErrorToast: true,
-        }
-      );
-      return response.data;
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
-      console.error(
-        "Inventory Today API list error:",
-        error.response?.data || error.message
-      );
+      console.error("Failed to fetch today inventory items:", error);
       throw error;
     }
   }, []);
 
   // INVENTORY SURPLUS
   const getSurplusItem = useCallback(async (id: string | number) => {
-    const response = await offlineAxiosRequest<InventoryItem>(
-      {
-        method: "GET",
-        url: `${API_BASE_URL}/api/inventory-surplus/${id}`,
-      },
-      {
-        cacheKey: `inventory-surplus-item-${id}`,
-        cacheHours: 2,
-        showErrorToast: true,
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/inventory-surplus/${id}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    );
-    return response.data;
+
+      return await response.json();
+    } catch (error: any) {
+      console.error(`Failed to fetch surplus inventory item ${id}:`, error);
+      throw error;
+    }
   }, []);
 
   const addSurplusItem = useCallback(
     async (item: AddInventoryPayload) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
+        async () => {
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory-surplus`,
             {
               method: "POST",
-              url: `${API_BASE_URL}/api/inventory-surplus`,
-              data: item,
-            },
-            {
-              showErrorToast: true,
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(item),
             }
-          ),
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "add-surplus-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory-surplus`,
@@ -374,11 +423,7 @@ export function useInventoryAPI() {
   );
 
   const updateSurplusItem = useCallback(
-    async (
-      id: string | number,
-      item: UpdateInventoryPayload,
-      token: string
-    ) => {
+    async (id: string | number, item: UpdateInventoryPayload) => {
       const cleanedItem = {
         ...item,
         expiration_date:
@@ -388,17 +433,24 @@ export function useInventoryAPI() {
       };
 
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
+        async () => {
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory-surplus/${id}`,
             {
               method: "PUT",
-              url: `${API_BASE_URL}/api/inventory-surplus/${id}`,
-              data: cleanedItem,
-            },
-            {
-              showErrorToast: true,
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(cleanedItem),
             }
-          ),
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "update-surplus-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory-surplus/${id}`,
@@ -413,16 +465,23 @@ export function useInventoryAPI() {
   const deleteSurplusItem = useCallback(
     async (id: string | number) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
+        async () => {
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory-surplus/${id}`,
             {
               method: "DELETE",
-              url: `${API_BASE_URL}/api/inventory-surplus/${id}`,
-            },
-            {
-              showErrorToast: true,
+              headers: {
+                "Content-Type": "application/json",
+              },
             }
-          ),
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "delete-surplus-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory-surplus/${id}`,
@@ -436,23 +495,20 @@ export function useInventoryAPI() {
 
   const listSurplusItems = useCallback(async () => {
     try {
-      const response = await offlineAxiosRequest<InventoryItem[]>(
-        {
-          method: "GET",
-          url: `${API_BASE_URL}/api/inventory-surplus`,
+      const response = await fetch(`${API_BASE_URL}/api/inventory-surplus`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          cacheKey: "inventory-surplus-list",
-          cacheHours: 2,
-          showErrorToast: true,
-        }
-      );
-      return response.data;
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
-      console.error(
-        "Inventory Surplus API list error:",
-        error.response?.data || error.message
-      );
+      console.error("Failed to fetch surplus inventory items:", error);
       throw error;
     }
   }, []);
@@ -462,17 +518,24 @@ export function useInventoryAPI() {
   const transferToToday = useCallback(
     async (id: string | number, quantity: number) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
+        async () => {
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory/${id}/transfer-to-today`,
             {
               method: "POST",
-              url: `${API_BASE_URL}/api/inventory/${id}/transfer-to-today`,
-              data: { quantity },
-            },
-            {
-              showErrorToast: true,
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ quantity }),
             }
-          ),
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "transfer-to-today",
           endpoint: `${API_BASE_URL}/api/inventory/${id}/transfer-to-today`,
@@ -487,17 +550,24 @@ export function useInventoryAPI() {
   const transferToSurplus = useCallback(
     async (id: string | number, quantity: number) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
+        async () => {
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory-today/${id}/transfer-to-surplus`,
             {
               method: "POST",
-              url: `${API_BASE_URL}/api/inventory-today/${id}/transfer-to-surplus`,
-              data: { quantity },
-            },
-            {
-              showErrorToast: true,
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ quantity }),
             }
-          ),
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "transfer-to-surplus",
           endpoint: `${API_BASE_URL}/api/inventory-today/${id}/transfer-to-surplus`,
@@ -512,22 +582,24 @@ export function useInventoryAPI() {
   const transferSurplusToToday = useCallback(
     async (id: string | number, quantity: number) => {
       try {
-        const response = await offlineAxiosRequest(
+        const response = await fetch(
+          `${API_BASE_URL}/api/inventory-surplus/${id}/transfer-to-today`,
           {
             method: "POST",
-            url: `${API_BASE_URL}/api/inventory-surplus/${id}/transfer-to-today`,
-            data: { quantity },
-          },
-          {
-            showErrorToast: true,
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ quantity }),
           }
         );
-        return response.data;
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
       } catch (error: any) {
-        console.error(
-          "transferSurplusToToday API error:",
-          error.response?.data || error.message
-        );
+        console.error("Failed to transfer surplus to today:", error);
         throw error;
       }
     },
@@ -536,23 +608,20 @@ export function useInventoryAPI() {
 
   const listSpoilage = useCallback(async () => {
     try {
-      const response = await offlineAxiosRequest<SpoilageItem[]>(
-        {
-          method: "GET",
-          url: `${API_BASE_URL}/api/inventory-spoilage`,
+      const response = await fetch(`${API_BASE_URL}/api/inventory-spoilage`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          cacheKey: "inventory-spoilage-list",
-          cacheHours: 2,
-          showErrorToast: true,
-        }
-      );
-      return response.data;
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     } catch (error: any) {
-      console.error(
-        "Inventory Spoilage API list error:",
-        error.response?.data || error.message
-      );
+      console.error("Failed to fetch spoilage items:", error);
       throw error;
     }
   }, []);
@@ -560,17 +629,24 @@ export function useInventoryAPI() {
   const transferToSpoilage = useCallback(
     async (id: string | number, quantity: number, reason?: string) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
+        async () => {
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory/${id}/transfer-to-spoilage`,
             {
               method: "POST",
-              url: `${API_BASE_URL}/api/inventory/${id}/transfer-to-spoilage`,
-              data: { quantity, reason },
-            },
-            {
-              showErrorToast: true,
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ quantity, reason }),
             }
-          ),
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "transfer-to-spoilage",
           endpoint: `${API_BASE_URL}/api/inventory/${id}/transfer-to-spoilage`,
@@ -585,16 +661,23 @@ export function useInventoryAPI() {
   const deleteSpoilage = useCallback(
     async (spoilage_id: string | number) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
+        async () => {
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory-spoilage/${spoilage_id}`,
             {
               method: "DELETE",
-              url: `${API_BASE_URL}/api/inventory-spoilage/${spoilage_id}`,
-            },
-            {
-              showErrorToast: true,
+              headers: {
+                "Content-Type": "application/json",
+              },
             }
-          ),
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
         {
           action: "delete-spoilage-item",
           endpoint: `${API_BASE_URL}/api/inventory-spoilage/${spoilage_id}`,
@@ -632,5 +715,7 @@ export function useInventoryAPI() {
     listSpoilage,
     transferToSpoilage,
     deleteSpoilage,
+
+    getOfflineActions,
   };
 }

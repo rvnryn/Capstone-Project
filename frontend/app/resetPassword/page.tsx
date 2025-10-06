@@ -15,7 +15,9 @@ const ResetPassword = () => {
     setLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: "http://localhost:3000/update-password",
+      redirectTo: `${
+        process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+      }/update-password`,
     });
 
     setLoading(false);

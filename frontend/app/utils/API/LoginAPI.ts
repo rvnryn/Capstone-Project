@@ -1,18 +1,34 @@
 "use client";
-import axiosInstance from "@/app/lib/axios";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export async function loginUser(email: string, password: string) {
   try {
-    const response = await axiosInstance.post("/api/auth/login", {
-      email,
-      password,
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        password,
+      }),
     });
-    if (response.data?.access_token) {
-      localStorage.setItem("token", response.data.access_token);
+
+    if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ detail: "Login failed" }));
+      throw new Error(errorData.detail || "Login failed");
     }
-    return response.data;
+
+    const data = await response.json();
+    if (data?.access_token) {
+      localStorage.setItem("token", data.access_token);
+    }
+    return data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.detail || "Login failed");
+    throw new Error(error.message || "Login failed");
   }
 }
 
@@ -20,19 +36,24 @@ export async function logoutUser() {
   const token = localStorage.getItem("token");
   if (!token) return;
   try {
-    await axiosInstance.post(
-      "/api/auth/logout",
-      {},
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
+    const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    // Remove token regardless of response status
     localStorage.removeItem("token");
+
+    if (!response.ok) {
+      console.error("Logout request failed, but token removed locally");
+    }
   } catch (error: any) {
     // Optionally handle error
-    console.error(
-      "Logout failed:",
-      error.response?.data?.detail || error.message
-    );
+    console.error("Logout failed:", error.message || "Unknown error");
+    // Still remove token even if logout request fails
+    localStorage.removeItem("token");
   }
 }

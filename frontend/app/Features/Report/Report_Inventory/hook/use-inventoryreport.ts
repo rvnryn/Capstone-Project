@@ -1,4 +1,3 @@
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 import { useCallback } from "react";
 
 export interface InventoryLogEntry {
@@ -13,42 +12,40 @@ export interface InventoryLogEntry {
 }
 
 export function useInventoryReportAPI() {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const fetchLogs = useCallback(
     async (start_date?: string, end_date?: string) => {
-      const params: Record<string, string> = {};
-      if (start_date) params.start_date = start_date;
-      if (end_date) params.end_date = end_date;
+      const params = new URLSearchParams();
+      if (start_date) params.append("start_date", start_date);
+      if (end_date) params.append("end_date", end_date);
+
       try {
-        console.debug("[fetchLogs] params:", params);
+        console.debug("[fetchLogs] params:", params.toString());
 
-        const cacheKey = `inventory-logs-${start_date || "all"}-${
-          end_date || "all"
+        const url = `${API_BASE_URL}/api/inventory-log${
+          params.toString() ? `?${params.toString()}` : ""
         }`;
-        const response = await offlineAxiosRequest(
-          {
-            method: "GET",
-            url: `${API_BASE_URL}/api/inventory-log`,
-            params,
-          },
-          {
-            cacheKey,
-            cacheHours: 1, // Reports are time-sensitive
-            showErrorToast: true,
-            fallbackData: [],
-          }
-        );
 
-        console.debug("[fetchLogs] response:", response.data);
-        return response.data;
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.debug("[fetchLogs] response:", data);
+        return data;
       } catch (err: any) {
         console.error("[fetchLogs] error:", err);
-        if (err.isOfflineError) {
-          // Return empty array for offline errors instead of throwing
-          return [];
-        }
-        throw err;
+        // Return empty array for errors instead of throwing
+        return [];
       }
     },
     []
@@ -57,28 +54,24 @@ export function useInventoryReportAPI() {
   const saveLogs = useCallback(async (entries: InventoryLogEntry[]) => {
     try {
       console.debug("[saveLogs] entries:", entries);
-      const res = await offlineAxiosRequest(
-        {
-          method: "PUT",
-          url: `${API_BASE_URL}/api/inventory-log`,
-          data: entries,
+
+      const response = await fetch(`${API_BASE_URL}/api/inventory-log`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
         },
-        {
-          showErrorToast: true,
-        }
-      );
-      console.debug("[saveLogs] response:", res.data);
-      return res.data;
-    } catch (err: any) {
-      if (err.response) {
-        console.error(
-          "[saveLogs] error:",
-          err.response.data,
-          err.response.status
-        );
-      } else {
-        console.error("[saveLogs] error:", err);
+        body: JSON.stringify(entries),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      const data = await response.json();
+      console.debug("[saveLogs] response:", data);
+      return data;
+    } catch (err: any) {
+      console.error("[saveLogs] error:", err);
       throw err;
     }
   }, []);
@@ -89,32 +82,30 @@ export function useInventoryReportAPI() {
    */
   const fetchSpoilageSummary = useCallback(
     async (start_date?: string, end_date?: string) => {
-      const params: Record<string, string> = {};
-      if (start_date) params.start_date = start_date;
-      if (end_date) params.end_date = end_date;
+      const params = new URLSearchParams();
+      if (start_date) params.append("start_date", start_date);
+      if (end_date) params.append("end_date", end_date);
+
       try {
-        const response = await offlineAxiosRequest(
-          {
-            method: "GET",
-            url: `${API_BASE_URL}/api/inventory-spoilage`,
-            params,
+        const url = `${API_BASE_URL}/api/inventory-spoilage${
+          params.toString() ? `?${params.toString()}` : ""
+        }`;
+
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
           },
-          {
-            cacheKey: `spoilage-summary-${start_date || "all"}-${
-              end_date || "all"
-            }`,
-            cacheHours: 1,
-            showErrorToast: true,
-            fallbackData: [],
-          }
-        );
-        return response.data;
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
       } catch (err: any) {
         console.error("[fetchSpoilageSummary] error:", err);
-        if (err.isOfflineError) {
-          return [];
-        }
-        throw err;
+        return [];
       }
     },
     []

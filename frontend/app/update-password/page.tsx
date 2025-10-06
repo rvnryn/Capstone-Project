@@ -35,7 +35,9 @@ export default function UpdatePasswordPage() {
       }
       setSuccess(true);
       setTimeout(() => {
-        router.push("/");
+        router.push(
+          `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/`
+        );
       }, 2500);
     } catch (err: any) {
       setError(err.message || "Failed to update password.");

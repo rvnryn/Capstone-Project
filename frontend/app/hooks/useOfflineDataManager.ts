@@ -1,7 +1,9 @@
-"uimport { useOffline, useOfflineAxios } from '@/app/context/OfflineContext';e client";
+"use client";
 
 import { useOffline, useOfflineAPI } from "@/app/context/OfflineContext";
 import { useCallback, useEffect, useState } from "react";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Data structure interfaces for restaurant management
 interface InventoryItem {
@@ -197,7 +199,7 @@ export const useOfflineDataManager = () => {
   // Inventory data management
   const getInventoryData = useCallback(async () => {
     return fetchWithOfflineSupport<InventoryItem[]>(
-      "/api/inventory",
+      `${API_BASE_URL}/api/inventory`,
       CACHE_KEYS.INVENTORY,
       CACHE_EXPIRY.INVENTORY
     );
@@ -206,7 +208,7 @@ export const useOfflineDataManager = () => {
   // Menu data management
   const getMenuData = useCallback(async () => {
     return fetchWithOfflineSupport<MenuItem[]>(
-      "/api/menu",
+      `${API_BASE_URL}/api/menu`,
       CACHE_KEYS.MENU,
       CACHE_EXPIRY.MENU
     );
@@ -215,7 +217,7 @@ export const useOfflineDataManager = () => {
   // User data management
   const getUserData = useCallback(async () => {
     return fetchWithOfflineSupport<UserData[]>(
-      "/api/users",
+      `${API_BASE_URL}/api/users`,
       CACHE_KEYS.USERS,
       CACHE_EXPIRY.USERS
     );
@@ -225,8 +227,8 @@ export const useOfflineDataManager = () => {
   const getSalesData = useCallback(
     async (dateRange?: { start: string; end: string }) => {
       const endpoint = dateRange
-        ? `/api/sales?start=${dateRange.start}&end=${dateRange.end}`
-        : "/api/sales";
+        ? `${API_BASE_URL}/api/sales?start=${dateRange.start}&end=${dateRange.end}`
+        : `${API_BASE_URL}/api/sales`;
 
       const cacheKey = dateRange
         ? `${CACHE_KEYS.SALES}-${dateRange.start}-${dateRange.end}`
@@ -244,7 +246,7 @@ export const useOfflineDataManager = () => {
   // Dashboard stats management
   const getDashboardStats = useCallback(async () => {
     return fetchWithOfflineSupport<DashboardStats>(
-      "/api/dashboard/stats",
+      `${API_BASE_URL}/api/dashboard/stats`,
       CACHE_KEYS.DASHBOARD,
       CACHE_EXPIRY.DASHBOARD
     );
@@ -253,7 +255,7 @@ export const useOfflineDataManager = () => {
   // Supplier data management
   const getSupplierData = useCallback(async () => {
     return fetchWithOfflineSupport<any[]>(
-      "/api/suppliers",
+      `${API_BASE_URL}/api/suppliers`,
       CACHE_KEYS.SUPPLIERS,
       CACHE_EXPIRY.SUPPLIERS
     );
@@ -263,7 +265,7 @@ export const useOfflineDataManager = () => {
   const getNotificationData = useCallback(
     async (userId: number) => {
       return fetchWithOfflineSupport<any[]>(
-        `/api/notifications?user_id=${userId}`,
+        `${API_BASE_URL}/api/notifications?user_id=${userId}`,
         `${CACHE_KEYS.NOTIFICATIONS}-${userId}`,
         CACHE_EXPIRY.NOTIFICATIONS
       );

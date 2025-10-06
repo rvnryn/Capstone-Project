@@ -19,7 +19,6 @@ import {
 } from "react-icons/fi";
 import { GiBiohazard } from "react-icons/gi";
 import { FaWarehouse } from "react-icons/fa";
-import axios from "@/app/lib/axios";
 
 export default function ViewSpoilageInventoryItem() {
   const { role } = useAuth();
@@ -38,28 +37,35 @@ export default function ViewSpoilageInventoryItem() {
         return;
       }
       try {
-        const response = await axios.get(
+        const response = await fetch(
           `/api/inventory-spoilage?skip=0&limit=100`,
           {
-            params: { skip: 0, limit: 100 },
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
           }
         );
-        const data = Array.isArray(response.data)
-          ? response.data.find(
-              (x) => String(x.spoilage_id) === String(spoilageId)
-            )
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const item = Array.isArray(data)
+          ? data.find((x) => String(x.spoilage_id) === String(spoilageId))
           : null;
-        if (!data) throw new Error("Not found");
+        if (!item) throw new Error("Not found");
         setItem({
-          spoilage_id: data.spoilage_id,
-          item_id: data.item_id,
-          item_name: data.item_name,
-          quantity_spoiled: data.quantity_spoiled,
-          spoilage_date: data.spoilage_date,
-          reason: data.reason,
-          user_id: data.user_id,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
+          spoilage_id: item.spoilage_id,
+          item_id: item.item_id,
+          item_name: item.item_name,
+          quantity_spoiled: item.quantity_spoiled,
+          spoilage_date: item.spoilage_date,
+          reason: item.reason,
+          user_id: item.user_id,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
         });
       } catch (error) {
         console.error("Error fetching spoilage item:", error);

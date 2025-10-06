@@ -35,7 +35,6 @@ import {
   InventorySetting,
 } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 import { useInventoryAPI } from "../hook/use-inventoryAPI";
-import axios from "@/app/lib/axios";
 type InventoryItem = {
   id: number;
   name: string;
@@ -50,7 +49,7 @@ type InventoryItem = {
   [key: string]: string | number | Date | undefined;
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function SurplusInventoryPage() {
   const { user, role } = useAuth();
@@ -81,10 +80,18 @@ export default function SurplusInventoryPage() {
     queryClient.prefetchQuery({
       queryKey: ["surplusInventory", settings],
       queryFn: async () => {
-        const response = await axios.get(
-          `${API_BASE_URL}/api/inventory-surplus`
-        );
-        return response.data;
+        const response = await fetch(`${API_BASE_URL}/api/inventory-surplus`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
       },
     });
   }, []);
@@ -116,8 +123,18 @@ export default function SurplusInventoryPage() {
   }, [isMobile]);
 
   const listSurplusItems = async () => {
-    const response = await axios.get(`${API_BASE_URL}/api/inventory-surplus`);
-    return response.data;
+    const response = await fetch(`${API_BASE_URL}/api/inventory-surplus`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
   };
 
   const inventoryQuery = useQuery<InventoryItem[]>({

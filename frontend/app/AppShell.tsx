@@ -3,10 +3,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/app/context/AuthContext";
 import { OfflineProvider } from "@/app/context/OfflineContext";
-import {
-  PWAInstallBanner,
-  NetworkStatusIndicator,
-} from "@/app/components/PWA/PWAComponents";
+import { NetworkStatusIndicator } from "@/app/components/PWA/PWAComponents";
+import PWAInstallBanner from "@/app/components/PWA/PWAInstallBanner";
 import { ToastContainer } from "react-toastify";
 import { useEffect } from "react";
 import "react-toastify/dist/ReactToastify.css";

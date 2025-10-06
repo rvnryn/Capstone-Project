@@ -1,8 +1,7 @@
-import axiosInstance from "@/app/lib/axios";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 import { useOfflineQueue } from "@/app/hooks/usePWA";
 import { useCallback } from "react";
 import { toast } from "react-toastify";
+import { getToken } from "@/app/lib/auth";
 
 export interface User {
   password: any;
@@ -24,7 +23,7 @@ export type CreateUserPayload = Omit<
 >;
 export type UpdateUserPayload = Partial<CreateUserPayload>;
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const API_BASE = `${API_BASE_URL}/api/users`;
 
 export function useUsersAPI() {
@@ -65,19 +64,19 @@ export function useUsersAPI() {
   );
   const listUsers = useCallback(async () => {
     try {
-      const response = await offlineAxiosRequest(
-        {
-          method: "GET",
-          url: `${API_BASE}`,
+      const response = await fetch(`${API_BASE}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
         },
-        {
-          cacheKey: "users-list",
-          cacheHours: 6, // User list changes moderately
-          showErrorToast: true,
-          fallbackData: [],
-        }
-      );
-      return response.data;
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch users");
+      }
+
+      return response.json();
     } catch (error: any) {
       console.error("Failed to fetch users:", error);
       return [];
@@ -86,18 +85,19 @@ export function useUsersAPI() {
 
   const getUser = useCallback(async (id: number | string) => {
     try {
-      const response = await offlineAxiosRequest(
-        {
-          method: "GET",
-          url: `${API_BASE}/${id}`,
+      const response = await fetch(`${API_BASE}/${id}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
         },
-        {
-          cacheKey: `user-${id}`,
-          cacheHours: 6,
-          showErrorToast: true,
-        }
-      );
-      return response.data;
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch user ${id}`);
+      }
+
+      return response.json();
     } catch (error: any) {
       console.error(`Failed to fetch user ${id}:`, error);
       throw error;
@@ -105,17 +105,22 @@ export function useUsersAPI() {
   }, []);
   const createUser = async (data: CreateUserPayload) => {
     return handleOfflineWriteOperation(
-      () =>
-        offlineAxiosRequest(
-          {
-            method: "POST",
-            url: `${API_BASE}`,
-            data,
+      async () => {
+        const response = await fetch(`${API_BASE}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
           },
-          {
-            showErrorToast: true,
-          }
-        ),
+          body: JSON.stringify(data),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to create user");
+        }
+
+        return response.json();
+      },
       {
         action: "create-user",
         endpoint: `${API_BASE}`,
@@ -128,17 +133,22 @@ export function useUsersAPI() {
   const updateUser = useCallback(
     async (id: number | string, user: UpdateUserPayload) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "PUT",
-              url: `${API_BASE}/${id}`,
-              data: user,
+        async () => {
+          const response = await fetch(`${API_BASE}/${id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+            body: JSON.stringify(user),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to update user");
+          }
+
+          return response.json();
+        },
         {
           action: "update-user",
           endpoint: `${API_BASE}/${id}`,
@@ -153,16 +163,21 @@ export function useUsersAPI() {
   const deleteUser = useCallback(
     async (id: number | string) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "DELETE",
-              url: `${API_BASE}/${id}`,
+        async () => {
+          const response = await fetch(`${API_BASE}/${id}`, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to delete user");
+          }
+
+          return response.json();
+        },
         {
           action: "delete-user",
           endpoint: `${API_BASE}/${id}`,
@@ -178,17 +193,22 @@ export function useUsersAPI() {
   const changeUserPassword = useCallback(
     async (auth_id: string, new_password: string) => {
       return handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "POST",
-              url: "/api/admin/change-password",
-              data: { auth_id, new_password },
+        async () => {
+          const response = await fetch("/api/admin/change-password", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+            body: JSON.stringify({ auth_id, new_password }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to change user password");
+          }
+
+          return response.json();
+        },
         {
           action: "change-user-password",
           endpoint: "/api/admin/change-password",

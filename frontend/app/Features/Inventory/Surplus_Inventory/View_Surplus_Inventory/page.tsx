@@ -25,7 +25,6 @@ import {
   FiAlertCircle,
 } from "react-icons/fi";
 import { FaWarehouse } from "react-icons/fa";
-import axios from "@/app/lib/axios";
 
 export default function ViewSurplusInventoryItem() {
   const { role } = useAuth();
@@ -47,11 +46,21 @@ export default function ViewSurplusInventoryItem() {
         return;
       }
       try {
-        const [response, settingsData] = await Promise.all([
-          axios.get(`/api/inventory-surplus/${itemId}`),
+        const [responseData, settingsData] = await Promise.all([
+          fetch(`/api/inventory-surplus/${itemId}`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }).then(async (response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return await response.json();
+          }),
           fetchSettings(),
         ]);
-        const data = response.data;
+        const data = responseData;
         const formatted = {
           id: data.item_id,
           name: data.item_name,

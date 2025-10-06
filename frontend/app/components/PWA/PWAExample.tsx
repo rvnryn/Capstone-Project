@@ -1,45 +1,44 @@
 // Example PWA integration for any feature page
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import { usePWA, useOfflineQueue } from '@/app/hooks/usePWA';
-import { PWAStatus } from '@/app/components/PWA/PWAComponents';
+import { useEffect } from "react";
+import { usePWA, useOfflineQueue } from "@/app/hooks/usePWA";
+import { PWAStatus } from "@/app/components/PWA/PWAComponents";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export const PWAExample = () => {
-  const { 
-    isOnline, 
-    hasNotificationPermission, 
+  const {
+    isOnline,
+    hasNotificationPermission,
     requestNotificationPermission,
-    pwaFeatures 
+    pwaFeatures,
   } = usePWA();
 
-  const { 
-    addOfflineAction, 
-    syncWhenOnline 
-  } = useOfflineQueue();
+  const { addOfflineAction, syncWhenOnline } = useOfflineQueue();
 
   // Example: Handle form submission with offline support
   const handleFormSubmit = async (formData: any) => {
     if (isOnline) {
       try {
         // Normal API call
-        const response = await fetch('/api/some-endpoint', {
-          method: 'POST',
+        const response = await fetch(`${API_BASE_URL}/api/some-endpoint`, {
+          method: "POST",
           body: JSON.stringify(formData),
-          headers: { 'Content-Type': 'application/json' }
+          headers: { "Content-Type": "application/json" },
         });
-        
+
         if (response.ok) {
-          console.log('Data submitted successfully');
+          console.log("Data submitted successfully");
         }
       } catch (error) {
-        console.error('Submission failed, adding to offline queue');
-        addOfflineAction('submit-form', formData);
+        console.error("Submission failed, adding to offline queue");
+        addOfflineAction("submit-form", formData);
       }
     } else {
       // Add to offline queue
-      addOfflineAction('submit-form', formData);
-      console.log('Added to offline queue - will sync when online');
+      addOfflineAction("submit-form", formData);
+      console.log("Added to offline queue - will sync when online");
     }
   };
 
@@ -48,16 +47,16 @@ export const PWAExample = () => {
     const syncOfflineData = async (offlineActions: any[]) => {
       for (const action of offlineActions) {
         try {
-          if (action.action === 'submit-form') {
-            await fetch('/api/some-endpoint', {
-              method: 'POST',
+          if (action.action === "submit-form") {
+            await fetch(`${API_BASE_URL}/api/some-endpoint`, {
+              method: "POST",
               body: JSON.stringify(action.data),
-              headers: { 'Content-Type': 'application/json' }
+              headers: { "Content-Type": "application/json" },
             });
           }
           // Handle other action types...
         } catch (error) {
-          console.error('Failed to sync offline action:', error);
+          console.error("Failed to sync offline action:", error);
         }
       }
     };
@@ -68,23 +67,27 @@ export const PWAExample = () => {
   // Example: Request notification permission
   const enableNotifications = async () => {
     const permission = await requestNotificationPermission();
-    if (permission === 'granted') {
-      console.log('Notifications enabled');
+    if (permission === "granted") {
+      console.log("Notifications enabled");
     }
   };
 
   return (
     <div className="p-4">
       <h2 className="text-xl font-bold mb-4">PWA Features</h2>
-      
+
       {/* Network Status */}
-      <div className={`p-3 rounded-lg mb-4 ${isOnline ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-        Status: {isOnline ? 'Online' : 'Offline'}
+      <div
+        className={`p-3 rounded-lg mb-4 ${
+          isOnline ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+        }`}
+      >
+        Status: {isOnline ? "Online" : "Offline"}
       </div>
 
       {/* Notification Permission */}
       {!hasNotificationPermission && (
-        <button 
+        <button
           onClick={enableNotifications}
           className="bg-blue-500 text-white px-4 py-2 rounded mb-4"
         >
@@ -96,7 +99,7 @@ export const PWAExample = () => {
       <PWAStatus />
 
       {/* Example form with offline support */}
-      <form 
+      <form
         onSubmit={(e) => {
           e.preventDefault();
           const formData = new FormData(e.target as HTMLFormElement);
@@ -104,16 +107,16 @@ export const PWAExample = () => {
         }}
         className="mt-4"
       >
-        <input 
-          name="example" 
-          placeholder="Enter data" 
+        <input
+          name="example"
+          placeholder="Enter data"
           className="border p-2 rounded mr-2"
         />
-        <button 
+        <button
           type="submit"
           className="bg-green-500 text-white px-4 py-2 rounded"
         >
-          Submit {!isOnline && '(Offline)'}
+          Submit {!isOnline && "(Offline)"}
         </button>
       </form>
     </div>

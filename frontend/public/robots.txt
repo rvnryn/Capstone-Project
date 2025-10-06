@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+
+# PWA specific files
+Allow: /manifest.json
+Allow: /service-worker.js
+Allow: /offline.html
+
+# Static assets
+Allow: /icons/
+Allow: /screenshots/
+Allow: /_next/static/
+
+# Disallow sensitive routes
+Disallow: /api/
+Disallow: /admin/
+Disallow: /_next/
+Disallow: /resetPassword/
+
+# Sitemap
+Sitemap: https://your-domain.com/sitemap.xml

@@ -29,7 +29,7 @@ import {
   useEffect as useSpoilageEffect,
   useState as useSpoilageState,
 } from "react";
-import axiosInstance from "@/app/lib/axios";
+
 import { supabase } from "@/app/utils/Server/supabaseClient";
 import { useAuth } from "@/app/context/AuthContext";
 import { saveAs } from "file-saver";
@@ -145,8 +145,18 @@ export default function ReportInventory() {
     try {
       const today = new Date().toISOString().slice(0, 10);
       const logs = await fetchLogs(today);
-      const masterRes = await axiosInstance.get("/api/inventory");
-      const masterInventory = masterRes.data;
+      const masterResponse = await fetch("/api/inventory", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!masterResponse.ok) {
+        throw new Error(`HTTP error! status: ${masterResponse.status}`);
+      }
+
+      const masterInventory = await masterResponse.json();
       setInventory(
         masterInventory.map((item: any) => {
           const batchDate = item.created_at;
@@ -296,10 +306,13 @@ export default function ReportInventory() {
                     ? new Date(log.action_date).toISOString().slice(0, 10)
                     : null
                 )
-                .filter((date): date is string => date !== null)
+                .filter(
+                  (date: unknown): date is string =>
+                    typeof date === "string" && date !== null
+                )
             ),
-          ].sort((a, b) => b.localeCompare(a));
-          setAvailableHistoricalDates(dates);
+          ].sort((a, b) => (b as string).localeCompare(a as string));
+          setAvailableHistoricalDates(dates as string[]);
         }
       } catch (error) {
         console.error("Error fetching available historical dates:", error);

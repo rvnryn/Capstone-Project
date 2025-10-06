@@ -8,7 +8,6 @@ import React, {
   JSX,
 } from "react";
 import { supabase } from "@/app/utils/Server/supabaseClient";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
 // --- Types ---
 export type UserRole =
@@ -42,7 +41,7 @@ const AuthContext = createContext<AuthContextType>({
     throw new Error("Function not implemented.");
   },
 });
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export const useAuth = () => useContext(AuthContext);
 
@@ -121,29 +120,31 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     setUser(newUser);
 
     try {
-      const res = await offlineAxiosRequest(
-        {
-          method: "GET",
-          url: `${API_BASE_URL}/api/auth/session`,
-          headers: { Authorization: `Bearer ${session.access_token}` },
+      const response = await fetch(`${API_BASE_URL}/api/auth/session`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
         },
-        {
-          cacheKey: `auth-session-${newUser.id}`,
-          cacheHours: 12,
-        }
-      );
-      setRole(res.data.role);
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setRole(data.role);
       setUser((prev) => ({
         ...prev,
-        ...res.data.user,
+        ...data.user,
       }));
       // Cache user and role for offline login
       if (typeof window !== "undefined") {
         localStorage.setItem(
           "cachedUser",
-          JSON.stringify({ ...newUser, ...res.data.user })
+          JSON.stringify({ ...newUser, ...data.user })
         );
-        localStorage.setItem("cachedRole", res.data.role);
+        localStorage.setItem("cachedRole", data.role);
       }
     } catch (err) {
       setUser(null);

@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 // Type definitions for API responses
 export interface SalesSummary {
   period: string;
@@ -148,7 +150,7 @@ export function useSalesReport() {
       params.append("timeframe", timeframe);
 
       return handleApiCall<SalesSummary>(
-        () => fetch(`/api/sales-summary?${params.toString()}`),
+        () => fetch(`${API_BASE_URL}/api/sales-summary?${params.toString()}`),
         "salesSummary"
       );
     },
@@ -168,7 +170,7 @@ export function useSalesReport() {
       params.append("limit", limit.toString());
 
       return handleApiCall<SalesByItemResponse>(
-        () => fetch(`/api/sales-by-item?${params.toString()}`),
+        () => fetch(`${API_BASE_URL}/api/sales-by-item?${params.toString()}`),
         "salesByItem"
       );
     },
@@ -188,7 +190,7 @@ export function useSalesReport() {
       params.append("grouping", grouping);
 
       return handleApiCall<SalesByDateResponse>(
-        () => fetch(`/api/sales-by-date?${params.toString()}`),
+        () => fetch(`${API_BASE_URL}/api/sales-by-date?${params.toString()}`),
         "salesByDate"
       );
     },
@@ -210,7 +212,7 @@ export function useSalesReport() {
       params.append("limit", limit.toString());
 
       return handleApiCall<TopPerformersResponse>(
-        () => fetch(`/api/top-performers?${params.toString()}`),
+        () => fetch(`${API_BASE_URL}/api/top-performers?${params.toString()}`),
         "topPerformers"
       );
     },
@@ -224,7 +226,7 @@ export function useSalesReport() {
       if (date) params.append("date", date);
 
       return handleApiCall<HourlySalesResponse>(
-        () => fetch(`/api/hourly-sales?${params.toString()}`),
+        () => fetch(`${API_BASE_URL}/api/hourly-sales?${params.toString()}`),
         "hourlySales"
       );
     },
@@ -246,7 +248,8 @@ export function useSalesReport() {
       params.append("previous_end", previousEnd);
 
       return handleApiCall<SalesComparison>(
-        () => fetch(`/api/sales-comparison?${params.toString()}`),
+        () =>
+          fetch(`${API_BASE_URL}/api/sales-comparison?${params.toString()}`),
         "salesComparison"
       );
     },

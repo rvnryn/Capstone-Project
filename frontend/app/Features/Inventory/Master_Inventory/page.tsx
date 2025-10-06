@@ -27,6 +27,10 @@ import NavigationBar from "@/app/components/navigation/navigation";
 import { useAuth } from "@/app/context/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useInventoryAPI } from "../hook/use-inventoryAPI";
+// PWA Integration
+import { usePWA, useOfflineQueue } from "@/app/hooks/usePWA";
+import { PWAStatusBar } from "@/app/components/PWA/PWAStatus";
+import { useOfflineDataManager } from "@/app/hooks/useOfflineDataManager";
 
 type InventoryItem = {
   id: number;
@@ -41,11 +45,17 @@ type InventoryItem = {
   [key: string]: unknown;
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function InventoryPage() {
   const { role } = useAuth();
   console.log("Current role (RBAC check):", role);
+
+  // PWA Integration
+  const { isOnline } = usePWA();
+  const { addOfflineAction, getOfflineActions } = useOfflineQueue();
+  const offlineDataManager = useOfflineDataManager();
+  const offlineActionsCount = getOfflineActions().length;
 
   // Aggressively cache settings with React Query
   const {
@@ -205,9 +215,18 @@ export default function InventoryPage() {
     refetchOnMount: false,
   });
 
-  // Delete mutation with optimistic UI
+  // Delete mutation with optimistic UI and offline support
   const deleteMutation = useMutation({
-    mutationFn: (id: string | number) => deleteItem(id),
+    mutationFn: async (id: string | number) => {
+      if (!isOnline) {
+        // Queue action for when online
+        addOfflineAction("delete-inventory-item", { id, type: "master" });
+        throw new Error(
+          "Offline: Action queued for sync when connection is restored"
+        );
+      }
+      return deleteItem(id);
+    },
     onMutate: async (id: string | number) => {
       await queryClient.cancelQueries({ queryKey: ["masterInventory"] });
       const previousInventory = queryClient.getQueryData<
@@ -237,9 +256,16 @@ export default function InventoryPage() {
     },
   });
 
-  // Transfer mutation with optimistic UI
+  // Transfer mutation with optimistic UI and offline support
   const transferMutation = useMutation({
     mutationFn: async ({ id, quantity }: { id: number; quantity: number }) => {
+      if (!isOnline) {
+        // Queue action for when online
+        addOfflineAction("transfer-to-today", { id, quantity, type: "master" });
+        throw new Error(
+          "Offline: Transfer queued for sync when connection is restored"
+        );
+      }
       await transferToToday(id, quantity);
     },
     onMutate: async ({ id }) => {
@@ -467,11 +493,23 @@ export default function InventoryPage() {
 
   const confirmSpoilage = async () => {
     if (!itemToSpoilage || !spoilageQuantity || spoilageQuantity <= 0) return;
-    await spoilageMutation.mutateAsync({
+
+    const spoilageData = {
       id: itemToSpoilage.id,
       quantity: Number(spoilageQuantity),
       reason: spoilageReason,
-    });
+    };
+
+    if (isOnline) {
+      await spoilageMutation.mutateAsync(spoilageData);
+    } else {
+      addOfflineAction("SPOILAGE_INVENTORY", {
+        endpoint: `/master_inventory/spoilage`,
+        method: "POST",
+        data: spoilageData,
+      });
+    }
+
     setShowSpoilageModal(false);
     setItemToSpoilage(null);
     setSpoilageQuantity("");
@@ -489,23 +527,49 @@ export default function InventoryPage() {
 
   const confirmDelete = async () => {
     if (itemToDelete === null) return;
-    await deleteMutation.mutateAsync(itemToDelete);
+
+    if (isOnline) {
+      await deleteMutation.mutateAsync(itemToDelete);
+    } else {
+      addOfflineAction("DELETE_INVENTORY", {
+        endpoint: `/master_inventory/${itemToDelete}`,
+        method: "DELETE",
+        data: { id: itemToDelete },
+      });
+    }
+
     setShowDeleteModal(false);
     queryClient.invalidateQueries({ queryKey: ["masterInventory"] }); // <-- force refetch
   };
 
   const confirmTransfer = async () => {
     if (!itemToTransfer || !transferQuantity || transferQuantity <= 0) return;
-    await transferMutation.mutateAsync({
+
+    const transferData = {
       id: itemToTransfer.id,
       quantity: Number(transferQuantity),
-    });
+    };
+
+    if (isOnline) {
+      await transferMutation.mutateAsync(transferData);
+    } else {
+      addOfflineAction("TRANSFER_INVENTORY", {
+        endpoint: `/master_inventory/transfer`,
+        method: "PUT",
+        data: transferData,
+      });
+    }
+
     setShowTransferModal(false);
     setItemToTransfer(null);
     setTransferQuantity("");
     queryClient.invalidateQueries({ queryKey: ["masterInventory"] }); // <-- force refetch
     queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
-    setTransferSuccess("Transfer successful! Item moved to Today's Inventory.");
+    setTransferSuccess(
+      isOnline
+        ? "Transfer successful! Item moved to Today's Inventory."
+        : "Transfer queued for processing when online."
+    );
   };
 
   const handleCloseTransferModal = () => {
@@ -550,6 +614,12 @@ export default function InventoryPage() {
           <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
             <article className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-xl xs:rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10 2xl:p-12 w-full">
               <header className="flex flex-col space-y-3 xs:space-y-4 sm:space-y-5 md:space-y-6 mb-4 xs:mb-5 sm:mb-6 md:mb-8">
+                {/* PWA Status Bar */}
+                <PWAStatusBar
+                  dataKey="masterInventory"
+                  dataType="inventory"
+                  className="mb-2 xs:mb-3 sm:mb-4"
+                />
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 xs:gap-3 sm:gap-4 md:gap-6">
                   <div className="flex items-center gap-2 xs:gap-3 sm:gap-4">
                     <div className="relative">
@@ -879,8 +949,15 @@ export default function InventoryPage() {
                             <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
                               <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
                               <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                                Loading inventory data...
+                                {isOnline
+                                  ? "Loading inventory data..."
+                                  : "Loading from offline cache..."}
                               </div>
+                              {!isOnline && (
+                                <div className="text-gray-400 text-xs xs:text-sm">
+                                  Data may not be current
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>

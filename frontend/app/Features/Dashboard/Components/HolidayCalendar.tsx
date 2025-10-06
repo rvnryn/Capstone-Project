@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import axios from "axios";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -38,11 +37,18 @@ const HolidayCalendar: React.FC<Props> = ({
       try {
         const y = year || new Date().getFullYear();
         const url = `${API_BASE_URL}/api/philippines?year=${y}`;
-        const res = await axios.get(url);
+        const response = await fetch(url);
         console.log("PH Holidays API URL:", url);
-        console.log("PH Holidays API response:", res.data);
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch PH holidays");
+        }
+
+        const data = await response.json();
+        console.log("PH Holidays API response:", data);
+
         setPhHolidays(
-          (res.data || []).map((h: any) => ({
+          (data || []).map((h: any) => ({
             id: `ph-${h.date}`,
             date: h.date,
             name: h.name,

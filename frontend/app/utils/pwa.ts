@@ -2,23 +2,25 @@
 
 export interface PWAInstallPrompt {
   prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
 // Check if app is running as PWA
 export const isPWA = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  
-  return window.matchMedia('(display-mode: standalone)').matches ||
-         (window.navigator as any).standalone ||
-         document.referrer.includes('android-app://');
+  if (typeof window === "undefined") return false;
+
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as any).standalone ||
+    document.referrer.includes("android-app://")
+  );
 };
 
 // Check if device supports PWA installation
 export const canInstallPWA = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  
-  return 'serviceWorker' in navigator && 'PushManager' in window;
+  if (typeof window === "undefined") return false;
+
+  return "serviceWorker" in navigator && "PushManager" in window;
 };
 
 // Install PWA prompt handler
@@ -27,33 +29,32 @@ export class PWAInstaller {
   private installed = false;
 
   constructor() {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       this.setupInstallPrompt();
     }
   }
 
   private setupInstallPrompt() {
     // Prevent default browser install banners
-    window.addEventListener('beforeinstallprompt', (e) => {
+    window.addEventListener("beforeinstallprompt", (e) => {
       // Prevent the mini-infobar from appearing on mobile
       e.preventDefault();
       // Stash the event so it can be triggered later
       this.deferredPrompt = e as any;
-      console.log('PWA install prompt captured and prevented');
     });
 
     // Also try to prevent other browser install prompts
-    window.addEventListener('appinstalled', () => {
+    window.addEventListener("appinstalled", () => {
       this.installed = true;
       this.deferredPrompt = null;
-      console.log('PWA installed successfully');
+      console.log("PWA installed successfully");
     });
 
     // Additional prevention for Chrome's install banner
-    if ('BeforeInstallPromptEvent' in window) {
-      document.addEventListener('DOMContentLoaded', () => {
+    if ("BeforeInstallPromptEvent" in window) {
+      document.addEventListener("DOMContentLoaded", () => {
         // Hide any browser install prompts by default
-        const style = document.createElement('style');
+        const style = document.createElement("style");
         style.innerHTML = `
           @media (display-mode: browser) {
             body::after {
@@ -72,16 +73,16 @@ export class PWAInstaller {
     try {
       await this.deferredPrompt.prompt();
       const { outcome } = await this.deferredPrompt.userChoice;
-      
-      if (outcome === 'accepted') {
+
+      if (outcome === "accepted") {
         this.installed = true;
         this.deferredPrompt = null;
         return true;
       }
     } catch (error) {
-      console.error('PWA installation failed:', error);
+      console.error("PWA installation failed:", error);
     }
-    
+
     return false;
   }
 
@@ -97,16 +98,16 @@ export class PWAInstaller {
 // Online/Offline status
 export class NetworkStatus {
   private listeners: ((isOnline: boolean) => void)[] = [];
-  
+
   constructor() {
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => this.notifyListeners(true));
-      window.addEventListener('offline', () => this.notifyListeners(false));
+    if (typeof window !== "undefined") {
+      window.addEventListener("online", () => this.notifyListeners(true));
+      window.addEventListener("offline", () => this.notifyListeners(false));
     }
   }
 
   isOnline(): boolean {
-    if (typeof navigator === 'undefined') return true;
+    if (typeof navigator === "undefined") return true;
     return navigator.onLine;
   }
 
@@ -115,11 +116,11 @@ export class NetworkStatus {
   }
 
   removeListener(callback: (isOnline: boolean) => void) {
-    this.listeners = this.listeners.filter(listener => listener !== callback);
+    this.listeners = this.listeners.filter((listener) => listener !== callback);
   }
 
   private notifyListeners(isOnline: boolean) {
-    this.listeners.forEach(listener => listener(isOnline));
+    this.listeners.forEach((listener) => listener(isOnline));
   }
 }
 
@@ -134,33 +135,36 @@ export class OfflineQueue {
 
   addAction(action: string, data: any): string {
     const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     this.queue.push({
       id,
       action,
       data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     // Store in localStorage for persistence
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('pwa-offline-queue', JSON.stringify(this.queue));
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("pwa-offline-queue", JSON.stringify(this.queue));
     }
 
     // Try to register background sync
     this.registerBackgroundSync();
-    
+
     return id;
   }
 
   private async registerBackgroundSync() {
-    if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
+    if (
+      "serviceWorker" in navigator &&
+      "sync" in window.ServiceWorkerRegistration.prototype
+    ) {
       try {
         const registration = await navigator.serviceWorker.ready;
         // Type assertion for background sync API
-        await (registration as any).sync.register('background-sync');
+        await (registration as any).sync.register("background-sync");
       } catch (error) {
-        console.warn('Background sync not supported:', error);
+        console.warn("Background sync not supported:", error);
       }
     }
   }
@@ -171,8 +175,8 @@ export class OfflineQueue {
 
   clearQueue() {
     this.queue = [];
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('pwa-offline-queue');
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem("pwa-offline-queue");
     }
   }
 }
@@ -182,8 +186,8 @@ export class PushNotifications {
   private registration: ServiceWorkerRegistration | null = null;
 
   async initialize(): Promise<boolean> {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      console.warn('Push notifications not supported');
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      console.warn("Push notifications not supported");
       return false;
     }
 
@@ -191,15 +195,15 @@ export class PushNotifications {
       this.registration = await navigator.serviceWorker.ready;
       return true;
     } catch (error) {
-      console.error('Service worker not ready:', error);
+      console.error("Service worker not ready:", error);
       return false;
     }
   }
 
   async requestPermission(): Promise<NotificationPermission> {
-    if (!('Notification' in window)) {
-      console.warn('Notifications not supported');
-      return 'denied';
+    if (!("Notification" in window)) {
+      console.warn("Notifications not supported");
+      return "denied";
     }
 
     return await Notification.requestPermission();
@@ -215,21 +219,23 @@ export class PushNotifications {
     try {
       const subscription = await this.registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: this.urlBase64ToUint8Array(vapidPublicKey) as BufferSource
+        applicationServerKey: this.urlBase64ToUint8Array(
+          vapidPublicKey
+        ) as BufferSource,
       });
 
       return subscription;
     } catch (error) {
-      console.error('Push subscription failed:', error);
+      console.error("Push subscription failed:", error);
       return null;
     }
   }
 
   private urlBase64ToUint8Array(base64String: string): Uint8Array {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
     const base64 = (base64String + padding)
-      .replace(/-/g, '+')
-      .replace(/_/g, '/');
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
 
     const rawData = window.atob(base64);
     const outputArray = new Uint8Array(rawData.length);

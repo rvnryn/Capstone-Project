@@ -33,7 +33,6 @@ import { useInventoryAPI } from "../hook/use-inventoryAPI";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { InventorySetting } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
-import axios from "@/app/lib/axios";
 
 type InventoryItem = {
   id: number;
@@ -48,7 +47,7 @@ type InventoryItem = {
   [key: string]: unknown;
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function TodayInventoryPage() {
   const { user, role } = useAuth();
@@ -68,8 +67,18 @@ export default function TodayInventoryPage() {
   } = useQuery<InventorySetting[]>({
     queryKey: ["inventorySettings"],
     queryFn: async () => {
-      const res = await axios.get(`${API_BASE_URL}/api/inventory-settings`);
-      return res.data;
+      const response = await fetch(`${API_BASE_URL}/api/inventory-settings`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     },
     staleTime: 1000 * 60 * 60 * 12, // 12 hours
     refetchOnReconnect: false,
@@ -88,16 +97,39 @@ export default function TodayInventoryPage() {
       queryClient.prefetchQuery({
         queryKey: ["inventorySettings"],
         queryFn: async () => {
-          const res = await axios.get(`${API_BASE_URL}/api/inventory-settings`);
-          return res.data;
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory-settings`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
         },
         staleTime: 1000 * 60 * 60 * 12,
       });
       queryClient.prefetchQuery({
         queryKey: ["todayInventory", []],
         queryFn: async () => {
-          const res = await axios.get(`${API_BASE_URL}/api/inventory-today`);
-          return res.data;
+          const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
         },
         staleTime: 1000 * 60 * 5,
       });
@@ -132,8 +164,18 @@ export default function TodayInventoryPage() {
   }, [isMobile]);
 
   const listTodayItems = async () => {
-    const response = await axios.get(`${API_BASE_URL}/api/inventory-today`);
-    return response.data;
+    const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
   };
 
   const { data: inventoryDataRaw, isLoading } = useQuery<InventoryItem[]>({

@@ -1,7 +1,6 @@
 import useSWR from "swr";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface BackupSchedule {
   id: number;
@@ -24,18 +23,15 @@ export function useBackupSchedule() {
   const { data, error, mutate, isLoading } = useSWR<BackupSchedule>(
     `${API_BASE_URL}/api/schedule`,
     async (url: string) => {
-      const res = await offlineAxiosRequest(
-        {
-          method: "GET",
-          url,
-        },
-        {
-          cacheKey: "backup-schedule",
-          cacheHours: 24,
-          showErrorToast: true,
-        }
-      );
-      return res.data;
+      const response = await fetch(url, {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch backup schedule");
+      }
+
+      return response.json();
     }
   );
   return {
@@ -48,15 +44,17 @@ export function useBackupSchedule() {
 
 // Update the backup schedule (matches backend: POST /schedule)
 export async function updateBackupSchedule(settings: BackupScheduleSettings) {
-  const res = await offlineAxiosRequest(
-    {
-      method: "POST",
-      url: `${API_BASE_URL}/api/schedule`,
-      data: settings,
+  const response = await fetch(`${API_BASE_URL}/api/schedule`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
     },
-    {
-      showErrorToast: true,
-    }
-  );
-  return res.data;
+    body: JSON.stringify(settings),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to update backup schedule");
+  }
+
+  return response.json();
 }

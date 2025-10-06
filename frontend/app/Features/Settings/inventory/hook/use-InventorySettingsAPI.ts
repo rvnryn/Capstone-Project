@@ -1,11 +1,9 @@
 "use client";
 import { useState } from "react";
-import axiosInstance from "@/app/lib/axios";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 import { useOfflineQueue } from "@/app/hooks/usePWA";
 import { useCallback } from "react";
 import { toast } from "react-toastify";
-import axios from "axios";
+import { getToken } from "@/app/lib/auth";
 
 export interface InventorySetting {
   id: number;
@@ -23,7 +21,7 @@ export interface InventorySettingInput {
   low_stock_threshold?: number;
   category?: string;
 }
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const API_BASE = `${API_BASE_URL}/api/inventory-settings`;
 
@@ -70,28 +68,21 @@ export function useInventorySettingsAPI() {
     setLoading(true);
     setError(null);
     try {
-      const response = await offlineAxiosRequest(
-        {
-          method: "GET",
-          url: API_BASE,
+      const response = await fetch(API_BASE, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
         },
-        {
-          cacheKey: "inventory-settings",
-          cacheHours: 2, // Settings can be cached longer
-          showErrorToast: true,
-          fallbackData: [],
-        }
-      );
-      return response.data;
-    } catch (err) {
-      if (err && typeof err === "object" && "isOfflineError" in err) {
-        setError("Settings not available offline");
-        return [];
-      } else if (axios.isAxiosError(err)) {
-        setError((err.response?.data?.detail as string) || err.message);
-      } else {
-        setError("Unknown error");
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch inventory settings");
       }
+
+      return response.json();
+    } catch (err: any) {
+      setError(err.message || "Unknown error");
       return [];
     } finally {
       setLoading(false);
@@ -105,17 +96,22 @@ export function useInventorySettingsAPI() {
     setError(null);
     try {
       const result = await handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "POST",
-              url: API_BASE,
-              data,
+        async () => {
+          const response = await fetch(API_BASE, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+            body: JSON.stringify(data),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to create inventory setting");
+          }
+
+          return response.json();
+        },
         {
           action: "create-inventory-setting",
           endpoint: API_BASE,
@@ -123,15 +119,9 @@ export function useInventorySettingsAPI() {
           payload: data,
         }
       );
-      return result.queued ? null : result.data;
-    } catch (err) {
-      if (err && typeof err === "object" && "isOfflineError" in err) {
-        setError("Action queued for sync");
-      } else if (axios.isAxiosError(err)) {
-        setError((err.response?.data?.detail as string) || err.message);
-      } else {
-        setError("Unknown error");
-      }
+      return result.queued ? null : result;
+    } catch (err: any) {
+      setError(err.message || "Unknown error");
       return null;
     } finally {
       setLoading(false);
@@ -146,17 +136,22 @@ export function useInventorySettingsAPI() {
     setError(null);
     try {
       const result = await handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "PUT",
-              url: `${API_BASE}/${id}`,
-              data,
+        async () => {
+          const response = await fetch(`${API_BASE}/${id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+            body: JSON.stringify(data),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to update inventory setting");
+          }
+
+          return response.json();
+        },
         {
           action: "update-inventory-setting",
           endpoint: `${API_BASE}/${id}`,
@@ -164,15 +159,9 @@ export function useInventorySettingsAPI() {
           payload: data,
         }
       );
-      return result.queued ? null : result.data;
-    } catch (err) {
-      if (err && typeof err === "object" && "isOfflineError" in err) {
-        setError("Action queued for sync");
-      } else if (axios.isAxiosError(err)) {
-        setError((err.response?.data?.detail as string) || err.message);
-      } else {
-        setError("Unknown error");
-      }
+      return result.queued ? null : result;
+    } catch (err: any) {
+      setError(err.message || "Unknown error");
       return null;
     } finally {
       setLoading(false);
@@ -184,16 +173,21 @@ export function useInventorySettingsAPI() {
     setError(null);
     try {
       const result = await handleOfflineWriteOperation(
-        () =>
-          offlineAxiosRequest(
-            {
-              method: "DELETE",
-              url: `${API_BASE}/${id}`,
+        async () => {
+          const response = await fetch(`${API_BASE}/${id}`, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
             },
-            {
-              showErrorToast: true,
-            }
-          ),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to delete inventory setting");
+          }
+
+          return response.json();
+        },
         {
           action: "delete-inventory-setting",
           endpoint: `${API_BASE}/${id}`,
@@ -202,14 +196,8 @@ export function useInventorySettingsAPI() {
         }
       );
       return !result.queued;
-    } catch (err) {
-      if (err && typeof err === "object" && "isOfflineError" in err) {
-        setError("Action queued for sync");
-      } else if (axios.isAxiosError(err)) {
-        setError((err.response?.data?.detail as string) || err.message);
-      } else {
-        setError("Unknown error");
-      }
+    } catch (err: any) {
+      setError(err.message || "Unknown error");
       return false;
     } finally {
       setLoading(false);

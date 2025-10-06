@@ -1,8 +1,7 @@
 import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface SalesPrediction {
   name: string;
@@ -55,25 +54,23 @@ export function useSalesHistory(
   } = useQuery({
     queryKey: ["sales-history", timeframe, top_n],
     queryFn: async () => {
-      const response = await offlineAxiosRequest(
+      const response = await fetch(
+        `${API_BASE_URL}/api/predict_top_sales?timeframe=${timeframe}&top_n=${top_n}`,
         {
           method: "GET",
-          url: `${API_BASE_URL}/api/predict_top_sales?timeframe=${timeframe}&top_n=${top_n}`,
-        },
-        {
-          cacheKey: `sales-history-${timeframe}-${top_n}`,
-          cacheHours: 6,
-          showErrorToast: true,
-          fallbackData: [],
+          headers: {
+            "Content-Type": "application/json",
+          },
         }
       );
-      console.log(
-        "[SalesHistory] API response for",
-        timeframe,
-        top_n,
-        response.data
-      );
-      return response.data;
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("[SalesHistory] API response for", timeframe, top_n, data);
+      return data;
     },
     refetchInterval: 10000,
     staleTime: 10000,
@@ -92,19 +89,21 @@ export function useHistoricalAnalysis() {
   } = useQuery({
     queryKey: ["historical-analysis", days],
     queryFn: async () => {
-      const response = await offlineAxiosRequest(
+      const response = await fetch(
+        `${API_BASE_URL}/api/historical_analysis?days=${days}`,
         {
           method: "GET",
-          url: `${API_BASE_URL}/api/historical_analysis?days=${days}`,
-        },
-        {
-          cacheKey: `historical-analysis-${days}`,
-          cacheHours: 12,
-          showErrorToast: true,
-          fallbackData: null,
+          headers: {
+            "Content-Type": "application/json",
+          },
         }
       );
-      return response.data;
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
     },
     refetchInterval: 10000,
     staleTime: 10000,

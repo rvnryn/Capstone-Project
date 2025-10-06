@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface SalesPrediction {
   name: string;
@@ -20,43 +21,48 @@ export function useMultiSalesPrediction() {
     setError(null);
     try {
       const [dailyRes, weeklyRes, monthlyRes] = await Promise.all([
-        offlineAxiosRequest<SalesPrediction[]>(
+        fetch(
+          `${API_BASE_URL}/api/predict_top_sales?timeframe=daily&top_n=${top_n}`,
           {
             method: "GET",
-            url: `/api/predict_top_sales?timeframe=daily&top_n=${top_n}`,
-          },
-          {
-            cacheKey: `predict_top_sales-daily-${top_n}`,
-            cacheHours: 6,
-            showErrorToast: false,
+            headers: {
+              "Content-Type": "application/json",
+            },
           }
         ),
-        offlineAxiosRequest<SalesPrediction[]>(
+        fetch(
+          `${API_BASE_URL}/api/predict_top_sales?timeframe=weekly&top_n=${top_n}`,
           {
             method: "GET",
-            url: `/api/predict_top_sales?timeframe=weekly&top_n=${top_n}`,
-          },
-          {
-            cacheKey: `predict_top_sales-weekly-${top_n}`,
-            cacheHours: 6,
-            showErrorToast: false,
+            headers: {
+              "Content-Type": "application/json",
+            },
           }
         ),
-        offlineAxiosRequest<SalesPrediction[]>(
+        fetch(
+          `${API_BASE_URL}/api/predict_top_sales?timeframe=monthly&top_n=${top_n}`,
           {
             method: "GET",
-            url: `/api/predict_top_sales?timeframe=monthly&top_n=${top_n}`,
-          },
-          {
-            cacheKey: `predict_top_sales-monthly-${top_n}`,
-            cacheHours: 6,
-            showErrorToast: false,
+            headers: {
+              "Content-Type": "application/json",
+            },
           }
         ),
       ]);
-      setDaily(dailyRes.data);
-      setWeekly(weeklyRes.data);
-      setMonthly(monthlyRes.data);
+
+      if (!dailyRes.ok || !weeklyRes.ok || !monthlyRes.ok) {
+        throw new Error("One or more requests failed");
+      }
+
+      const [dailyData, weeklyData, monthlyData] = await Promise.all([
+        dailyRes.json(),
+        weeklyRes.json(),
+        monthlyRes.json(),
+      ]);
+
+      setDaily(dailyData);
+      setWeekly(weeklyData);
+      setMonthly(monthlyData);
     } catch (err: any) {
       setError(err.message || "Unknown error");
     } finally {

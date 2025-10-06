@@ -7,7 +7,6 @@ import {
   updateBackupSchedule,
 } from "./hook/useBackupSchedule";
 import { useBackupRestoreAPI } from "./hook/use-BackupRestoreAPI";
-import axios from "axios";
 
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
@@ -136,15 +135,21 @@ export default function BackupRestorePage() {
     setRestoreError("");
     try {
       // Download backup file from backend
-      const response = await axios.get(
+      const response = await fetch(
         `/api/download-backup?filename=${encodeURIComponent(
           pendingRestoreFilename
         )}`,
         {
-          responseType: "blob",
+          method: "GET",
         }
       );
-      const file = new File([response.data], pendingRestoreFilename);
+
+      if (!response.ok) {
+        throw new Error("Failed to download backup file");
+      }
+
+      const blob = await response.blob();
+      const file = new File([blob], pendingRestoreFilename);
       await restore(password, file);
       setRestoreMsg("Restore successful!");
       setTimeout(() => setRestoreMsg(""), 2000);

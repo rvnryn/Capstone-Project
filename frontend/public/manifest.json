@@ -9,12 +9,39 @@
   "theme_color": "#fbbf24",
   "description": "A modern, responsive dashboard and management PWA for Cardiac Delights with offline capabilities, inventory management, menu planning, and comprehensive reporting.",
   "lang": "en",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "dir": "ltr",
   "categories": ["food", "productivity", "business", "utilities", "finance"],
   "prefer_related_applications": false,
+  "id": "/",
   "edge_side_panel": {
     "preferred_width": 400
+  },
+  "file_handlers": [
+    {
+      "action": "/import",
+      "accept": {
+        "text/csv": [".csv"],
+        "application/json": [".json"],
+        "application/vnd.ms-excel": [".xlsx"]
+      }
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": ["text/csv", "application/json", "image/*"]
+        }
+      ]
+    }
   },
   "shortcuts": [
     {

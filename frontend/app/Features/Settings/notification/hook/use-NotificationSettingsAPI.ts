@@ -1,8 +1,8 @@
 "use client";
 import { useState, useCallback } from "react";
-import { offlineAxiosRequest } from "@/app/utils/offlineAxios";
+import { getToken } from "@/app/lib/auth";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface NotificationSettings {
   user_id: number;
@@ -17,8 +17,6 @@ export function useNotificationSettingsAPI(userId: number) {
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const getToken = () =>
-    typeof window !== "undefined" ? localStorage.getItem("token") : null;
   // Fetch settings from backend
   const fetchSettings = useCallback(async () => {
     if (!userId) {
@@ -30,30 +28,27 @@ export function useNotificationSettingsAPI(userId: number) {
     setLoading(true);
     setError(null);
     try {
-      const cacheKey = `notification-settings-${userId}`;
-      const response = await offlineAxiosRequest(
+      const response = await fetch(
+        `${API_BASE_URL}/api/notification-settings?user_id=${userId}`,
         {
           method: "GET",
-          url: `${API_BASE_URL}/api/notification-settings?user_id=${userId}`,
-        },
-        {
-          cacheKey,
-          cacheHours: 2, // Settings can be cached longer
-          showErrorToast: true,
-          fallbackData: null,
+          headers: {
+            "Content-Type": "application/json",
+            ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+          },
         }
       );
 
-      setSettings(response.data);
-      setLoading(false);
-      return response.data;
-    } catch (err: any) {
-      if (err.isOfflineError) {
-        setSettings(null);
-        setError("Settings not available offline");
-      } else {
-        setError(err.message || "Unknown error");
+      if (!response.ok) {
+        throw new Error("Failed to fetch notification settings");
       }
+
+      const data = await response.json();
+      setSettings(data);
+      setLoading(false);
+      return data;
+    } catch (err: any) {
+      setError(err.message || "Unknown error");
       setLoading(false);
       return null;
     }
@@ -69,21 +64,22 @@ export function useNotificationSettingsAPI(userId: number) {
       setLoading(true);
       setError(null);
       try {
-        const token = getToken();
-        const res = await offlineAxiosRequest(
+        const response = await fetch(
+          `${API_BASE_URL}/api/notification-settings`,
           {
             method: "POST",
-            url: `${API_BASE_URL}/api/notification-settings`,
-            data: newSettings,
             headers: {
               "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
             },
-          },
-          {
-            showErrorToast: true,
+            body: JSON.stringify(newSettings),
           }
         );
+
+        if (!response.ok) {
+          throw new Error("Failed to update notification settings");
+        }
+
         // Refetch to get the latest settings from backend
         const latest = await fetchSettings();
         setSettings(latest);

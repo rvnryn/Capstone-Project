@@ -36,7 +36,8 @@ export default function SpoilageInventoryPage() {
   // Modal state for delete confirmation
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const { user, role } = useAuth();
   const router = useRouter();

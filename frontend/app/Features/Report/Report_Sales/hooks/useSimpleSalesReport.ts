@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
-import axiosInstance from "@/app/lib/axios";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface WeeklyForecast {
   week_start: string;
@@ -62,18 +63,44 @@ export function useSimpleSalesReport() {
         if (options?.category)
           forecastParams.append("category", options.category);
 
-        // Fetch all required data in parallel using axios
+        // Fetch all required data in parallel using fetch
         const [summaryRes, itemsRes, dateRes, forecastRes] = await Promise.all([
-          axiosInstance.get(`/api/sales-summary?${params.toString()}`),
-          axiosInstance.get(`/api/sales-by-item?${params.toString()}`),
-          axiosInstance.get(
-            `/api/sales-by-date?${params.toString()}&grouping=daily`
-          ),
-          axiosInstance.get(
-            `/api/weekly-sales-forecast${
+          fetch(`${API_BASE_URL}/api/sales-summary?${params.toString()}`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          }).then(async (res) => {
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return { data: await res.json() };
+          }),
+          fetch(`${API_BASE_URL}/api/sales-by-item?${params.toString()}`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          }).then(async (res) => {
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return { data: await res.json() };
+          }),
+          fetch(
+            `${API_BASE_URL}/api/sales-by-date?${params.toString()}&grouping=daily`,
+            {
+              method: "GET",
+              headers: { "Content-Type": "application/json" },
+            }
+          ).then(async (res) => {
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return { data: await res.json() };
+          }),
+          fetch(
+            `${API_BASE_URL}/api/weekly-sales-forecast${
               forecastParams.toString() ? `?${forecastParams.toString()}` : ""
-            }`
-          ),
+            }`,
+            {
+              method: "GET",
+              headers: { "Content-Type": "application/json" },
+            }
+          ).then(async (res) => {
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return { data: await res.json() };
+          }),
         ]);
 
         const summary = summaryRes.data;

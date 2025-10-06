@@ -9,6 +9,16 @@ import React, {
   ReactNode,
 } from "react";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Helper function to ensure URL has the base URL
+const ensureFullUrl = (url: string): string => {
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+  return `${API_BASE_URL}${url.startsWith("/") ? url : "/" + url}`;
+};
+
 // Types for offline data management
 interface OfflineData {
   timestamp: number;
@@ -244,7 +254,8 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({
 
     for (const action of actionsToSync) {
       try {
-        const response = await fetch(action.endpoint, {
+        const fullUrl = ensureFullUrl(action.endpoint);
+        const response = await fetch(fullUrl, {
           method: action.method,
           headers: {
             "Content-Type": "application/json",
@@ -384,7 +395,8 @@ export const useOfflineAPI = () => {
 
       // Normal fetch when online
       try {
-        const response = await fetch(url, options);
+        const fullUrl = ensureFullUrl(url);
+        const response = await fetch(fullUrl, options);
 
         // Cache successful GET responses
         if (
@@ -483,23 +495,39 @@ export const useOfflineAxios = () => {
         };
       }
 
-      // Normal axios request when online
+      // Normal fetch request when online
       try {
-        const axiosInstance = (await import("@/app/lib/axios")).default;
-        const response = await axiosInstance(config);
+        const fullUrl = ensureFullUrl(config.url);
+        const response = await fetch(fullUrl, {
+          method: config.method || "GET",
+          headers: {
+            "Content-Type": "application/json",
+            ...config.headers,
+          },
+          body: config.data ? JSON.stringify(config.data) : undefined,
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const responseData = await response.json();
 
         // Cache successful GET responses
         if (
-          response.status >= 200 &&
-          response.status < 300 &&
           (!config.method || config.method.toUpperCase() === "GET") &&
           cacheKey
         ) {
           console.log(`[OfflineAxios] Caching response for ${config.url}`);
-          setCachedData(cacheKey, response.data, cacheHours || 24);
+          setCachedData(cacheKey, responseData, cacheHours || 24);
         }
 
-        return response;
+        return {
+          data: responseData,
+          status: response.status,
+          statusText: response.statusText,
+          config,
+        };
       } catch (error: any) {
         // If network fails, try cache as fallback for GET requests
         if (
