@@ -37,14 +37,12 @@ const nextConfig: NextConfig = {
 
 const pwaConfig = withPWA({
   dest: "public",
-  disable: false, // Enable PWA in development for testing install banner
+  disable: false, // Enable PWA in both development and production
   register: true,
   skipWaiting: true,
   sw: "service-worker.js",
   fallbacks: {
-    document: "/offline.html", // Fallback page for offline navigation
-    image: "/logo.png",
-    font: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+    document: "/offline.html",
   },
   reloadOnOnline: true,
   cacheStartUrl: true,
