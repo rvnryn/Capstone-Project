@@ -47,7 +47,7 @@ async def create_menu_with_ingredients(
     category: str = Form(...),
     price: float = Form(...),
     description: Optional[str] = Form(None),
-    stock_status: Optional[str] = Form(None),  # This will be overwritten below
+    stock_status: Optional[str] = Form(None),
     file: UploadFile = File(...),
     ingredients: str = Form(...),
     user=Depends(require_role("Owner", "General Manager", "Store Manager")),
@@ -154,6 +154,9 @@ async def create_menu_with_ingredients(
 
         stock_status = "Available" if all_in_stock else "Out of Stock"
 
+        # Add timestamps
+        now = datetime.utcnow().isoformat()
+
         menu_data = {
             "dish_name": dish_name,
             "image_url": public_url,
@@ -161,6 +164,8 @@ async def create_menu_with_ingredients(
             "price": float(price),
             "description": description,
             "stock_status": stock_status,
+            "created_at": now,
+            "updated_at": now,
         }
         dbres = supabase.table("menu").insert(menu_data).execute()
         error = (
@@ -496,6 +501,10 @@ async def update_menu(
         "stock_status",
     }
     update_data = {k: v for k, v in menu_update.items() if k in allowed_fields}
+
+    # Add updated timestamp
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow().isoformat()
     # Handle ingredients update if provided
     ingredients = menu_update.get("ingredients")
     if ingredients is not None:
@@ -721,6 +730,7 @@ async def update_menu_with_image_and_ingredients(
             "price": float(price),
             "description": description,
             "stock_status": stock_status,
+            "updated_at": datetime.utcnow().isoformat(),
         }
         if public_url:
             update_data["image_url"] = public_url

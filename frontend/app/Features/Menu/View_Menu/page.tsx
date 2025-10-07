@@ -26,6 +26,8 @@ import {
   FaSortDown,
   FaTimesCircle,
   FaExclamationTriangle,
+  FaCalendarAlt,
+  FaHistory,
 } from "react-icons/fa";
 
 export default function ViewMenu() {
@@ -70,13 +72,40 @@ export default function ViewMenu() {
 
   function formatDateTime(date?: string) {
     if (!date) return "-";
-    return new Date(date).toLocaleString(undefined, {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    try {
+      return new Date(date).toLocaleString("en-PH", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch (error) {
+      return "Invalid Date";
+    }
+  }
+
+  function formatRelativeTime(date?: string) {
+    if (!date) return "-";
+    try {
+      const now = new Date();
+      const past = new Date(date);
+      const diffMs = now.getTime() - past.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMins < 1) return "Just now";
+      if (diffMins < 60) return `${diffMins} min ago`;
+      if (diffHours < 24)
+        return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+      if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+
+      return formatDateOnly(date);
+    } catch (error) {
+      return "Invalid Date";
+    }
   }
 
   if (isLoading) {
@@ -318,11 +347,42 @@ export default function ViewMenu() {
                   }
                   valueClassName=""
                 />
-                <ItemRow
-                  icon={<FiCalendar className="text-orange-400" />}
-                  label="Added Date"
-                  value={formatDateOnly(menu.created_at)}
-                />
+
+                {/* Enhanced timestamp display */}
+                <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-4">
+                  <ItemRow
+                    icon={<FaCalendarAlt className="text-green-400" />}
+                    label="Created"
+                    value={
+                      <div className="space-y-1">
+                        <div className="text-sm font-semibold text-white">
+                          {formatDateTime(menu.created_at)}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {formatRelativeTime(menu.created_at)}
+                        </div>
+                      </div>
+                    }
+                    valueClassName=""
+                  />
+                  <ItemRow
+                    icon={<FaHistory className="text-blue-400" />}
+                    label="Last Updated"
+                    value={
+                      <div className="space-y-1">
+                        <div className="text-sm font-semibold text-white">
+                          {formatDateTime(menu.updated_at)}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {menu.updated_at !== menu.created_at
+                            ? formatRelativeTime(menu.updated_at)
+                            : "Not modified since creation"}
+                        </div>
+                      </div>
+                    }
+                    valueClassName=""
+                  />
+                </div>
               </div>
 
               {/* Ingredients - Full Width */}

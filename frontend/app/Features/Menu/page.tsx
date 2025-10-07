@@ -16,6 +16,8 @@ import {
   FaUtensils,
   FaPlus,
   FaSort,
+  FaClock,
+  FaCalendarAlt,
 } from "react-icons/fa";
 import { useMenuAPI, MenuItem as MenuItemType } from "./hook/use-menu";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
@@ -30,10 +32,31 @@ const columns = [
   { key: "description", label: "Description" },
   { key: "price", label: "Price" },
   { key: "stock_status", label: "Stock Status" },
+  { key: "created_at", label: "Created" },
+  { key: "updated_at", label: "Last Updated" },
   { key: "actions", label: "Actions" },
 ];
 
 type SortableMenuKey = keyof MenuItemType;
+
+// Utility function to format timestamps
+const formatTimestamp = (timestamp: string | undefined): string => {
+  if (!timestamp) return "N/A";
+
+  try {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch (error) {
+    return "Invalid Date";
+  }
+};
 
 const Menu: React.FC = () => {
   const { role } = useAuth();
@@ -149,6 +172,14 @@ const Menu: React.FC = () => {
           valA = a.description?.toLowerCase() || "";
           valB = b.description?.toLowerCase() || "";
           break;
+        case "created_at":
+        case "updated_at":
+          valA = (a[sortConfig.key as keyof MenuItemType] as string) || "";
+          valB = (b[sortConfig.key as keyof MenuItemType] as string) || "";
+          // For dates, we can compare them directly as ISO strings
+          return sortConfig.direction === "asc"
+            ? valA.localeCompare(valB)
+            : valB.localeCompare(valA);
         default:
           valA = "";
           valB = "";
@@ -350,38 +381,50 @@ const Menu: React.FC = () => {
                     <caption className="sr-only">Menu items</caption>
                     <thead className="bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
                       <tr>
-                        {columns.map((col) => (
-                          <th
-                            key={col.key}
-                            onClick={() =>
-                              col.key !== "actions" && requestSort(col.key)
-                            }
-                            scope="col"
-                            className={`px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 text-left font-semibold cursor-pointer select-none whitespace-nowrap text-xs xs:text-sm sm:text-base lg:text-lg transition-colors ${
-                              col.key !== "actions"
-                                ? "text-gray-300 hover:text-yellow-400"
-                                : "text-gray-300"
-                            } ${
-                              sortConfig.key === col.key
-                                ? "text-yellow-400"
-                                : ""
-                            }`}
-                          >
-                            <div className="flex items-center gap-1 xs:gap-2">
-                              {col.label}
-                              {sortConfig.key === col.key &&
-                                col.key !== "actions" && (
-                                  <span className="text-yellow-400">
-                                    {sortConfig.direction === "asc" ? "↑" : "↓"}
-                                  </span>
-                                )}
-                              {col.key !== "actions" &&
-                                sortConfig.key !== col.key && (
-                                  <FaSort className="text-gray-500 text-xs opacity-50" />
-                                )}
-                            </div>
-                          </th>
-                        ))}
+                        {columns.map((col) => {
+                          // Add responsive visibility classes for timestamp columns
+                          let responsiveClass = "";
+                          if (col.key === "created_at") {
+                            responsiveClass = "hidden sm:table-cell";
+                          } else if (col.key === "updated_at") {
+                            responsiveClass = "hidden md:table-cell";
+                          }
+
+                          return (
+                            <th
+                              key={col.key}
+                              onClick={() =>
+                                col.key !== "actions" && requestSort(col.key)
+                              }
+                              scope="col"
+                              className={`px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 text-left font-semibold cursor-pointer select-none whitespace-nowrap text-xs xs:text-sm sm:text-base lg:text-lg transition-colors ${responsiveClass} ${
+                                col.key !== "actions"
+                                  ? "text-gray-300 hover:text-yellow-400"
+                                  : "text-gray-300"
+                              } ${
+                                sortConfig.key === col.key
+                                  ? "text-yellow-400"
+                                  : ""
+                              }`}
+                            >
+                              <div className="flex items-center gap-1 xs:gap-2">
+                                {col.label}
+                                {sortConfig.key === col.key &&
+                                  col.key !== "actions" && (
+                                    <span className="text-yellow-400">
+                                      {sortConfig.direction === "asc"
+                                        ? "↑"
+                                        : "↓"}
+                                    </span>
+                                  )}
+                                {col.key !== "actions" &&
+                                  sortConfig.key !== col.key && (
+                                    <FaSort className="text-gray-500 text-xs opacity-50" />
+                                  )}
+                              </div>
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody>
@@ -519,6 +562,26 @@ const Menu: React.FC = () => {
                                   </span>
                                 );
                               })()}
+                            </td>
+                            {/* Created At Column */}
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap hidden sm:table-cell">
+                              <div className="text-center">
+                                <div className="flex items-center justify-center gap-1 mb-1">
+                                  <span className="text-gray-300 text-xs xs:text-sm">
+                                    {formatTimestamp(dish.created_at)}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            {/* Updated At Column */}
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap hidden md:table-cell">
+                              <div className="text-center">
+                                <div className="flex items-center justify-center gap-1 mb-1">
+                                  <span className="text-gray-300 text-xs xs:text-sm">
+                                    {formatTimestamp(dish.updated_at)}
+                                  </span>
+                                </div>
+                              </div>
                             </td>
                             <td className="px-3 xl:px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-1 xl:gap-2">

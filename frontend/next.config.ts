@@ -7,7 +7,10 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "http://localhost:8000/api/:path*", // backend URL
+        destination:
+          process.env.NODE_ENV === "production"
+            ? `${process.env.NEXT_PUBLIC_API_URL}/api/:path*`
+            : "http://localhost:8000/api/:path*", // backend URL
       },
     ];
   },
