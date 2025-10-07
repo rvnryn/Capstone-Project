@@ -27,6 +27,7 @@ const columns = [
   { key: "dish_name", label: "Dish Name" },
   { key: "image_url", label: "Image" },
   { key: "category", label: "Category" },
+  { key: "description", label: "Description" },
   { key: "price", label: "Price" },
   { key: "stock_status", label: "Stock Status" },
   { key: "actions", label: "Actions" },
@@ -81,7 +82,12 @@ const Menu: React.FC = () => {
       (item) =>
         (!selectedCategory || item.category === selectedCategory) &&
         (!searchQuery ||
-          [item.dish_name, item.category, item.menu_id?.toString()]
+          [
+            item.dish_name,
+            item.category,
+            item.description,
+            item.menu_id?.toString(),
+          ]
             .filter(Boolean)
             .join(" ")
             .toLowerCase()
@@ -138,6 +144,10 @@ const Menu: React.FC = () => {
         case "stock_status":
           valA = a.stock_status?.toLowerCase() || "";
           valB = b.stock_status?.toLowerCase() || "";
+          break;
+        case "description":
+          valA = a.description?.toLowerCase() || "";
+          valB = b.description?.toLowerCase() || "";
           break;
         default:
           valA = "";
@@ -283,7 +293,7 @@ const Menu: React.FC = () => {
                     </div>
                     <input
                       type="search"
-                      placeholder="Search by name, category, or ID..."
+                      placeholder="Search by name, category, description, or ID..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full bg-gray-800/50 backdrop-blur-sm text-white placeholder-gray-400 rounded-xl px-12 py-3 shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-400/50 border border-gray-600/50 hover:border-gray-500 transition-all text-sm sm:text-base"
@@ -450,6 +460,25 @@ const Menu: React.FC = () => {
                               <span className="px-1 xs:px-2 py-0.5 xs:py-1 bg-gray-700/50 rounded-md xs:rounded-lg text-xs font-medium">
                                 {dish.category}
                               </span>
+                            </td>
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 max-w-[200px]">
+                              {dish.description ? (
+                                <div className="group relative">
+                                  <span className="text-gray-300 text-xs xs:text-sm truncate block cursor-help">
+                                    {dish.description}
+                                  </span>
+                                  {dish.description.length > 50 && (
+                                    <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10 bg-gray-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg border border-gray-600 max-w-xs whitespace-normal">
+                                      {dish.description}
+                                      <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-500 text-xs xs:text-sm italic">
+                                  No description
+                                </span>
+                              )}
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
                               <span className="inline-block bg-gradient-to-r from-yellow-400/20 to-yellow-500/20 text-yellow-400 font-bold rounded-lg px-3 py-1 shadow-sm text-xs xs:text-sm border border-yellow-400/30">

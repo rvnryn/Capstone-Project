@@ -8,6 +8,7 @@ export interface MenuItem {
   image_url: string;
   category: string;
   price: number;
+  description?: string;
   stock_status?: string;
   ingredients?: MenuIngredient[];
 }

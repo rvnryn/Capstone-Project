@@ -25,6 +25,7 @@ export default function AddMenuPage() {
     dish_name: "",
     category: "",
     price: "",
+    description: "",
   });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -137,7 +138,7 @@ export default function AddMenuPage() {
       !formData.price ||
       !selectedImage
     ) {
-      setError("Please fill all the fields.");
+      setError("Please fill all the required fields.");
       setIsSubmitting(false);
       return;
     }
@@ -157,13 +158,14 @@ export default function AddMenuPage() {
       form.append("dish_name", formData.dish_name);
       form.append("category", formData.category);
       form.append("price", formData.price);
+      form.append("description", formData.description);
       form.append("file", selectedImage);
       form.append("ingredients", JSON.stringify(validIngredients));
 
       await addMenuWithImageAndIngredients(form);
 
       setShowSuccessMessage(true);
-      setFormData({ dish_name: "", category: "", price: "" });
+      setFormData({ dish_name: "", category: "", price: "", description: "" });
       setSelectedImage(null);
       setPreviewUrl(null);
       setIsDirty(false);
@@ -179,6 +181,7 @@ export default function AddMenuPage() {
       formData.dish_name ||
       formData.category ||
       formData.price ||
+      formData.description ||
       selectedImage
     ) {
       setShowCancelModal(true);
@@ -199,6 +202,7 @@ export default function AddMenuPage() {
       dish_name: "",
       category: "",
       price: "",
+      description: "",
       ingredients: [{ name: "", quantity: "" }],
       image: null,
     });
@@ -210,6 +214,7 @@ export default function AddMenuPage() {
       initialSettings.dish_name !== formData.dish_name ||
       initialSettings.category !== formData.category ||
       initialSettings.price !== formData.price ||
+      initialSettings.description !== formData.description ||
       JSON.stringify(initialSettings.ingredients) !==
         JSON.stringify(ingredients) ||
       initialSettings.image !== selectedImage
@@ -351,6 +356,29 @@ export default function AddMenuPage() {
                         className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
                         inputMode="numeric"
                         pattern="[0-9]*"
+                      />
+                    </div>
+                    <div className="group">
+                      <label
+                        htmlFor="description"
+                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                      >
+                        Description
+                      </label>
+                      <textarea
+                        id="description"
+                        name="description"
+                        value={formData.description}
+                        onChange={(e) => {
+                          setIsDirty(true);
+                          setFormData((prev) => ({
+                            ...prev,
+                            description: e.target.value,
+                          }));
+                        }}
+                        placeholder="Enter dish description..."
+                        className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70 resize-vertical min-h-[80px]"
+                        rows={3}
                       />
                     </div>
                   </div>

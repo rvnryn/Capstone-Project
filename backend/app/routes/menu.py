@@ -46,6 +46,7 @@ async def create_menu_with_ingredients(
     dish_name: str = Form(...),
     category: str = Form(...),
     price: float = Form(...),
+    description: Optional[str] = Form(None),
     stock_status: Optional[str] = Form(None),  # This will be overwritten below
     file: UploadFile = File(...),
     ingredients: str = Form(...),
@@ -158,6 +159,7 @@ async def create_menu_with_ingredients(
             "image_url": public_url,
             "category": category,
             "price": float(price),
+            "description": description,
             "stock_status": stock_status,
         }
         dbres = supabase.table("menu").insert(menu_data).execute()
@@ -485,7 +487,14 @@ async def update_menu(
     import json
 
     # Only allow updating certain fields
-    allowed_fields = {"dish_name", "image_url", "category", "price", "stock_status"}
+    allowed_fields = {
+        "dish_name",
+        "image_url",
+        "category",
+        "price",
+        "description",
+        "stock_status",
+    }
     update_data = {k: v for k, v in menu_update.items() if k in allowed_fields}
     # Handle ingredients update if provided
     ingredients = menu_update.get("ingredients")
@@ -680,6 +689,7 @@ async def update_menu_with_image_and_ingredients(
     dish_name: str = Form(...),
     category: str = Form(...),
     price: float = Form(...),
+    description: Optional[str] = Form(None),
     stock_status: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     ingredients: str = Form(...),
@@ -709,6 +719,7 @@ async def update_menu_with_image_and_ingredients(
             "dish_name": dish_name,
             "category": category,
             "price": float(price),
+            "description": description,
             "stock_status": stock_status,
         }
         if public_url:

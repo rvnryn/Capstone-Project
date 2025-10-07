@@ -295,6 +295,16 @@ export default function ViewMenu() {
                   label="Price"
                   value={`₱${menu.price}`}
                 />
+                {menu.description && (
+                  <div className="sm:col-span-2">
+                    <ItemRow
+                      icon={<FiTag className="text-indigo-400" />}
+                      label="Description"
+                      value={menu.description}
+                      valueClassName="text-sm text-gray-300 leading-relaxed"
+                    />
+                  </div>
+                )}
                 <ItemRow
                   icon={<FiTrendingUp className="text-cyan-400" />}
                   label="Stock Status"
