@@ -4,24 +4,32 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/app/context/AuthContext";
 import { OfflineProvider } from "@/app/context/OfflineContext";
 import { NetworkStatusIndicator } from "@/app/components/PWA/PWAComponents";
+import OfflineStatusBar from "@/app/components/OfflineStatusBar";
+import EnhancedOfflineStatusBar from "@/app/components/EnhancedOfflineStatus";
 import PWAInstallBanner from "@/app/components/PWA/PWAInstallBanner";
+import PWAInstallPrompt from "@/app/components/PWAInstallPrompt";
+import { DataPreloader } from "@/app/components/DataPreloader";
 import { ToastContainer } from "react-toastify";
 import { useEffect } from "react";
+// @ts-ignore - missing type declarations for CSS side-effect import
 import "react-toastify/dist/ReactToastify.css";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient();
 
   useEffect(() => {
-    const preventInstallPrompt = (e: Event) => {
+    // Store install prompt globally for custom banner
+    let deferredPrompt: any = null;
+
+    const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      console.log(
-        "Browser install prompt prevented - using custom banner instead"
-      );
-      return false;
+      deferredPrompt = e;
+      console.log("Install prompt intercepted by AppShell");
+      // Store in window for PWA components to access
+      (window as any).deferredInstallPrompt = deferredPrompt;
     };
 
-    window.addEventListener("beforeinstallprompt", preventInstallPrompt, true);
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
     const hideBrowserInstallBanners = () => {
       const browserBannerSelectors = [
@@ -64,10 +72,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         navigator.serviceWorker
           .register("/service-worker.js")
           .then((registration) => {
-            console.log("SW registered: ", registration);
+            console.log("✅ SW registered: ", registration);
+
+            // Automatically pre-cache all critical pages
+            if (registration.active) {
+              registration.active.postMessage({ type: 'CACHE_CRITICAL_ASSETS' });
+              console.log("🚀 Auto-caching all pages for offline use...");
+            }
+
+            // Listen for cache completion messages
+            navigator.serviceWorker.addEventListener("message", (event) => {
+              if (event.data.type === "CACHE_COMPLETE") {
+                console.log(`✅ Pre-cached ${event.data.cached} pages automatically!`);
+              }
+            });
           })
           .catch((registrationError) => {
-            console.log("SW registration failed: ", registrationError);
+            console.log("❌ SW registration failed: ", registrationError);
           });
       });
     }
@@ -76,8 +97,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       clearInterval(intervalId);
       window.removeEventListener(
         "beforeinstallprompt",
-        preventInstallPrompt,
-        true
+        handleBeforeInstallPrompt
       );
     };
   }, []);
@@ -86,8 +106,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <OfflineProvider>
+          <DataPreloader />
+          <OfflineStatusBar />
+          <EnhancedOfflineStatusBar />
           {children}
           <PWAInstallBanner />
+          <PWAInstallPrompt />
           <NetworkStatusIndicator />
           <ToastContainer />
         </OfflineProvider>

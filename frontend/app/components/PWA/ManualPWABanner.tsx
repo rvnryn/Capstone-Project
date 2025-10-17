@@ -14,6 +14,7 @@ const ManualPWABanner: React.FC<ManualPWABannerProps> = ({
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
+  const modalRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Show manual banner if requested and not dismissed
@@ -28,6 +29,10 @@ const ManualPWABanner: React.FC<ManualPWABannerProps> = ({
 
   const handleManualInstall = async () => {
     setIsInstalling(true);
+    // Analytics stub - fire an event for install attempt
+    try {
+      (window as any).__pwa_analytics?.track?.('pwa_install_attempt');
+    } catch {}
 
     try {
       // Check if there's a deferred prompt available
@@ -80,16 +85,23 @@ You can also bookmark this page and access it from your browser's bookmarks.`);
   return (
     <div
       className={`fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-md bg-gradient-to-r from-blue-900/95 to-indigo-900/95 backdrop-blur-xl border border-blue-400/30 rounded-2xl shadow-2xl z-[9999] ${className}`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="manual-pwa-banner-title"
+      tabIndex={-1}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") dismissBanner();
+      }}
     >
-      <div className="p-4">
+      <div className="p-4" tabIndex={0} ref={modalRef}>
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-500 rounded-xl flex items-center justify-center shadow-lg">
-              <FaDownload className="text-white text-lg" />
+              <FaDownload className="text-white text-lg" aria-hidden="true" />
             </div>
             <div>
-              <h3 className="text-white font-bold text-lg">
+              <h3 className="text-white font-bold text-lg" id="manual-pwa-banner-title">
                 Install App (Manual)
               </h3>
               <p className="text-gray-300 text-sm">
@@ -101,9 +113,12 @@ You can also bookmark this page and access it from your browser's bookmarks.`);
             onClick={dismissBanner}
             className="text-gray-400 hover:text-white transition-colors p-1"
             aria-label="Dismiss install prompt"
+            title="Close"
+            tabIndex={0}
           >
-            <FaTimes size={16} />
+            <FaTimes size={16} aria-hidden="true" />
           </button>
+          <span className="ml-2 text-xs text-gray-300 hidden sm:inline" aria-hidden="true">Esc to close</span>
         </div>
 
         {/* Info */}
@@ -111,6 +126,7 @@ You can also bookmark this page and access it from your browser's bookmarks.`);
           <FaInfoCircle
             className="text-blue-400 mt-0.5 flex-shrink-0"
             size={14}
+            aria-hidden="true"
           />
           <p className="text-gray-300 text-sm">
             This is a manual install banner for testing PWA functionality when
@@ -122,16 +138,19 @@ You can also bookmark this page and access it from your browser's bookmarks.`);
         <button
           onClick={handleManualInstall}
           disabled={isInstalling}
+          aria-live="polite"
           className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold py-2.5 px-4 rounded-xl hover:from-blue-400 hover:to-indigo-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          aria-label="Install Cardiac Delights app manually"
+          tabIndex={0}
         >
           {isInstalling ? (
             <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
               Installing...
             </>
           ) : (
             <>
-              <FaDownload size={14} />
+              <FaDownload size={14} aria-hidden="true" />
               Install App Manually
             </>
           )}

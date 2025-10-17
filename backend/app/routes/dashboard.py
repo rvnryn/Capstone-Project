@@ -4,7 +4,7 @@ from slowapi import Limiter
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, text, cast, Date
+from sqlalchemy import select, and_, or_, func, text, cast, Date, String
 from app.supabase import get_db
 from app.models.inventory import Inventory
 from app.models.inventory_surplus import InventorySurplus
@@ -121,38 +121,88 @@ async def get_expired_ingredients(
 ):
     try:
         today = datetime.now(timezone.utc).date()
-        stmt_inventory = (
-            select(Inventory)
-            .where(cast(Inventory.expiration_date, Date) <= today)
-            .order_by(cast(Inventory.expiration_date, Date))
+        stmt_spoilage = (
+            select(InventorySpoilage)
+            .where(
+                (cast(InventorySpoilage.reason, String) == "Expired"),
+            )
+            .order_by(cast(InventorySpoilage.expiration_date, Date))
             .offset(skip)
             .limit(limit)
         )
 
-        stmt_surplus = (
-            select(InventorySurplus)
-            .where(cast(InventorySurplus.expiration_date, Date) < today)
-            .order_by(cast(InventorySurplus.expiration_date, Date))
-            .offset(skip)
-            .limit(limit)
-        )
-        result_inventory = await db.execute(stmt_inventory)
-        result_surplus = await db.execute(stmt_surplus)
-        expired_inventory = result_inventory.scalars().all()
-        expired_surplus = result_surplus.scalars().all()
+        result_spoilage = await db.execute(stmt_spoilage)
+        expired_spoilage = result_spoilage.scalars().all()
 
-        all_expired = [item.as_dict() for item in expired_inventory + expired_surplus]
-        # Robustly convert expiration_date to date if it's a string
-        for entry in all_expired:
-            exp = entry.get("expiration_date")
-            if isinstance(exp, str):
-                try:
-                    entry["expiration_date"] = datetime.strptime(exp, "%Y-%m-%d").date()
-                except Exception:
-                    entry["expiration_date"] = None
-            elif exp is None:
-                entry["expiration_date"] = None
-        # Sort, using a safe default for missing/invalid dates
+        all_expired = []
+        seen = set()
+
+        for spoil in expired_spoilage:
+            d = spoil.as_dict()
+            # Use spoilage fields exactly as in the database, but provide fallback values
+            item_name = d.get("item_name") or "N/A"
+            category = d.get("category") or "N/A"
+            batch_date = d.get("batch_date")
+            stock = d.get("quantity_spoiled")
+            if stock is None:
+                stock = d.get("quantity")
+            if stock is None:
+                stock = d.get("stock")
+            if stock is None:
+                stock = 0
+
+            def format_date(val):
+                if not val:
+                    return "N/A"
+                if isinstance(val, str):
+                    # Try several common formats
+                    for fmt in [
+                        "%Y-%m-%d",
+                        "%Y-%m-%dT%H:%M:%S.%fZ",
+                        "%Y-%m-%d %H:%M:%S%z",
+                        "%Y-%m-%d %H:%M:%S",
+                        "%Y-%m-%dT%H:%M:%S%z",
+                        "%Y-%m-%dT%H:%M:%S",
+                    ]:
+                        try:
+                            return datetime.strptime(val, fmt).strftime("%b %d, %Y")
+                        except Exception:
+                            continue
+                    return "N/A"
+                elif isinstance(val, date):
+                    return val.strftime("%b %d, %Y")
+                return "N/A"
+
+            batch_date_formatted = format_date(batch_date)
+            expiration_date = d.get("expiration_date")
+            expiration_date_formatted = format_date(expiration_date)
+            spoilage_date = d.get("spoilage_date")
+            spoilage_date_formatted = format_date(spoilage_date)
+
+            mapped = {
+                "id": d.get("spoilage_id"),
+                "item_id": d.get("item_id"),
+                "item_name": item_name,
+                "category": category,
+                "stock": stock,
+                "batch_date": batch_date_formatted,
+                "quantity_spoiled": d.get("quantity_spoiled") or d.get("quantity") or 0,
+                "expiration_date": expiration_date_formatted,
+                "spoilage_date": spoilage_date_formatted,
+                "reason": d.get("reason") or "Expired",
+                "created_at": d.get("created_at"),
+                "updated_at": d.get("updated_at"),
+            }
+            dedup_key = (
+                mapped["item_id"],
+                mapped["batch_date"],
+                mapped["spoilage_date"],
+            )
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+            all_expired.append(mapped)
+
         all_expired.sort(
             key=lambda x: (
                 x["expiration_date"]
@@ -214,7 +264,6 @@ async def get_spoilage_inventory(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
-
     try:
         stmt = (
             select(InventorySpoilage)
@@ -224,7 +273,65 @@ async def get_spoilage_inventory(
         )
         result = await db.execute(stmt)
         items = result.scalars().all()
-        return [item.as_dict() for item in items]
+
+        def format_date(val):
+            if not val:
+                return "N/A"
+            if isinstance(val, str):
+                for fmt in [
+                    "%Y-%m-%d",
+                    "%Y-%m-%dT%H:%M:%S.%fZ",
+                    "%Y-%m-%d %H:%M:%S%z",
+                    "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%dT%H:%M:%S%z",
+                    "%Y-%m-%dT%H:%M:%S",
+                ]:
+                    try:
+                        return datetime.strptime(val, fmt).strftime("%b %d, %Y")
+                    except Exception:
+                        continue
+                return "N/A"
+            elif isinstance(val, date):
+                return val.strftime("%b %d, %Y")
+            return "N/A"
+
+        formatted_items = []
+        for spoil in items:
+            d = spoil.as_dict()
+            item_name = d.get("item_name") or "N/A"
+            category = d.get("category") or "N/A"
+            batch_date = d.get("batch_date")
+            stock = d.get("quantity_spoiled")
+            if stock is None:
+                stock = d.get("quantity")
+            if stock is None:
+                stock = d.get("stock")
+            if stock is None:
+                stock = 0
+
+            batch_date_formatted = format_date(batch_date)
+            expiration_date = d.get("expiration_date")
+            expiration_date_formatted = format_date(expiration_date)
+            spoilage_date = d.get("spoilage_date")
+            spoilage_date_formatted = format_date(spoilage_date)
+
+            mapped = {
+                "id": d.get("spoilage_id"),
+                "item_id": d.get("item_id"),
+                "item_name": item_name,
+                "category": category,
+                "stock": stock,
+                "batch_date": batch_date_formatted,
+                "quantity_spoiled": d.get("quantity_spoiled") or d.get("quantity") or 0,
+                "expiration_date": expiration_date_formatted,
+                "spoilage_date": spoilage_date_formatted,
+                "reason": d.get("reason") or "Spoilage",
+                "created_at": d.get("created_at"),
+                "updated_at": d.get("updated_at"),
+            }
+            formatted_items.append(mapped)
+
+        return formatted_items
     except Exception as e:
         print("Error fetching spoilage inventory:", e)
         raise HTTPException(status_code=500, detail=str(e))

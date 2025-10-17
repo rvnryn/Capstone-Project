@@ -27,6 +27,18 @@ export default function ViewUsers() {
   const searchParams = useSearchParams();
   const { isMenuOpen, isMobile } = useNavigation();
   const { getUser } = useUsersAPI();
+    const [isOnline, setIsOnline] = useState(true);
+    useEffect(() => {
+      setIsOnline(navigator.onLine);
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+      return () => {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      };
+    }, []);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -222,6 +234,7 @@ export default function ViewUsers() {
                 {/* Action Buttons */}
                 <div className="flex flex-col xs:flex-row justify-end gap-2 xs:gap-3 sm:gap-4 pt-4 xs:pt-5 sm:pt-6 md:pt-8 border-t border-gray-700/50">
                   <button
+                    disabled={!isOnline} title={!isOnline ? 'You can use this when online.' : ''} 
                     onClick={() => {
                       setShowEditModal(true);
                     }}

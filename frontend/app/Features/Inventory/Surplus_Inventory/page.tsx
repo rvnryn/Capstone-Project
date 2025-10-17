@@ -24,6 +24,7 @@ import {
   FiTrendingDown,
   FiMinus,
   FiEye,
+  FiRefreshCw,
 } from "react-icons/fi";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
@@ -55,6 +56,18 @@ export default function SurplusInventoryPage() {
   const { user, role } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
+    const [isOnline, setIsOnline] = useState(true);
+    useEffect(() => {
+      setIsOnline(navigator.onLine);
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+      return () => {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      };
+    }, []);
   const { isMobile } = useNavigation();
   const { deleteSurplusItem, transferSurplusToToday } = useInventoryAPI();
 
@@ -170,6 +183,12 @@ export default function SurplusInventoryPage() {
     ? inventoryQuery.data
     : [];
   const isLoading = inventoryQuery.isLoading;
+  const isFetching = inventoryQuery.isFetching;
+
+  const handleRefresh = () => {
+    console.log("Refreshing inventory table...");
+    queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
+  };
 
   const transferToTodayMutation = useMutation({
     mutationFn: async ({ id, quantity }: { id: number; quantity: number }) => {
@@ -481,9 +500,21 @@ export default function SurplusInventoryPage() {
                       </p>
                     </div>
                   </div>
+                  <nav
+                    aria-label="Inventory actions"
+                    className="flex items-center gap-1 xs:gap-2 sm:gap-3 w-full sm:w-auto"
+                  >
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                    >
+                      <FiRefreshCw className="text-xs xs:text-sm" />
+                      <span className="sm:inline">Refresh</span>
+                    </button>
+                  </nav>
                 </div>
               </header>
-
               <div className="relative mb-6 sm:mb-8">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gradient-to-r from-transparent via-yellow-400/50 to-transparent"></div>
@@ -499,6 +530,7 @@ export default function SurplusInventoryPage() {
                 <form
                   className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4"
                   role="search"
+                  onSubmit={e => e.preventDefault()}
                 >
                   <div className="relative flex-1 min-w-0">
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400 pointer-events-none">
@@ -649,7 +681,7 @@ export default function SurplusInventoryPage() {
                 aria-label="Inventory table"
               >
                 <div className="overflow-x-auto">
-                  {isInventoryLoading ? (
+                  {isInventoryLoading || isFetching ? (
                     <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
                       <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
                       <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">

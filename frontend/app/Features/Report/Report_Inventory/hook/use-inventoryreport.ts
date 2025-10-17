@@ -91,10 +91,15 @@ export function useInventoryReportAPI() {
           params.toString() ? `?${params.toString()}` : ""
         }`;
 
+        // Get token from localStorage if available
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
         const response = await fetch(url, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         });
 

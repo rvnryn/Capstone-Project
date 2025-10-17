@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Service Worker Debug</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .status {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 5px;
+      }
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      .info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+      }
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      pre {
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 5px;
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Service Worker Debug Tool</h1>
+
+    <div id="status-container"></div>
+
+    <h2>Actions</h2>
+    <button onclick="checkServiceWorker()">Check Service Worker Status</button>
+    <button onclick="registerServiceWorker()">Register Service Worker</button>
+    <button onclick="unregisterServiceWorker()">
+      Unregister Service Worker
+    </button>
+    <button onclick="testOfflineMode()">Test Offline Mode</button>
+    <button onclick="clearCaches()">Clear All Caches</button>
+
+    <h2>Test Offline Navigation</h2>
+    <button onclick="testNavigation()">Test Navigation to Dashboard</button>
+    <button onclick="testAPICall()">Test API Call</button>
+
+    <div id="log-container">
+      <h2>Debug Log</h2>
+      <pre id="debug-log"></pre>
+    </div>
+
+    <script>
+      const statusContainer = document.getElementById("status-container");
+      const debugLog = document.getElementById("debug-log");
+
+      function log(message) {
+        const timestamp = new Date().toLocaleTimeString();
+        const logMessage = `[${timestamp}] ${message}\n`;
+        debugLog.textContent += logMessage;
+        console.log(message);
+      }
+
+      function showStatus(message, type = "info") {
+        const statusDiv = document.createElement("div");
+        statusDiv.className = `status ${type}`;
+        statusDiv.textContent = message;
+        statusContainer.appendChild(statusDiv);
+      }
+
+      async function checkServiceWorker() {
+        log("Checking service worker status...");
+        statusContainer.innerHTML = "";
+
+        // Check if service workers are supported
+        if (!("serviceWorker" in navigator)) {
+          showStatus(
+            "❌ Service Workers not supported in this browser",
+            "error"
+          );
+          log("Service Workers not supported");
+          return;
+        }
+
+        showStatus("✅ Service Workers supported", "success");
+        log("Service Workers supported");
+
+        try {
+          // Check if there's an active service worker
+          const registration = await navigator.serviceWorker.getRegistration();
+
+          if (registration) {
+            showStatus("✅ Service Worker registered", "success");
+            log(`Service Worker registered: ${registration.scope}`);
+
+            if (registration.active) {
+              showStatus("✅ Service Worker active", "success");
+              log("Service Worker is active");
+            } else if (registration.installing) {
+              showStatus("⏳ Service Worker installing", "info");
+              log("Service Worker is installing");
+            } else if (registration.waiting) {
+              showStatus("⏳ Service Worker waiting", "info");
+              log("Service Worker is waiting");
+            }
+
+            // Check if service worker controller is available
+            if (navigator.serviceWorker.controller) {
+              showStatus("✅ Service Worker controller available", "success");
+              log("Service Worker controller is available");
+            } else {
+              showStatus("❌ Service Worker controller not available", "error");
+              log("Service Worker controller not available");
+            }
+          } else {
+            showStatus("❌ No Service Worker registered", "error");
+            log("No Service Worker registered");
+          }
+        } catch (error) {
+          showStatus(
+            `❌ Error checking Service Worker: ${error.message}`,
+            "error"
+          );
+          log(`Error checking Service Worker: ${error.message}`);
+        }
+      }
+
+      async function registerServiceWorker() {
+        log("Attempting to register service worker...");
+        statusContainer.innerHTML = "";
+
+        if (!("serviceWorker" in navigator)) {
+          showStatus("❌ Service Workers not supported", "error");
+          return;
+        }
+
+        try {
+          const registration = await navigator.serviceWorker.register(
+            "/service-worker.js"
+          );
+          showStatus("✅ Service Worker registered successfully", "success");
+          log(`Service Worker registered: ${registration.scope}`);
+
+          // Wait for it to become active
+          await new Promise((resolve) => {
+            if (registration.active) {
+              resolve();
+            } else {
+              registration.addEventListener("statechange", () => {
+                if (registration.active) {
+                  resolve();
+                }
+              });
+            }
+          });
+
+          showStatus("✅ Service Worker is now active", "success");
+          log("Service Worker is now active");
+        } catch (error) {
+          showStatus(
+            `❌ Service Worker registration failed: ${error.message}`,
+            "error"
+          );
+          log(`Service Worker registration failed: ${error.message}`);
+        }
+      }
+
+      async function unregisterServiceWorker() {
+        log("Unregistering service worker...");
+        statusContainer.innerHTML = "";
+
+        try {
+          const registration = await navigator.serviceWorker.getRegistration();
+          if (registration) {
+            await registration.unregister();
+            showStatus("✅ Service Worker unregistered", "success");
+            log("Service Worker unregistered");
+          } else {
+            showStatus("ℹ️ No Service Worker to unregister", "info");
+            log("No Service Worker to unregister");
+          }
+        } catch (error) {
+          showStatus(`❌ Error unregistering: ${error.message}`, "error");
+          log(`Error unregistering: ${error.message}`);
+        }
+      }
+
+      async function testOfflineMode() {
+        log("Testing offline mode...");
+        statusContainer.innerHTML = "";
+
+        if (!navigator.serviceWorker.controller) {
+          showStatus("❌ No active service worker to test with", "error");
+          log("No active service worker controller");
+          return;
+        }
+
+        try {
+          // Create a message channel for communication
+          const messageChannel = new MessageChannel();
+
+          // Listen for response
+          messageChannel.port1.onmessage = (event) => {
+            if (event.data.success) {
+              showStatus(
+                `✅ Offline test mode: ${
+                  event.data.offlineTestMode ? "ENABLED" : "DISABLED"
+                }`,
+                "success"
+              );
+              log(
+                `Offline test mode: ${
+                  event.data.offlineTestMode ? "ENABLED" : "DISABLED"
+                }`
+              );
+            } else {
+              showStatus(
+                "❌ Failed to communicate with service worker",
+                "error"
+              );
+              log("Failed to communicate with service worker");
+            }
+          };
+
+          // Send message to service worker
+          navigator.serviceWorker.controller.postMessage(
+            { type: "SET_OFFLINE_TEST_MODE", enabled: true },
+            [messageChannel.port2]
+          );
+        } catch (error) {
+          showStatus(
+            `❌ Error testing offline mode: ${error.message}`,
+            "error"
+          );
+          log(`Error testing offline mode: ${error.message}`);
+        }
+      }
+
+      async function clearCaches() {
+        log("Clearing all caches...");
+        statusContainer.innerHTML = "";
+
+        try {
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map((name) => caches.delete(name)));
+          showStatus(`✅ Cleared ${cacheNames.length} caches`, "success");
+          log(`Cleared ${cacheNames.length} caches: ${cacheNames.join(", ")}`);
+        } catch (error) {
+          showStatus(`❌ Error clearing caches: ${error.message}`, "error");
+          log(`Error clearing caches: ${error.message}`);
+        }
+      }
+
+      async function testNavigation() {
+        log("Testing navigation...");
+
+        try {
+          // Test if we can navigate to dashboard
+          window.location.href = "/dashboard";
+        } catch (error) {
+          log(`Navigation error: ${error.message}`);
+        }
+      }
+
+      async function testAPICall() {
+        log("Testing API call...");
+
+        try {
+          const response = await fetch("/api/dashboard/stats");
+          if (response.ok) {
+            const data = await response.json();
+            log(`API call successful: ${JSON.stringify(data)}`);
+          } else {
+            log(`API call failed: ${response.status} ${response.statusText}`);
+          }
+        } catch (error) {
+          log(`API call error: ${error.message}`);
+        }
+      }
+
+      // Auto-check on page load
+      window.addEventListener("load", () => {
+        log("Page loaded, checking service worker status...");
+        checkServiceWorker();
+      });
+
+      // Listen for service worker updates
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        log("Service worker controller changed");
+        checkServiceWorker();
+      });
+    </script>
+  </body>
+</html>

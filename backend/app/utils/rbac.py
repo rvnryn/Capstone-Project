@@ -27,7 +27,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         async with SessionLocal() as session:
             from sqlalchemy import text
             result = await session.execute(
-                text("SELECT user_id, user_role, name FROM users WHERE auth_id = :auth_id"),
+                text("SELECT user_id, user_role, name, email FROM users WHERE auth_id = :auth_id"),
                 {"auth_id": auth_id}
             )
             user = result.fetchone()
@@ -35,7 +35,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             if not user:
                 print("[RBAC] User not found in DB for auth_id:", auth_id)
                 raise HTTPException(status_code=404, detail="User not found")
-            return {"user_id": user.user_id, "user_role": user.user_role, "name": user.name}
+            return {"user_id": user.user_id, "user_role": user.user_role, "name": user.name, "email": user.email}
     except Exception as e:
         import traceback
         print("[RBAC] Exception during authentication:", str(e))

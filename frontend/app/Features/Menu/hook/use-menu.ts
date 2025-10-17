@@ -8,27 +8,29 @@ export interface MenuItem {
   image_url: string;
   category: string;
   price: number;
+  description?: string;
   stock_status?: string;
+  created_at?: string;
+  updated_at?: string;
   ingredients?: MenuIngredient[];
 }
 
 export interface MenuIngredient {
   menu_id?: number;
   ingredient_id?: number;
-  name?: string; // for new/edited ingredients
-  ingredient_name?: string; // for compatibility
+  name?: string;
+  ingredient_name?: string;
   quantity?: string;
-  is_unavailable?: boolean; // indicates if this ingredient is out of stock
-  stock_quantity?: number; // current stock quantity
+  is_unavailable?: boolean;
+  stock_quantity?: number;
 }
 
 export function useMenuAPI() {
-  const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const { addOfflineAction, getOfflineActions } = useOfflineQueue();
   const isOnline = typeof window !== "undefined" ? navigator.onLine : true;
 
-  // Helper function for online/offline write operations
+  // Helper for online/offline write operations
   const handleOfflineWriteOperation = useCallback(
     async (
       onlineOperation: () => Promise<any>,
@@ -64,245 +66,209 @@ export function useMenuAPI() {
     [isOnline, addOfflineAction]
   );
 
-  // Menu endpoints
-  const fetchMenu = async (): Promise<MenuItem[]> => {
+  const getToken = useCallback(() => {
+    return typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  }, []);
+
+  // Fetch all menu items
+  const fetchMenu = useCallback(async (): Promise<MenuItem[]> => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/menu`, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       return await response.json();
     } catch (error: any) {
       console.error("Failed to fetch menu:", error);
-      return []; // Return empty array instead of throwing
+      return [];
     }
-  };
+  }, [API_BASE_URL]);
 
-  // PATCH menu (JSON, no image)
-  const updateMenu = async (
-    menu_id: number,
-    data: Partial<MenuItem> & { ingredients?: MenuIngredient[] }
-  ) => {
-    return handleOfflineWriteOperation(
-      async () => {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-          body: JSON.stringify(data),
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return await response.json();
-      },
-      {
-        action: "update-menu-item",
-        endpoint: `${API_BASE_URL}/api/menu/${menu_id}`,
-        method: "PATCH",
-        payload: data,
-      }
-    );
-  };
-
-  // PATCH menu with image and ingredients (FormData)
-  const updateMenuWithImageAndIngredients = async (
-    menu_id: number,
-    form: FormData
-  ) => {
-    return handleOfflineWriteOperation(
-      async () => {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const headers: Record<string, string> = {};
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
-        }
-
-        const response = await fetch(
-          `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
-          {
-            method: "PATCH",
-            headers,
-            body: form, // FormData automatically sets Content-Type
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return await response.json();
-      },
-      {
-        action: "update-menu-with-image",
-        endpoint: `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
-        method: "PATCH",
-        payload: form, // Note: FormData will be serialized for queue
-      }
-    );
-  };
-
-  const deleteMenu = async (menu_id: number) => {
-    return handleOfflineWriteOperation(
-      async () => {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return await response.json();
-      },
-      {
-        action: "delete-menu-item",
-        endpoint: `${API_BASE_URL}/api/menu/${menu_id}`,
-        method: "DELETE",
-        payload: { menu_id },
-      }
-    );
-  };
-
-  // Add menu with image and ingredients (FormData)
-  const addMenuWithImageAndIngredients = async (form: FormData) => {
-    return handleOfflineWriteOperation(
-      async () => {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const headers: Record<string, string> = {};
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
-        }
-
-        const response = await fetch(
-          `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
-          {
-            method: "POST",
-            headers,
-            body: form, // FormData automatically sets Content-Type
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return await response.json();
-      },
-      {
-        action: "add-menu-with-image",
-        endpoint: `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
-        method: "POST",
-        payload: form,
-      }
-    );
-  };
-
-  const fetchMenuById = async (menu_id: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
+  // Add menu with image and ingredients
+  const addMenuWithImageAndIngredients = useCallback(
+    async (form: FormData) => {
+      return handleOfflineWriteOperation(
+        async () => {
+          const token = getToken();
+          const headers: Record<string, string> = {};
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+          const response = await fetch(
+            `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
+            { method: "POST", headers, body: form }
+          );
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          return await response.json();
         },
-      });
+        {
+          action: "add-menu-with-image",
+          endpoint: `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
+          method: "POST",
+          payload: form,
+        }
+      );
+    },
+    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+  );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+  // Update menu (JSON, no image)
+  const updateMenu = useCallback(
+    async (menu_id: number, data: Partial<MenuItem> & { ingredients?: MenuIngredient[] }) => {
+      return handleOfflineWriteOperation(
+        async () => {
+          const token = getToken();
+          const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+            body: JSON.stringify(data),
+          });
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          return await response.json();
+        },
+        {
+          action: "update-menu-item",
+          endpoint: `${API_BASE_URL}/api/menu/${menu_id}`,
+          method: "PATCH",
+          payload: data,
+        }
+      );
+    },
+    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+  );
 
-      return await response.json();
-    } catch (error: any) {
-      console.error(`Failed to fetch menu item ${menu_id}:`, error);
-      throw error;
-    }
-  };
+  // Update menu with image and ingredients
+  const updateMenuWithImageAndIngredients = useCallback(
+    async (menu_id: number, form: FormData) => {
+      return handleOfflineWriteOperation(
+        async () => {
+          const token = getToken();
+          const headers: Record<string, string> = {};
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+          const response = await fetch(
+            `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
+            { method: "PATCH", headers, body: form }
+          );
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          return await response.json();
+        },
+        {
+          action: "update-menu-with-image",
+          endpoint: `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
+          method: "PATCH",
+          payload: form,
+        }
+      );
+    },
+    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+  );
 
-  const deleteIngredientFromMenu = async (
-    menu_id: number,
-    ingredient_id: string
-  ) => {
-    return handleOfflineWriteOperation(
-      async () => {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const response = await fetch(
-          `${API_BASE_URL}/api/menu/${menu_id}/ingredient/${ingredient_id}`,
-          {
+  // Delete menu
+  const deleteMenu = useCallback(
+    async (menu_id: number) => {
+      return handleOfflineWriteOperation(
+        async () => {
+          const token = getToken();
+          const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
             method: "DELETE",
             headers: {
               "Content-Type": "application/json",
               ...(token && { Authorization: `Bearer ${token}` }),
             },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          });
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          return await response.json();
+        },
+        {
+          action: "delete-menu-item",
+          endpoint: `${API_BASE_URL}/api/menu/${menu_id}`,
+          method: "DELETE",
+          payload: { menu_id },
         }
+      );
+    },
+    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+  );
 
+  // Fetch menu by ID
+  const fetchMenuById = useCallback(
+    async (menu_id: number) => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
-      },
-      {
-        action: "delete-menu-ingredient",
-        endpoint: `${API_BASE_URL}/api/menu/${menu_id}/ingredient/${ingredient_id}`,
-        method: "DELETE",
-        payload: { menu_id, ingredient_id },
+      } catch (error: any) {
+        console.error(`Failed to fetch menu item ${menu_id}:`, error);
+        throw error;
       }
-    );
-  };
+    },
+    [API_BASE_URL]
+  );
 
-  const recalculateStockStatus = async () => {
-    return handleOfflineWriteOperation(
-      async () => {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const response = await fetch(
-          `${API_BASE_URL}/api/menu/recalculate-stock-status`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+  // Delete ingredient from menu
+  const deleteIngredientFromMenu = useCallback(
+    async (menu_id: number, ingredient_id: string) => {
+      return handleOfflineWriteOperation(
+        async () => {
+          const token = getToken();
+          const response = await fetch(
+            `${API_BASE_URL}/api/menu/${menu_id}/ingredient/${ingredient_id}`,
+            {
+              method: "DELETE",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
+              },
+            }
+          );
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          return await response.json();
+        },
+        {
+          action: "delete-menu-ingredient",
+          endpoint: `${API_BASE_URL}/api/menu/${menu_id}/ingredient/${ingredient_id}`,
+          method: "DELETE",
+          payload: { menu_id, ingredient_id },
         }
+      );
+    },
+    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+  );
 
-        return await response.json();
-      },
-      {
-        action: "recalculate-menu-stock",
-        endpoint: `${API_BASE_URL}/api/menu/recalculate-stock-status`,
-        method: "POST",
-        payload: {},
-      }
-    );
-  };
+  // Recalculate stock status
+  const recalculateStockStatus = useCallback(
+    async () => {
+      return handleOfflineWriteOperation(
+        async () => {
+          const token = getToken();
+          const response = await fetch(
+            `${API_BASE_URL}/api/menu/recalc`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
+              },
+            }
+          );
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          return await response.json();
+        },
+        {
+          action: "recalculate-menu-stock",
+          endpoint: `${API_BASE_URL}/api/menu/recalc`,
+          method: "POST",
+          payload: {},
+        }
+      );
+    },
+    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+  );
 
   return {
     fetchMenu,

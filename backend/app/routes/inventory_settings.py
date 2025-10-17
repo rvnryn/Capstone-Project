@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from app.routes.userActivity import UserActivityLog
 from app.utils.rbac import require_role
-from app.supabase import supabase, get_db
+from app.supabase import postgrest_client, get_db
 
 router = APIRouter()
 
@@ -37,7 +37,7 @@ class InventorySettingOut(InventorySettingBase):
 def get_inventory_settings(request: Request):
     try:
         response = (
-            supabase.table("inventory_settings")
+            postgrest_client.table("inventory_settings")
             .select("*")
             .order("id", desc=False)
             .execute()
@@ -46,6 +46,7 @@ def get_inventory_settings(request: Request):
             return []
         return [InventorySettingOut(**item) for item in response.data]
     except Exception as e:
+        print("[ERROR /inventory-settings]", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -65,7 +66,7 @@ async def create_inventory_setting(
         payload = setting.dict()
         payload["created_at"] = now
         payload["updated_at"] = now
-        response = supabase.table("inventory_settings").insert(payload).execute()
+        response = postgrest_client.table("inventory_settings").insert(payload).execute()
         if not response.data:
             raise HTTPException(
                 status_code=400, detail="Inventory setting creation failed"
@@ -106,7 +107,7 @@ async def update_inventory_setting(
         update_data = setting.dict(exclude_unset=True)
         update_data["updated_at"] = datetime.utcnow().isoformat()
         response = (
-            supabase.table("inventory_settings")
+            postgrest_client.table("inventory_settings")
             .update(update_data)
             .eq("id", setting_id)
             .execute()
@@ -146,7 +147,7 @@ async def delete_inventory_setting(
 ):
     try:
         response = (
-            supabase.table("inventory_settings").delete().eq("id", setting_id).execute()
+            postgrest_client.table("inventory_settings").delete().eq("id", setting_id).execute()
         )
         if not response.data:
             raise HTTPException(status_code=404, detail="Setting not found")

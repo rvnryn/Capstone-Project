@@ -13,3 +13,5 @@ frontend/.env
 .env.*
 # Ignore VSCode settings
 .vscode/
+__pycache__/
+*.pyc

@@ -1,0 +1,5 @@
+<svg width="128" height="128" xmlns="http://www.w3.org/2000/svg">
+    <rect width="128" height="128" fill="#f59e0b"/>
+    <circle cx="64" cy="64" r="42.666666666666664" fill="white"/>
+    <text x="64" y="70" font-family="Arial" font-size="16" text-anchor="middle" fill="#f59e0b" font-weight="bold">CD</text>
+  </svg>

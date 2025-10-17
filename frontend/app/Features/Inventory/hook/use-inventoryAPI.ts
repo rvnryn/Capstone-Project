@@ -778,6 +778,50 @@ export function useInventoryAPI() {
     [handleOfflineWriteOperation]
   );
 
+  // Transfer from any inventory to spoilage (expired)
+  // Updated to support source_type and quantity as per backend API
+  const transferAnyToSpoilage = useCallback(
+    async (
+      id: string | number,
+      quantity: number,
+      source_type: "main" | "today" | "surplus",
+      reason?: string
+    ) => {
+      return handleOfflineWriteOperation(
+        async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory/transfer-to-spoilage/${id}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
+              },
+              body: JSON.stringify({ quantity, source_type, reason }),
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
+        {
+          action: "transfer-any-to-spoilage",
+          endpoint: `${API_BASE_URL}/api/inventory/transfer-to-spoilage/${id}`,
+          method: "POST",
+          payload: { id, quantity, source_type, reason },
+        }
+      );
+    },
+    [handleOfflineWriteOperation]
+  );
+
   return {
     getItem,
     addItem,
@@ -804,6 +848,8 @@ export function useInventoryAPI() {
     listSpoilage,
     transferToSpoilage,
     deleteSpoilage,
+
+    transferAnyToSpoilage,
 
     getOfflineActions,
   };

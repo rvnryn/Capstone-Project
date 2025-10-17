@@ -311,7 +311,6 @@ async def get_sales_by_item(
     request: Request,
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-    limit: int = Query(10, description="Number of top items to return"),
     session: AsyncSession = Depends(get_db),
 ):
     """Get sales breakdown by individual items"""
@@ -338,14 +337,11 @@ async def get_sales_by_item(
             WHERE DATE(created_at) BETWEEN :start_date AND :end_date
             GROUP BY item_name, category
             ORDER BY total_revenue DESC
-            LIMIT :limit
-        """
+            """
         )
+        params = {"start_date": start_datetime, "end_date": end_datetime}
 
-        result = await session.execute(
-            query,
-            {"start_date": start_datetime, "end_date": end_datetime, "limit": limit},
-        )
+        result = await session.execute(query, params)
 
         items = []
         for row in result.fetchall():
@@ -353,10 +349,20 @@ async def get_sales_by_item(
                 {
                     "item_name": getattr(row, "item_name", "") or "",
                     "category": getattr(row, "category", "") or "",
-                    "total_quantity": row.total_quantity if row.total_quantity is not None else 0,
-                    "total_revenue": float(row.total_revenue) if row.total_revenue is not None else 0.0,
-                    "avg_price": float(row.avg_price) if row.avg_price is not None else 0.0,
-                    "orders_count": row.orders_count if row.orders_count is not None else 0,
+                    "total_quantity": (
+                        row.total_quantity if row.total_quantity is not None else 0
+                    ),
+                    "total_revenue": (
+                        float(row.total_revenue)
+                        if row.total_revenue is not None
+                        else 0.0
+                    ),
+                    "avg_price": (
+                        float(row.avg_price) if row.avg_price is not None else 0.0
+                    ),
+                    "orders_count": (
+                        row.orders_count if row.orders_count is not None else 0
+                    ),
                 }
             )
         return {"period": f"{start_date} to {end_date}", "items": items}
@@ -418,9 +424,17 @@ async def get_sales_by_date(
             sales_data.append(
                 {
                     "period": row.period.strftime("%Y-%m-%d") if row.period else "",
-                    "orders_count": row.orders_count if row.orders_count is not None else 0,
-                    "total_items": row.total_items if row.total_items is not None else 0,
-                    "total_revenue": float(row.total_revenue) if row.total_revenue is not None else 0.0,
+                    "orders_count": (
+                        row.orders_count if row.orders_count is not None else 0
+                    ),
+                    "total_items": (
+                        row.total_items if row.total_items is not None else 0
+                    ),
+                    "total_revenue": (
+                        float(row.total_revenue)
+                        if row.total_revenue is not None
+                        else 0.0
+                    ),
                 }
             )
         return {

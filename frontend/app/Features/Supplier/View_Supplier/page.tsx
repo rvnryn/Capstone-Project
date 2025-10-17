@@ -31,6 +31,19 @@ export default function ViewSupplier() {
   const { getSupplier } = useSupplierAPI();
   const [supplier, setSupplier] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const supplierId = searchParams.get("id");
 
@@ -80,6 +93,17 @@ export default function ViewSupplier() {
     });
   };
 
+        useEffect(() => {
+          setIsOnline(navigator.onLine);
+          const handleOnline = () => setIsOnline(true);
+          const handleOffline = () => setIsOnline(false);
+          window.addEventListener("online", handleOnline);
+          window.addEventListener("offline", handleOffline);
+          return () => {
+            window.removeEventListener("online", handleOnline);
+            window.removeEventListener("offline", handleOffline);
+          };
+        }, []);
   if (isLoading) {
     return (
       <section className="text-white font-poppins">

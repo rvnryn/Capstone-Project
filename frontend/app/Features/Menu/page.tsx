@@ -16,10 +16,12 @@ import {
   FaUtensils,
   FaPlus,
   FaSort,
+  FaClock,
+  FaCalendarAlt,
 } from "react-icons/fa";
 import { useMenuAPI, MenuItem as MenuItemType } from "./hook/use-menu";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
-import { FiEye, FiMinus, FiTrendingDown } from "react-icons/fi";
+import { FiEye, FiMinus, FiRefreshCw, FiTrendingDown } from "react-icons/fi";
 import { MdWarning, MdCheckCircle } from "react-icons/md";
 
 const columns = [
@@ -27,12 +29,34 @@ const columns = [
   { key: "dish_name", label: "Dish Name" },
   { key: "image_url", label: "Image" },
   { key: "category", label: "Category" },
+  { key: "description", label: "Description" },
   { key: "price", label: "Price" },
   { key: "stock_status", label: "Stock Status" },
+  { key: "created_at", label: "Created" },
+  { key: "updated_at", label: "Last Updated" },
   { key: "actions", label: "Actions" },
 ];
 
 type SortableMenuKey = keyof MenuItemType;
+
+// Utility function to format timestamps
+const formatTimestamp = (timestamp: string | undefined): string => {
+  if (!timestamp) return "N/A";
+
+  try {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch (error) {
+    return "Invalid Date";
+  }
+};
 
 const Menu: React.FC = () => {
   const { role } = useAuth();
@@ -40,6 +64,18 @@ const Menu: React.FC = () => {
   React.useEffect(() => {
     setMounted(true);
   }, []);
+    const [isOnline, setIsOnline] = useState(true);
+    React.useEffect(() => {
+      setIsOnline(navigator.onLine);
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+      return () => {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      };
+    }, []);
   const router = useRouter();
   const { fetchMenu, deleteMenu } = useMenuAPI();
   const queryClient = useQueryClient();
@@ -54,12 +90,18 @@ const Menu: React.FC = () => {
   const {
     data: menuData = [],
     isLoading,
+    isFetching,
     isError,
   } = useQuery({
     queryKey: ["menu"],
     queryFn: fetchMenu,
     refetchOnWindowFocus: true,
   });
+
+  const handleRefresh = () => {
+    console.log("Refreshing inventory table...");
+    queryClient.invalidateQueries({ queryKey: ["menu"] });
+  };
 
   // Delete mutation
   const deleteMutation = useMutation({
@@ -81,7 +123,12 @@ const Menu: React.FC = () => {
       (item) =>
         (!selectedCategory || item.category === selectedCategory) &&
         (!searchQuery ||
-          [item.dish_name, item.category, item.menu_id?.toString()]
+          [
+            item.dish_name,
+            item.category,
+            item.description,
+            item.menu_id?.toString(),
+          ]
             .filter(Boolean)
             .join(" ")
             .toLowerCase()
@@ -139,6 +186,18 @@ const Menu: React.FC = () => {
           valA = a.stock_status?.toLowerCase() || "";
           valB = b.stock_status?.toLowerCase() || "";
           break;
+        case "description":
+          valA = a.description?.toLowerCase() || "";
+          valB = b.description?.toLowerCase() || "";
+          break;
+        case "created_at":
+        case "updated_at":
+          valA = (a[sortConfig.key as keyof MenuItemType] as string) || "";
+          valB = (b[sortConfig.key as keyof MenuItemType] as string) || "";
+          // For dates, we can compare them directly as ISO strings
+          return sortConfig.direction === "asc"
+            ? valA.localeCompare(valB)
+            : valB.localeCompare(valA);
         default:
           valA = "";
           valB = "";
@@ -194,6 +253,15 @@ const Menu: React.FC = () => {
                     className="flex items-center gap-1 xs:gap-2 sm:gap-3 w-full sm:w-auto"
                     aria-label="Menu actions"
                   >
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                    >
+                      <FiRefreshCw className="text-xs xs:text-sm" />
+                      <span className="sm:inline">Refresh</span>
+                    </button>
+
                     {/* Add Item Button */}
                     {["Owner", "General Manager", "Store Manager"].includes(
                       role || ""
@@ -206,6 +274,7 @@ const Menu: React.FC = () => {
                         <span className="sm:inline">Add Menu</span>
                       </button>
                     )}
+                      <button disabled={!isOnline} title={!isOnline ? 'You can use this when online.' : ''}>Edit</button>
                   </nav>
                 </div>
                 <section
@@ -283,7 +352,7 @@ const Menu: React.FC = () => {
                     </div>
                     <input
                       type="search"
-                      placeholder="Search by name, category, or ID..."
+                      placeholder="Search by name, category, description, or ID..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full bg-gray-800/50 backdrop-blur-sm text-white placeholder-gray-400 rounded-xl px-12 py-3 shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-400/50 border border-gray-600/50 hover:border-gray-500 transition-all text-sm sm:text-base"
@@ -340,48 +409,64 @@ const Menu: React.FC = () => {
                     <caption className="sr-only">Menu items</caption>
                     <thead className="bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
                       <tr>
-                        {columns.map((col) => (
-                          <th
-                            key={col.key}
-                            onClick={() =>
-                              col.key !== "actions" && requestSort(col.key)
-                            }
-                            scope="col"
-                            className={`px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 text-left font-semibold cursor-pointer select-none whitespace-nowrap text-xs xs:text-sm sm:text-base lg:text-lg transition-colors ${
-                              col.key !== "actions"
-                                ? "text-gray-300 hover:text-yellow-400"
-                                : "text-gray-300"
-                            } ${
-                              sortConfig.key === col.key
-                                ? "text-yellow-400"
-                                : ""
-                            }`}
-                          >
-                            <div className="flex items-center gap-1 xs:gap-2">
-                              {col.label}
-                              {sortConfig.key === col.key &&
-                                col.key !== "actions" && (
-                                  <span className="text-yellow-400">
-                                    {sortConfig.direction === "asc" ? "↑" : "↓"}
-                                  </span>
-                                )}
-                              {col.key !== "actions" &&
-                                sortConfig.key !== col.key && (
-                                  <FaSort className="text-gray-500 text-xs opacity-50" />
-                                )}
-                            </div>
-                          </th>
-                        ))}
+                        {columns.map((col) => {
+                          // Add responsive visibility classes for timestamp columns
+                          let responsiveClass = "";
+                          if (col.key === "created_at") {
+                            responsiveClass = "hidden sm:table-cell";
+                          } else if (col.key === "updated_at") {
+                            responsiveClass = "hidden md:table-cell";
+                          }
+
+                          return (
+                            <th
+                              key={col.key}
+                              onClick={() =>
+                                col.key !== "actions" && requestSort(col.key)
+                              }
+                              scope="col"
+                              className={`px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 text-left font-semibold cursor-pointer select-none whitespace-nowrap text-xs xs:text-sm sm:text-base lg:text-lg transition-colors ${responsiveClass} ${
+                                col.key !== "actions"
+                                  ? "text-gray-300 hover:text-yellow-400"
+                                  : "text-gray-300"
+                              } ${
+                                sortConfig.key === col.key
+                                  ? "text-yellow-400"
+                                  : ""
+                              }`}
+                            >
+                              <div className="flex items-center gap-1 xs:gap-2">
+                                {col.label}
+                                {sortConfig.key === col.key &&
+                                  col.key !== "actions" && (
+                                    <span className="text-yellow-400">
+                                      {sortConfig.direction === "asc"
+                                        ? "↑"
+                                        : "↓"}
+                                    </span>
+                                  )}
+                                {col.key !== "actions" &&
+                                  sortConfig.key !== col.key && (
+                                    <FaSort className="text-gray-500 text-xs opacity-50" />
+                                  )}
+                              </div>
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody>
-                      {isLoading ? (
+                      {isLoading || isFetching ? (
                         <tr>
                           <td
                             colSpan={columns.length}
                             className="text-center py-8"
                           >
-                            Loading...
+                            <div className="text-yellow-300 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
+                              {(typeof navigator !== "undefined" && navigator.onLine)
+                                ? "Refreshing menu data..."
+                                : "Loading from offline cache..."}
+                            </div>
                           </td>
                         </tr>
                       ) : isError ? (
@@ -451,6 +536,25 @@ const Menu: React.FC = () => {
                                 {dish.category}
                               </span>
                             </td>
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 max-w-[200px]">
+                              {dish.description ? (
+                                <div className="group relative">
+                                  <span className="text-gray-300 text-xs xs:text-sm truncate block cursor-help">
+                                    {dish.description}
+                                  </span>
+                                  {dish.description.length > 50 && (
+                                    <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10 bg-gray-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg border border-gray-600 max-w-xs whitespace-normal">
+                                      {dish.description}
+                                      <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-500 text-xs xs:text-sm italic">
+                                  No description
+                                </span>
+                              )}
+                            </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
                               <span className="inline-block bg-gradient-to-r from-yellow-400/20 to-yellow-500/20 text-yellow-400 font-bold rounded-lg px-3 py-1 shadow-sm text-xs xs:text-sm border border-yellow-400/30">
                                 ₱
@@ -490,6 +594,26 @@ const Menu: React.FC = () => {
                                   </span>
                                 );
                               })()}
+                            </td>
+                            {/* Created At Column */}
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap hidden sm:table-cell">
+                              <div className="text-center">
+                                <div className="flex items-center justify-center gap-1 mb-1">
+                                  <span className="text-gray-300 text-xs xs:text-sm">
+                                    {formatTimestamp(dish.created_at)}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            {/* Updated At Column */}
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap hidden md:table-cell">
+                              <div className="text-center">
+                                <div className="flex items-center justify-center gap-1 mb-1">
+                                  <span className="text-gray-300 text-xs xs:text-sm">
+                                    {formatTimestamp(dish.updated_at)}
+                                  </span>
+                                </div>
+                              </div>
                             </td>
                             <td className="px-3 xl:px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-1 xl:gap-2">

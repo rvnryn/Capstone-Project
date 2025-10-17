@@ -13,6 +13,9 @@ class InventorySpoilage(Base):
     item_name = Column(String, nullable=False)
     quantity_spoiled = Column(Float, nullable=False)
     spoilage_date = Column(Date, nullable=False)
+    expiration_date = Column(Date, nullable=True)  # NEW
+    category = Column(String, nullable=True)  # NEW
+    batch_date = Column(Date, nullable=True)  # NEW
     reason = Column(String, nullable=True)
     user_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -35,6 +38,9 @@ class InventorySpoilage(Base):
             "item_name": self.item_name,
             "quantity_spoiled": self.quantity_spoiled,
             "spoilage_date": safe_iso(self.spoilage_date),
+            "expiration_date": safe_iso(self.expiration_date),  # NEW
+            "category": self.category,  # NEW
+            "batch_date": safe_iso(self.batch_date),  # NEW
             "reason": self.reason,
             "user_id": self.user_id,
             "created_at": safe_iso(self.created_at),

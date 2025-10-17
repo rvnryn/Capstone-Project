@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
 import { FaSearch, FaSort, FaWarehouse, FaTrash } from "react-icons/fa";
 import { MdInventory, MdCheckCircle, MdWarning } from "react-icons/md";
-import { FiFilter } from "react-icons/fi";
+import { FiFilter, FiRefreshCw } from "react-icons/fi";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useAuth } from "@/app/context/AuthContext";
@@ -51,8 +51,6 @@ export default function SpoilageInventoryPage() {
     direction: "asc",
   });
 
-  // Fetch spoilage data
-
   const spoilageQuery = useQuery<ExtendedSpoilageItem[]>({
     queryKey: ["spoilageInventory"],
     queryFn: async () => {
@@ -78,6 +76,12 @@ export default function SpoilageInventoryPage() {
     ? spoilageQuery.data
     : [];
   const isLoading = spoilageQuery.isLoading;
+  const isFetching = spoilageQuery.isFetching;
+
+  const handleRefresh = () => {
+    console.log("Refreshing inventory table...");
+    queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] });
+  };
 
   const formatDateOnly = (date: string | Date | null | undefined): string => {
     if (!date) return "N/A";
@@ -129,8 +133,11 @@ export default function SpoilageInventoryPage() {
     });
   }, [spoilageData, searchQuery]);
 
+  // Do not group spoilage records; show each record as a separate row
+  const groupedData = useMemo(() => filtered, [filtered]);
+
   const sortedData = useMemo(() => {
-    const data = [...filtered];
+    const data = [...groupedData];
     if (!sortConfig.key) {
       return data.sort((a, b) => Number(a.spoilage_id) - Number(b.spoilage_id));
     }
@@ -162,7 +169,7 @@ export default function SpoilageInventoryPage() {
         ? valA.localeCompare(valB)
         : valB.localeCompare(valA);
     });
-  }, [filtered, sortConfig]);
+  }, [groupedData, sortConfig]);
 
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => {
@@ -228,21 +235,36 @@ export default function SpoilageInventoryPage() {
           <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
             <article className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-xl xs:rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10 2xl:p-12 w-full">
               <header className="flex flex-col space-y-3 xs:space-y-4 sm:space-y-5 md:space-y-6 mb-4 xs:mb-5 sm:mb-6 md:mb-8">
-                <div className="flex items-center gap-2 xs:gap-3 sm:gap-4">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-yellow-400/20 rounded-full blur-lg"></div>
-                    <div className="relative bg-gradient-to-br from-yellow-400 to-yellow-500 p-1.5 xs:p-2 sm:p-3 rounded-full">
-                      <GiBiohazard className="text-black text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl 2xl:text-4xl" />
+                <div className="flex items-center justify-between gap-2 xs:gap-3 sm:gap-4">
+                  <div className="flex items-center gap-2 xs:gap-3 sm:gap-4">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-yellow-400/20 rounded-full blur-lg"></div>
+                      <div className="relative bg-gradient-to-br from-yellow-400 to-yellow-500 p-1.5 xs:p-2 sm:p-3 rounded-full">
+                        <GiBiohazard className="text-black text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl 2xl:text-4xl" />
+                      </div>
+                    </div>
+                    <div>
+                      <h1 className="text-base xs:text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl 2xl:text-5xl font-bold text-transparent bg-gradient-to-r from-yellow-400 to-yellow-500 bg-clip-text font-poppins">
+                        Spoilage Inventory
+                      </h1>
+                      <p className="text-gray-400 text-xs xs:text-sm sm:text-base mt-0.5 xs:mt-1">
+                        View and track all spoiled inventory items
+                      </p>
                     </div>
                   </div>
-                  <div>
-                    <h1 className="text-base xs:text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl 2xl:text-5xl font-bold text-transparent bg-gradient-to-r from-yellow-400 to-yellow-500 bg-clip-text font-poppins">
-                      Spoilage Inventory
-                    </h1>
-                    <p className="text-gray-400 text-xs xs:text-sm sm:text-base mt-0.5 xs:mt-1">
-                      View and track all spoiled inventory items
-                    </p>
-                  </div>
+                  <nav
+                    aria-label="Inventory actions"
+                    className="flex items-center gap-1 xs:gap-2 sm:gap-3"
+                  >
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                    >
+                      <FiRefreshCw className="text-xs xs:text-sm" />
+                      <span className="sm:inline">Refresh</span>
+                    </button>
+                  </nav>
                 </div>
               </header>
 
@@ -302,7 +324,7 @@ export default function SpoilageInventoryPage() {
                 aria-label="Spoilage table"
               >
                 <div className="overflow-x-auto">
-                  {isLoading ? (
+                  {isLoading || isFetching ? (
                     <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
                       <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
                       <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">

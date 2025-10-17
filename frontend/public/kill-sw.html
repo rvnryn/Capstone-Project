@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Emergency Service Worker Killer</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 500px;
+        margin: 50px auto;
+        padding: 20px;
+        text-align: center;
+        background: #1a1a1a;
+        color: white;
+      }
+      .btn {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 18px;
+        margin: 10px;
+        font-weight: bold;
+      }
+      .btn:hover {
+        background: #c82333;
+      }
+      .success {
+        color: #28a745;
+        font-weight: bold;
+      }
+      .error {
+        color: #dc3545;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🚨 Emergency Service Worker Killer</h1>
+    <p>This will completely nuke the service worker and reload the page.</p>
+
+    <button class="btn" onclick="killEverything()">
+      🔥 NUKE SERVICE WORKER
+    </button>
+
+    <div id="result"></div>
+
+    <script>
+      async function killEverything() {
+        const result = document.getElementById("result");
+        result.innerHTML = "🔄 Destroying service worker...";
+
+        try {
+          // Unregister ALL service workers
+          const registrations =
+            await navigator.serviceWorker.getRegistrations();
+          console.log("Found registrations:", registrations.length);
+
+          for (let registration of registrations) {
+            await registration.unregister();
+            console.log("✅ Killed:", registration.scope);
+          }
+
+          // Clear ALL caches
+          const cacheNames = await caches.keys();
+          console.log("Found caches:", cacheNames.length);
+
+          for (let cacheName of cacheNames) {
+            await caches.delete(cacheName);
+            console.log("🗑️ Deleted:", cacheName);
+          }
+
+          // Clear all storage
+          localStorage.clear();
+          sessionStorage.clear();
+
+          result.innerHTML =
+            '<div class="success">✅ Service worker DESTROYED! Reloading...</div>';
+
+          // Force reload without cache
+          setTimeout(() => {
+            window.location.href = "/Features/Dashboard?nocache=" + Date.now();
+          }, 1000);
+        } catch (error) {
+          result.innerHTML =
+            '<div class="error">❌ Error: ' + error.message + "</div>";
+          console.error("Error:", error);
+        }
+      }
+
+      // Auto-execute on load
+      window.addEventListener("load", () => {
+        if (confirm("NUKE THE SERVICE WORKER?")) {
+          killEverything();
+        }
+      });
+    </script>
+  </body>
+</html>

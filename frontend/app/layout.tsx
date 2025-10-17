@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+// @ts-ignore - allow importing global CSS with no type declarations
 import "./Styles/globals.css";
 import AppShell from "./AppShell";
 
-import "react-toastify/dist/ReactToastify.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -66,8 +66,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fbbf24" },
-    { media: "(prefers-color-scheme: dark)", color: "#fbbf24" },
+    { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -82,9 +82,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" dir="ltr">
       <head>
-        {/* Enhanced PWA Meta Tags */}
+        {/* Fallback viewport for compatibility */}
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  {/* Enhanced PWA Meta Tags */}
+  {/* Vendor-prefixed theme colors for legacy browsers */}
+  <meta name="theme-color" content="#FFFFFF" />
+  <meta name="msapplication-navbutton-color" content="#FFFFFF" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="#FFFFFF" />
         <meta name="application-name" content="Cardiac Delights" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -100,109 +106,28 @@ export default function RootLayout({
 
         {/* PWA Manifest and Icons */}
         <link rel="manifest" href="/manifest.json" />
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="32x32"
-          href="/icons/icon-32x32.png"
-        />
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="16x16"
-          href="/icons/icon-16x16.png"
-        />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon.ico" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon.ico" />
         <link rel="shortcut icon" href="/favicon.ico" />
 
         {/* Apple Touch Icons */}
-        <link rel="apple-touch-icon" href="/icons/icon-180x180.png" />
-        <link
-          rel="apple-touch-icon"
-          sizes="152x152"
-          href="/icons/icon-152x152.png"
-        />
-        <link
-          rel="apple-touch-icon"
-          sizes="180x180"
-          href="/icons/icon-180x180.png"
-        />
-        <link
-          rel="apple-touch-icon"
-          sizes="167x167"
-          href="/icons/icon-167x167.png"
-        />
+        <link rel="apple-touch-icon" href="/logo2.png" />
+        <link rel="apple-touch-icon" sizes="152x152" href="/logo2.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/logo2.png" />
+        <link rel="apple-touch-icon" sizes="167x167" href="/logo2.png" />
 
-        {/* Splash Screens for iOS */}
-        <link
-          rel="apple-touch-startup-image"
-          href="/icons/apple-splash-2048-2732.jpg"
-          media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
-        />
-        <link
-          rel="apple-touch-startup-image"
-          href="/icons/apple-splash-1668-2388.jpg"
-          media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
-        />
-        <link
-          rel="apple-touch-startup-image"
-          href="/icons/apple-splash-1536-2048.jpg"
-          media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
-        />
-        <link
-          rel="apple-touch-startup-image"
-          href="/icons/apple-splash-1125-2436.jpg"
-          media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)"
-        />
-        <link
-          rel="apple-touch-startup-image"
-          href="/icons/apple-splash-1242-2208.jpg"
-          media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)"
-        />
-        <link
-          rel="apple-touch-startup-image"
-          href="/icons/apple-splash-750-1334.jpg"
-          media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
-        />
-        <link
-          rel="apple-touch-startup-image"
-          href="/icons/apple-splash-640-1136.jpg"
-          media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)"
-        />
+        {/* Apple Splash Screen - Using default logo */}
+        <link rel="apple-touch-startup-image" href="/logo2.png" />
 
-        {/* Microsoft Tiles */}
-        <meta
-          name="msapplication-TileImage"
-          content="/icons/icon-144x144.png"
-        />
-        <meta
-          name="msapplication-square70x70logo"
-          content="/icons/icon-70x70.png"
-        />
-        <meta
-          name="msapplication-square150x150logo"
-          content="/icons/icon-150x150.png"
-        />
-        <meta
-          name="msapplication-wide310x150logo"
-          content="/icons/icon-310x150.png"
-        />
-        <meta
-          name="msapplication-square310x310logo"
-          content="/icons/icon-310x310.png"
-        />
+        {/* Microsoft Tiles - Using default logo */}
+        <meta name="msapplication-TileImage" content="/logo2.png" />
 
         {/* Security and Performance */}
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="robots" content="index,follow" />
         <meta name="googlebot" content="index,follow" />
 
-        {/* Preload Critical Resources */}
-        <link
-          rel="preload"
-          href="/manifest.json"
-          as="fetch"
-          crossOrigin="anonymous"
-        />
+  {/* Preload Critical Resources */}
         <link rel="dns-prefetch" href="//fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -210,10 +135,14 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <AppShell>{children}</AppShell>
+      <body className={`${geistSans.variable} ${geistMono.variable}`} aria-label="Cardiac Delights App Body">
+        <AppShell>
+          <main role="main" tabIndex={-1} id="main-content">
+            {children}
+          </main>
+        </AppShell>
 
-        {/* Service Worker Registration Script */}
+        {/* Enhanced Service Worker with Offline CRUD Support */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -221,10 +150,26 @@ export default function RootLayout({
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/service-worker.js')
                     .then(function(registration) {
-                      console.log('SW registered: ', registration);
+                      console.log('✅ Enhanced SW registered with offline CRUD:', registration.scope);
+
+                      // Automatically pre-cache all critical pages after registration
+                      if (registration.active) {
+                        registration.active.postMessage({ type: 'CACHE_CRITICAL_ASSETS' });
+                        console.log('🚀 Triggering automatic page pre-caching...');
+                      }
+
+                      // Listen for messages from service worker
+                      navigator.serviceWorker.addEventListener('message', function(event) {
+                        if (event.data.type === 'CACHE_COMPLETE') {
+                          console.log('✅ Auto-cached', event.data.cached, 'pages!');
+                        }
+                        if (event.data.type === 'SYNC_COMPLETE') {
+                          console.log('📊 Background sync completed:', event.data);
+                        }
+                      });
                     })
                     .catch(function(registrationError) {
-                      console.log('SW registration failed: ', registrationError);
+                      console.log('❌ SW registration failed:', registrationError);
                     });
                 });
               }

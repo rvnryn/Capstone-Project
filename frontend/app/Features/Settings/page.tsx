@@ -19,6 +19,19 @@ import React from "react";
 import { HiSparkles } from "react-icons/hi";
 
 const Settings = () => {
+  const [isOnline, setIsOnline] = React.useState(true);
+  React.useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+  
   const { role } = useAuth();
   const router = useRouter();
   const Nav_user = () => router.push(routes.user_management_settings);

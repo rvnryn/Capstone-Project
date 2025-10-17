@@ -27,6 +27,18 @@ export default function ViewSpoilageInventoryItem() {
   const { isMenuOpen, isMobile } = useNavigation();
   const [item, setItem] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+    const [isOnline, setIsOnline] = useState(true);
+    useEffect(() => {
+      setIsOnline(navigator.onLine);
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+      return () => {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      };
+    }, []);
 
   const spoilageId = searchParams.get("id");
 
@@ -276,12 +288,13 @@ export default function ViewSpoilageInventoryItem() {
                     onClick={() => router.push(routes.spoilage_inventory)}
                     className="group flex items-center justify-center gap-1.5 xs:gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto shadow-lg hover:shadow-yellow-400/25 order-1 xs:order-2"
                   >
-                    <FiArrowLeft className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform duration-300" />
+                      <FiArrowLeft className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform duration-300" />
                     <span className="hidden sm:inline">
                       Back to Spoilage Inventory
                     </span>
                     <span className="sm:hidden">Back</span>
                   </button>
+                    <button disabled={!isOnline} title={!isOnline ? 'You can use this when online.' : ''} >Edit</button>
                 </div>
               </div>
             </div>

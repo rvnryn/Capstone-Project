@@ -52,6 +52,7 @@ export default function EditMenuPage() {
     dish_name: "",
     category: "",
     price: "",
+    description: "",
     stock_status: "",
   });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -82,6 +83,7 @@ export default function EditMenuPage() {
         dish_name: menu.dish_name,
         category: menu.category,
         price: menu.price.toString(),
+        description: menu.description || "",
         stock_status: menu.stock_status || "",
       });
       setPreviewUrl(menu.image_url || null);
@@ -98,6 +100,7 @@ export default function EditMenuPage() {
         dish_name: menu.dish_name,
         category: menu.category,
         price: menu.price.toString(),
+        description: menu.description || "",
         stock_status: menu.stock_status || "",
         ingredients: menu.ingredients?.map((ing: any) => ({
           id: ing.ingredient_id,
@@ -109,7 +112,11 @@ export default function EditMenuPage() {
   }, [menu]);
 
   const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    (
+      e: React.ChangeEvent<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >
+    ) => {
       const { name, value } = e.target;
       setIsDirty(true);
       setFormData((prev) => ({
@@ -191,6 +198,7 @@ export default function EditMenuPage() {
         form.append("dish_name", formData.dish_name);
         form.append("category", formData.category);
         form.append("price", formData.price);
+        form.append("description", formData.description);
         form.append("stock_status", formData.stock_status);
         form.append("ingredients", JSON.stringify(ingredients));
         form.append("file", selectedImage);
@@ -201,6 +209,7 @@ export default function EditMenuPage() {
           dish_name: formData.dish_name,
           category: formData.category,
           price: Number(formData.price),
+          description: formData.description,
           stock_status: formData.stock_status,
           ingredients: ingredients.map((ing) => ({
             name: ing.name,
@@ -247,6 +256,7 @@ export default function EditMenuPage() {
       initialSettings.dish_name !== formData.dish_name ||
       initialSettings.category !== formData.category ||
       initialSettings.price !== formData.price ||
+      initialSettings.description !== formData.description ||
       JSON.stringify(initialSettings.ingredients) !==
         JSON.stringify(ingredients)
     );
@@ -488,6 +498,39 @@ export default function EditMenuPage() {
                         />
                         {focusedField === "price" && (
                           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <div className="group">
+                      <label
+                        htmlFor="description"
+                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                      >
+                        <FiTag className="text-yellow-400" />
+                        Description
+                      </label>
+                      <div className="relative">
+                        <textarea
+                          id="description"
+                          name="description"
+                          value={formData.description}
+                          onChange={handleChange}
+                          onFocus={() => handleFocus("description")}
+                          onBlur={handleBlur}
+                          placeholder="Enter dish description..."
+                          className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 resize-vertical min-h-[80px] ${
+                            focusedField === "description"
+                              ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                              : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                          }`}
+                          rows={3}
+                        />
+                        {focusedField === "description" && (
+                          <div className="absolute right-3 top-3">
                             <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
                           </div>
                         )}
