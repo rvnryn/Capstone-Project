@@ -24,6 +24,7 @@ import {
   FiTrendingDown,
   FiMinus,
   FiEye,
+  FiRefreshCw,
 } from "react-icons/fi";
 import { GiCardboardBoxClosed } from "react-icons/gi";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
@@ -186,7 +187,11 @@ export default function TodayInventoryPage() {
     return await response.json();
   };
 
-  const { data: inventoryDataRaw, isLoading } = useQuery<InventoryItem[]>({
+  const {
+    data: inventoryDataRaw,
+    isLoading,
+    isFetching,
+  } = useQuery<InventoryItem[]>({
     queryKey: ["todayInventory", settings],
     queryFn: async () => {
       const items = await listTodayItems();
@@ -244,6 +249,11 @@ export default function TodayInventoryPage() {
   const inventoryData: InventoryItem[] = Array.isArray(inventoryDataRaw)
     ? inventoryDataRaw
     : [];
+
+  const handleRefresh = () => {
+    console.log("Refreshing inventory table...");
+    queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
+  };
 
   const transferToSurplusMutation = useMutation({
     mutationFn: async ({ id, quantity }: { id: number; quantity: number }) => {
@@ -529,9 +539,18 @@ export default function TodayInventoryPage() {
                     </div>
                   </div>
                   <nav
+                    aria-label="Inventory actions"
                     className="flex items-center gap-1 xs:gap-2 sm:gap-3 w-full sm:w-auto"
-                    aria-label="Actions"
-                  ></nav>
+                  >
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                    >
+                      <FiRefreshCw className="text-xs xs:text-sm" />
+                      <span className="sm:inline">Refresh</span>
+                    </button>
+                  </nav>
                 </div>
               </header>
               <div className="relative mb-6 sm:mb-8">
@@ -745,7 +764,7 @@ export default function TodayInventoryPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {isLoading ? (
+                      {isLoading || isFetching ? (
                         <tr>
                           <td
                             colSpan={9}

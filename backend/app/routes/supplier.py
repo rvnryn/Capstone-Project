@@ -5,7 +5,7 @@ from slowapi import Limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 from datetime import datetime
 from pydantic import BaseModel
-from app.supabase import supabase, get_db
+from app.supabase import postgrest_client, get_db
 from typing import Optional
 from datetime import datetime
 from app.routes.userActivity import UserActivityLog
@@ -42,7 +42,7 @@ class SupplierUpdate(BaseModel):
 @router.get("/suppliers")
 def list_suppliers(request: Request):
     try:
-        items = supabase.table("suppliers").select("*").execute()
+        items = postgrest_client.table("suppliers").select("*").execute()
         return items.data
     except Exception as e:
         print("Error:", e)
@@ -54,7 +54,7 @@ def list_suppliers(request: Request):
 def get_supplier(request: Request, supplier_id: int):
     try:
         response = (
-            supabase.table("suppliers")
+            postgrest_client.table("suppliers")
             .select("*")
             .eq("supplier_id", supplier_id)
             .single()
@@ -87,7 +87,7 @@ async def add_supplier(
             "created_at": now,
             "updated_at": now,
         }
-        response = supabase.table("suppliers").insert(payload).execute()
+        response = postgrest_client.table("suppliers").insert(payload).execute()
         try:
             user_row = getattr(user, "user_row", user)
             new_activity = UserActivityLog(
@@ -105,7 +105,6 @@ async def add_supplier(
             print("Supplier add activity logged successfully.")
         except Exception as e:
             print("Failed to record supplier add activity:", e)
-
         return {"message": "Supplier added successfully", "data": response.data}
     except Exception as e:
         print("🔥 Error during add_supplier:", e)
@@ -127,7 +126,7 @@ async def update_supplier(
             update_data.pop("address")
         update_data["updated_at"] = datetime.utcnow().isoformat()
         response = (
-            supabase.table("suppliers")
+            postgrest_client.table("suppliers")
             .update(update_data)
             .eq("supplier_id", supplier_id)
             .execute()
@@ -167,7 +166,7 @@ async def delete_supplier(
 ):
     try:
         check = (
-            supabase.table("suppliers")
+            postgrest_client.table("suppliers")
             .select("supplier_id, supplier_name")
             .eq("supplier_id", supplier_id)
             .execute()
@@ -177,7 +176,7 @@ async def delete_supplier(
         supplier_name = check.data[0]["supplier_name"]
         supplier_id_val = check.data[0]["supplier_id"]
         response = (
-            supabase.table("suppliers")
+            postgrest_client.table("suppliers")
             .delete()
             .eq("supplier_id", supplier_id)
             .execute()

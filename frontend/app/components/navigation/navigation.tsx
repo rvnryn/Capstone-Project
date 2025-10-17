@@ -21,6 +21,7 @@ import {
   MdFullscreen,
   MdFullscreenExit,
   MdSignalWifiOff,
+  MdWifiOff,
 } from "react-icons/md";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
@@ -128,6 +129,7 @@ interface NavigationBarProps {
   backupResultMsg?: string | null;
   showHistoryModal?: boolean;
   onCloseAnyModal?: () => void;
+  showAdminPasswordModal?: boolean;
 }
 
 const NavigationBar = ({
@@ -151,6 +153,7 @@ const NavigationBar = ({
   onCloseAnyModal,
   backupResultMsg,
   showHistoryModal,
+  showAdminPasswordModal
 }: NavigationBarProps) => {
   // Enhanced navigation state using the improved hook
   const {
@@ -199,92 +202,102 @@ const NavigationBar = ({
   const { user, role } = useAuth();
   console.log("User:", user, "Role:", role);
 
-  // Enhanced responsive calculations
+  // Enhanced responsive calculations with more granular breakpoints
   const getSidebarWidth = () => {
-    // Ultra small devices (xs: <480px)
+    // Mobile phones (xs: <480px)
     if (screenSize === "xs") return isMenuOpen ? "100vw" : "0";
-    // Small devices (sm: 480-640px)
-    if (screenSize === "sm") return isMenuOpen ? "100vw" : "0";
-    // Medium devices (md: 640-768px)
-    if (screenSize === "md") return isMenuOpen ? "20rem" : "4rem";
-    // Large devices (lg: 768-1024px)
-    if (screenSize === "lg") return isMenuOpen ? "22rem" : "4.5rem";
-    // Extra large devices (xl: 1024-1280px)
-    if (screenSize === "xl") return isMenuOpen ? "24rem" : "5rem";
-    // 2XL and above (>1280px)
-    return isMenuOpen ? "26rem" : "5rem";
+    // Large phones/small tablets (sm: 480-640px)
+    if (screenSize === "sm") return isMenuOpen ? "280px" : "0";
+    // Tablets portrait (md: 640-768px)
+    if (screenSize === "md") return isMenuOpen ? "320px" : "70px";
+    // Tablets landscape/small laptops (lg: 768-1024px)
+    if (screenSize === "lg") return isMenuOpen ? "350px" : "80px";
+    // Laptops (xl: 1024-1280px)
+    if (screenSize === "xl") return isMenuOpen ? "380px" : "90px";
+    // Desktop (2xl: >1280px)
+    return isMenuOpen ? "400px" : "100px";
   };
 
   const getHeaderLeftOffset = () => {
-    // Full width header on mobile
+    // Full width header on mobile and small tablets
     if (screenSize === "xs" || screenSize === "sm") return "0";
     // Offset by sidebar width on larger screens
-    if (screenSize === "md") return isMenuOpen ? "20rem" : "4rem";
-    if (screenSize === "lg") return isMenuOpen ? "22rem" : "4.5rem";
-    if (screenSize === "xl") return isMenuOpen ? "24rem" : "5rem";
-    return isMenuOpen ? "26rem" : "5rem";
+    if (screenSize === "md") return isMenuOpen ? "320px" : "70px";
+    if (screenSize === "lg") return isMenuOpen ? "350px" : "80px";
+    if (screenSize === "xl") return isMenuOpen ? "380px" : "90px";
+    return isMenuOpen ? "400px" : "100px";
   };
 
   const getIconSize = () => {
-    if (screenSize === "xs") return 18;
-    if (screenSize === "sm") return 19;
+    if (screenSize === "xs") return 16;
+    if (screenSize === "sm") return 18;
     if (screenSize === "md") return 20;
     if (screenSize === "lg") return 22;
-    return 24;
+    if (screenSize === "xl") return 24;
+    return 26; // 2xl and above
   };
 
   const getHeaderHeight = () => {
-    if (screenSize === "xs") return "3.5rem"; // 56px
-    if (screenSize === "sm") return "4rem"; // 64px
-    return "4rem"; // 64px for md and above
+    if (screenSize === "xs") return "56px"; // Mobile
+    if (screenSize === "sm") return "60px"; // Large mobile
+    if (screenSize === "md") return "64px"; // Tablet
+    return "68px"; // Desktop and larger
   };
 
-  // Enhanced padding and spacing calculations
+  // Enhanced padding and spacing calculations with better device targeting
   const getPadding = (base: string) => {
     const paddingMap: Record<string, Record<string, string>> = {
-      xs: { small: "p-2", medium: "p-3", large: "p-4" },
-      sm: { small: "p-2", medium: "p-3", large: "p-4" },
-      md: { small: "p-3", medium: "p-4", large: "p-5" },
-      lg: { small: "p-4", medium: "p-5", large: "p-6" },
-      xl: { small: "p-5", medium: "p-6", large: "p-8" },
-      "2xl": { small: "p-6", medium: "p-8", large: "p-10" },
+      xs: { small: "p-1.5", medium: "p-2", large: "p-3" },
+      sm: { small: "p-2", medium: "p-2.5", large: "p-3.5" },
+      md: { small: "p-2.5", medium: "p-3", large: "p-4" },
+      lg: { small: "p-3", medium: "p-4", large: "p-5" },
+      xl: { small: "p-4", medium: "p-5", large: "p-6" },
+      "2xl": { small: "p-5", medium: "p-6", large: "p-8" },
     };
     return paddingMap[screenSize]?.[base] || paddingMap.md[base];
   };
 
-  const getTextSize = (variant: "small" | "medium" | "large" | "xlarge") => {
+  const getTextSize = (
+    variant: "xs" | "small" | "medium" | "large" | "xlarge"
+  ) => {
     const textMap: Record<string, Record<string, string>> = {
       xs: {
+        xs: "text-xs",
         small: "text-xs",
         medium: "text-sm",
         large: "text-base",
         xlarge: "text-lg",
       },
       sm: {
-        small: "text-xs",
+        xs: "text-xs",
+        small: "text-sm",
         medium: "text-sm",
         large: "text-base",
         xlarge: "text-lg",
       },
       md: {
+        xs: "text-xs",
         small: "text-sm",
         medium: "text-base",
         large: "text-lg",
         xlarge: "text-xl",
       },
       lg: {
+        xs: "text-sm",
         small: "text-sm",
         medium: "text-base",
         large: "text-lg",
         xlarge: "text-xl",
       },
       xl: {
+        xs: "text-sm",
         small: "text-base",
         medium: "text-lg",
         large: "text-xl",
         xlarge: "text-2xl",
       },
       "2xl": {
+        xs: "text-sm",
         small: "text-base",
         medium: "text-lg",
         large: "text-xl",
@@ -294,21 +307,31 @@ const NavigationBar = ({
     return textMap[screenSize]?.[variant] || textMap.md[variant];
   };
 
-  const getSpacing = (variant: "small" | "medium" | "large") => {
+  const getSpacing = (variant: "xs" | "small" | "medium" | "large") => {
     const spacingMap: Record<string, Record<string, string>> = {
-      xs: { small: "gap-1", medium: "gap-2", large: "gap-3" },
-      sm: { small: "gap-2", medium: "gap-3", large: "gap-4" },
-      md: { small: "gap-2", medium: "gap-3", large: "gap-4" },
-      lg: { small: "gap-3", medium: "gap-4", large: "gap-5" },
-      xl: { small: "gap-3", medium: "gap-4", large: "gap-6" },
-      "2xl": { small: "gap-4", medium: "gap-5", large: "gap-6" },
+      xs: { xs: "gap-0.5", small: "gap-1", medium: "gap-1.5", large: "gap-2" },
+      sm: { xs: "gap-1", small: "gap-1.5", medium: "gap-2", large: "gap-3" },
+      md: { xs: "gap-1", small: "gap-2", medium: "gap-2.5", large: "gap-3" },
+      lg: { xs: "gap-1.5", small: "gap-2", medium: "gap-3", large: "gap-4" },
+      xl: { xs: "gap-2", small: "gap-3", medium: "gap-4", large: "gap-5" },
+      "2xl": { xs: "gap-2", small: "gap-3", medium: "gap-4", large: "gap-6" },
     };
     return spacingMap[screenSize]?.[variant] || spacingMap.md[variant];
   };
 
-  // Mobile overlay detection - should show on xs and sm screens
+  // Device-specific behavior helpers
+  const isMobileDevice = () => screenSize === "xs";
+  const isSmallTablet = () => screenSize === "sm";
+  const isTabletDevice = () => screenSize === "md";
+  const isLaptopDevice = () => screenSize === "lg" || screenSize === "xl";
+  const isDesktopDevice = () => screenSize === "2xl";
+  const isCompactDevice = () => screenSize === "xs" || screenSize === "sm";
+  const isExpandedDevice = () =>
+    screenSize === "lg" || screenSize === "xl" || screenSize === "2xl";
+
+  // Mobile overlay detection - enhanced for all compact devices
   const shouldShowMobileOverlay = () => {
-    return (screenSize === "xs" || screenSize === "sm") && isMenuOpen;
+    return isCompactDevice() && isMenuOpen;
   };
 
   // PWA Installation handling with enhanced hooks
@@ -336,9 +359,9 @@ const NavigationBar = ({
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  // Close menu on mobile when clicking outside
+  // Close menu on mobile when clicking outside - enhanced for all compact devices
   useEffect(() => {
-    if (isMobile && isMenuOpen) {
+    if (isCompactDevice() && isMenuOpen) {
       const handleOutsideClick = (e: MouseEvent) => {
         const target = e.target as Element;
         if (
@@ -351,7 +374,7 @@ const NavigationBar = ({
       document.addEventListener("click", handleOutsideClick);
       return () => document.removeEventListener("click", handleOutsideClick);
     }
-  }, [isMobile, isMenuOpen, closeMenu]);
+  }, [isCompactDevice(), isMenuOpen, closeMenu]);
 
   // Notifications handling
 
@@ -415,8 +438,8 @@ const NavigationBar = ({
     if (onNavigate && onNavigate(path) === false) {
       return;
     }
-    // Close menu on mobile after navigation
-    if (isMobile) {
+    // Close menu on mobile after navigation - enhanced for all compact devices
+    if (isCompactDevice()) {
       closeMenu();
     }
     router.push(path);
@@ -481,8 +504,13 @@ const NavigationBar = ({
     const month = months[date.getMonth()];
     const year = date.getFullYear();
 
-    // Responsive date format
-    if (isMobile) {
+    // Responsive date format - enhanced for all device types
+    if (isCompactDevice()) {
+      return `${dayName.slice(0, 3)}, ${dayNumber}${getOrdinalSuffix(
+        dayNumber
+      )} ${month.slice(0, 3)}`;
+    }
+    if (isTabletDevice()) {
       return `${dayName}, ${dayNumber}${getOrdinalSuffix(dayNumber)} ${month}`;
     }
     return `Today is ${dayName}, ${dayNumber}${getOrdinalSuffix(
@@ -606,7 +634,8 @@ const NavigationBar = ({
     isBackingUp ||
     showEditModal ||
     backupResultMsg ||
-    showHistoryModal
+    showHistoryModal ||
+    showAdminPasswordModal
   );
 
   const handleBurgerClick = anyModalOpen
@@ -640,7 +669,7 @@ const NavigationBar = ({
       ${
         anyModalOpen
           ? "bg-black/90 border border-transparent shadow-none"
-          : "bg-gradient-to-br from-slate-900/90 via-black/90 to-gray-800/90 border border-yellow-400/20 shadow-xl group-hover:border-yellow-400/30 group-hover:shadow-yellow-400/10 backdrop-blur-lg transition-all duration-300"
+          : "bg-gradient-to-br from-slate-900/90 via-black/90 to-gray-800/90 border border-yellow-400/20 shadow-xl group-hover:border-yellow-400/30 group-hover:shadow-yellow-400/10 backdrop-blur-lg transition-all duration-300 ml-2"
       }`}
             style={anyModalOpen ? { border: "none", boxShadow: "none" } : {}}
           >
@@ -671,7 +700,7 @@ const NavigationBar = ({
       <aside
         className={`fixed top-0 left-0 h-screen bg-gradient-to-b from-gray-950/98 via-black/98 to-gray-950/98 backdrop-blur-xl text-yellow-100 flex flex-col shadow-2xl border-r border-yellow-400/20 transition-all overflow-hidden group
           ${
-            !isMenuOpen && screenSize !== "xs" && screenSize !== "sm"
+            !isMenuOpen && !isCompactDevice()
               ? "hover:border-yellow-400/40"
               : ""
           }`}
@@ -684,15 +713,15 @@ const NavigationBar = ({
           height: "100vh",
           // Enhanced responsive transform behavior
           transform:
-            (screenSize === "xs" || screenSize === "sm") && !isMenuOpen
+            isCompactDevice() && !isMenuOpen
               ? "translateX(-100%)"
               : "translateX(0)",
           transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-          zIndex: screenSize === "xs" || screenSize === "sm" ? 50 : 50,
-          // Enhanced responsive shadows
+          zIndex: isCompactDevice() ? 50 : 45,
+          // Enhanced responsive shadows based on device type
           boxShadow: isMenuOpen
             ? "4px 0 32px rgba(0, 0, 0, 0.5), inset -1px 0 0 rgba(251, 191, 36, 0.1)"
-            : screenSize !== "xs" && screenSize !== "sm"
+            : !isCompactDevice()
             ? "2px 0 20px rgba(0, 0, 0, 0.4), inset -1px 0 0 rgba(251, 191, 36, 0.15)"
             : "2px 0 16px rgba(0, 0, 0, 0.3)",
         }}
@@ -707,20 +736,20 @@ const NavigationBar = ({
           style={{ height: getHeaderHeight() }}
         >
           {/* Collapsed state - Centered logo with enhanced responsive styling */}
-          {!isMenuOpen && screenSize !== "xs" && screenSize !== "sm" && (
+          {!isMenuOpen && !isCompactDevice() && (
             <div className="w-full flex justify-center">
               <div
                 className="relative rounded-xl overflow-hidden shadow-lg border border-yellow-400/20 bg-gradient-to-br from-yellow-400/5 via-transparent to-yellow-300/3 group-hover:border-yellow-400/30 group-hover:shadow-yellow-400/15 transition-all duration-300 group-hover:scale-105"
                 style={{
-                  width: getIconSize() + 16,
-                  height: getIconSize() + 16,
+                  width: getIconSize() + (isExpandedDevice() ? 20 : 16),
+                  height: getIconSize() + (isExpandedDevice() ? 20 : 16),
                 }}
               >
                 <Image
                   src="/logo.png"
                   alt="Logo"
-                  width={getIconSize() + 16}
-                  height={getIconSize() + 16}
+                  width={getIconSize() + (isExpandedDevice() ? 20 : 16)}
+                  height={getIconSize() + (isExpandedDevice() ? 20 : 16)}
                   className="w-full h-full object-contain relative z-10"
                   priority
                 />
@@ -731,22 +760,21 @@ const NavigationBar = ({
           )}
 
           {/* Expanded state - Enhanced responsive layout */}
-          {(isMenuOpen || screenSize === "xs" || screenSize === "sm") && (
+          {(isMenuOpen || isCompactDevice()) && (
             <>
               <div
                 className={`flex items-center min-w-0 ${getSpacing("small")}`}
-                style={{ height: getIconSize() + 16 }}
+                style={{
+                  height: getIconSize() + (isExpandedDevice() ? 20 : 16),
+                }}
               >
                 <div
                   className="flex-shrink-0 transition-all"
                   style={{
-                    opacity:
-                      isMenuOpen || screenSize === "xs" || screenSize === "sm"
-                        ? 1
-                        : 0,
+                    opacity: isMenuOpen || isCompactDevice() ? 1 : 0,
                     width:
-                      isMenuOpen || screenSize === "xs" || screenSize === "sm"
-                        ? getIconSize() + 16
+                      isMenuOpen || isCompactDevice()
+                        ? getIconSize() + (isExpandedDevice() ? 20 : 16)
                         : 0,
                     overflow: "hidden",
                     transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
@@ -755,15 +783,15 @@ const NavigationBar = ({
                   <div
                     className="relative rounded-xl overflow-hidden shadow-lg border border-yellow-400/20"
                     style={{
-                      width: getIconSize() + 16,
-                      height: getIconSize() + 16,
+                      width: getIconSize() + (isExpandedDevice() ? 20 : 16),
+                      height: getIconSize() + (isExpandedDevice() ? 20 : 16),
                     }}
                   >
                     <Image
                       src="/logo.png"
                       alt="Logo"
-                      width={getIconSize() + 16}
-                      height={getIconSize() + 16}
+                      width={getIconSize() + (isExpandedDevice() ? 20 : 16)}
+                      height={getIconSize() + (isExpandedDevice() ? 20 : 16)}
                       className="w-full h-full object-contain"
                       priority
                     />
@@ -774,92 +802,106 @@ const NavigationBar = ({
                   className="transition-all flex items-center group relative"
                   style={{
                     maxWidth:
-                      isMenuOpen || screenSize === "xs" || screenSize === "sm"
+                      isMenuOpen || isCompactDevice()
                         ? isPWA
+                          ? isExpandedDevice()
+                            ? 220
+                            : isTabletDevice()
+                            ? 180
+                            : 160
+                          : isExpandedDevice()
+                          ? 260
+                          : isTabletDevice()
+                          ? 200
+                          : isSmallTablet()
                           ? 180
-                          : screenSize === "xs"
-                          ? 140
-                          : screenSize === "sm"
-                          ? 160
-                          : 220
+                          : 140
                         : 0,
                     overflow: "hidden",
-                    opacity:
-                      isMenuOpen || screenSize === "xs" || screenSize === "sm"
-                        ? 1
-                        : 0,
-                    height: getIconSize() + 16,
+                    opacity: isMenuOpen || isCompactDevice() ? 1 : 0,
+                    height: getIconSize() + (isExpandedDevice() ? 20 : 16),
                     transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-                    marginLeft:
-                      getSpacing("small") === "gap-1"
-                        ? "0.25rem"
-                        : getSpacing("small") === "gap-2"
-                        ? "0.5rem"
-                        : "0.75rem",
+                    marginLeft: getSpacing("small").includes("gap-0.5")
+                      ? "2px"
+                      : getSpacing("small").includes("gap-1")
+                      ? "4px"
+                      : "6px",
                   }}
                 >
                   <div className="flex flex-col">
                     <h1
-                      className="text-lg sm:text-xl font-bold text-transparent bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text whitespace-nowrap tracking-wide drop-shadow-sm cursor-default"
+                      className={`font-bold text-transparent bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text whitespace-nowrap tracking-wide drop-shadow-sm cursor-default ${
+                        isDesktopDevice()
+                          ? "text-xl"
+                          : isLaptopDevice()
+                          ? "text-lg"
+                          : isTabletDevice()
+                          ? "text-base"
+                          : "text-sm"
+                      }`}
                       title="Cardiac Delights - Restaurant Management System"
                     >
                       Cardiac Delights
                     </h1>
                   </div>
 
-                  {/* Hover Tooltip */}
-                  <div className="absolute left-0 top-full mt-2 px-3 py-2 bg-black/95 text-yellow-200 text-sm rounded-lg border border-yellow-400/30 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-lg backdrop-blur-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                      <span className="font-semibold">Cardiac Delights</span>
+                  {/* Enhanced Tooltip for larger screens */}
+                  {!isCompactDevice() && (
+                    <div className="absolute left-0 top-full mt-2 px-3 py-2 bg-black/95 text-yellow-200 text-sm rounded-lg border border-yellow-400/30 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-50 whitespace-nowrap shadow-lg backdrop-blur-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                        <span className="font-semibold">Cardiac Delights</span>
+                      </div>
+                      <div className="text-xs text-yellow-400 mt-1">
+                        Restaurant Management System
+                      </div>
+                      {/* Tooltip arrow */}
+                      <div className="absolute -top-1 left-4 w-2 h-2 bg-black/95 border-l border-t border-yellow-400/30 transform rotate-45"></div>
                     </div>
-                    <div className="text-xs text-yellow-400 mt-1">
-                      Restaurant Management System
-                    </div>
-                    {/* Tooltip arrow */}
-                    <div className="absolute -top-1 left-4 w-2 h-2 bg-black/95 border-l border-t border-yellow-400/30 transform rotate-45"></div>
-                  </div>
+                  )}
                 </div>
               </div>
 
-              {/* Header Controls */}
-              <div className="flex items-center gap-2">
-                {/* PWA Fullscreen Toggle */}
-                {isPWA && !isMobile && (isMenuOpen || isMobile) && (
-                  <button
-                    onClick={toggleFullscreen}
-                    className="text-yellow-200 hover:text-yellow-400 transition-all duration-300 p-2 rounded-lg hover:bg-yellow-400/10 focus:outline-none focus:ring-2 focus:ring-yellow-400/50"
-                    aria-label={
-                      isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
-                    }
-                  >
-                    {isFullscreen ? (
-                      <MdFullscreenExit size={18} />
-                    ) : (
-                      <MdFullscreen size={18} />
-                    )}
-                  </button>
-                )}
+              {/* Header Controls - Enhanced for all device types */}
+              <div className={`flex items-center ${getSpacing("xs")}`}>
+                {/* PWA Fullscreen Toggle - only on larger devices */}
+                {isPWA &&
+                  !isCompactDevice() &&
+                  (isMenuOpen || !isCompactDevice()) && (
+                    <button
+                      onClick={toggleFullscreen}
+                      className="text-yellow-200 hover:text-yellow-400 transition-all duration-300 p-2 rounded-lg hover:bg-yellow-400/10 focus:outline-none focus:ring-2 focus:ring-yellow-400/50"
+                      aria-label={
+                        isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
+                      }
+                    >
+                      {isFullscreen ? (
+                        <MdFullscreenExit size={getIconSize() - 2} />
+                      ) : (
+                        <MdFullscreen size={getIconSize() - 2} />
+                      )}
+                    </button>
+                  )}
 
                 {/* Mobile Close Button */}
-                {isMobile && (
+                {isCompactDevice() && (
                   <button
                     onClick={closeMenu}
                     className="text-yellow-200 hover:text-yellow-400 transition-all duration-300 p-2 rounded-lg hover:bg-yellow-400/10 focus:outline-none focus:ring-2 focus:ring-yellow-400/50"
                     aria-label="Close menu"
                   >
-                    <FaTimes size={20} />
+                    <FaTimes size={getIconSize() - 2} />
                   </button>
                 )}
 
                 {/* Desktop Close Arrow (only when sidebar is open) */}
-                {!isMobile && isMenuOpen && (
+                {!isCompactDevice() && isMenuOpen && (
                   <button
                     onClick={toggleMenu}
                     className="text-yellow-200 hover:text-yellow-400 transition-all duration-300 p-2 rounded-lg hover:bg-yellow-400/10 focus:outline-none focus:ring-2 focus:ring-yellow-400/50"
                     aria-label="Close sidebar"
                   >
-                    <FaAngleLeft size={18} />
+                    <FaAngleLeft size={getIconSize() - 2} />
                   </button>
                 )}
               </div>
@@ -867,25 +909,26 @@ const NavigationBar = ({
           )}
         </header>
 
-        {/* Navigation Items */}
+        {/* Navigation Items - Fully Responsive */}
         <nav
           className={
             navigationUtils.getResponsiveClass(
               {
-                xs: "flex-1 overflow-y-auto py-4 px-2",
-                sm: "flex-1 overflow-y-auto py-4 px-2",
-                md: "flex-1 overflow-y-auto py-6 px-2",
-                lg: "flex-1 overflow-y-auto py-6 px-2",
-                xl: "flex-1 overflow-y-auto py-8 px-2",
+                xs: "flex-1 overflow-y-auto py-2 px-1.5",
+                sm: "flex-1 overflow-y-auto py-3 px-2",
+                md: "flex-1 overflow-y-auto py-4 px-2",
+                lg: "flex-1 overflow-y-auto py-5 px-2.5",
+                xl: "flex-1 overflow-y-auto py-6 px-3",
               },
               screenSize
-            ) + ` ${!isMenuOpen && !isMobile ? "py-4" : ""}`
+            ) + ` ${!isMenuOpen && !isCompactDevice() ? "py-4" : ""}`
           }
         >
           <ul
-            className={`space-y-3 px-1 ${
-              !isMenuOpen && !isMobile ? "space-y-4" : ""
+            className={`${getSpacing("small")} px-1 ${
+              !isMenuOpen && !isCompactDevice() ? getSpacing("medium") : ""
             }`}
+            style={{ display: "flex", flexDirection: "column" }}
           >
             {allSidebarItems
               .filter((item) => !role || item.roles.includes(role))
@@ -898,9 +941,11 @@ const NavigationBar = ({
                       className={`w-full flex items-center rounded-xl cursor-pointer group relative overflow-hidden
                         transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-yellow-400/50
                         ${
-                          isMenuOpen || isMobile
-                            ? "gap-3 px-4 py-3.5 justify-start"
-                            : "px-2.5 py-2.5 justify-center"
+                          isMenuOpen || isCompactDevice()
+                            ? `${getSpacing("xs")} ${getPadding(
+                                "small"
+                              )} justify-start`
+                            : `${getPadding("xs")} justify-center`
                         }
                         ${
                           isActive
@@ -908,20 +953,42 @@ const NavigationBar = ({
                             : "text-yellow-100/75 hover:bg-gradient-to-r hover:from-gray-800/50 hover:via-gray-700/35 hover:to-gray-600/15 hover:text-yellow-300 border border-transparent hover:border-yellow-500/15 hover:backdrop-blur-sm"
                         }
                         ${
-                          !isMenuOpen && !isMobile
+                          !isMenuOpen && !isCompactDevice()
                             ? "group hover:scale-105 hover:shadow-lg hover:shadow-yellow-400/5"
                             : ""
                         }`}
                       style={{
                         transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-                        height: isMenuOpen || isMobile ? "auto" : "3.5rem", // Taller for better proportions when collapsed
-                        aspectRatio: isMenuOpen || isMobile ? "auto" : "1/1",
+                        height:
+                          isMenuOpen || isCompactDevice()
+                            ? "auto"
+                            : isDesktopDevice()
+                            ? "56px"
+                            : isLaptopDevice()
+                            ? "52px"
+                            : "48px",
+                        aspectRatio:
+                          isMenuOpen || isCompactDevice() ? "auto" : "1/1",
+                        minHeight:
+                          isMenuOpen || isCompactDevice()
+                            ? isDesktopDevice()
+                              ? "48px"
+                              : isLaptopDevice()
+                              ? "44px"
+                              : isTabletDevice()
+                              ? "40px"
+                              : "36px"
+                            : "auto",
                         // Stagger animation delay for collapsed state
                         animationDelay:
-                          !isMenuOpen && !isMobile ? `${index * 50}ms` : "0ms",
+                          !isMenuOpen && !isCompactDevice()
+                            ? `${index * 50}ms`
+                            : "0ms",
                       }}
                       aria-current={isActive ? "page" : undefined}
-                      title={!isMenuOpen && !isMobile ? name : undefined} // Tooltip for collapsed state
+                      title={
+                        !isMenuOpen && !isCompactDevice() ? name : undefined
+                      }
                     >
                       {/* Enhanced background glow effect for active state */}
                       {isActive && (
@@ -935,33 +1002,62 @@ const NavigationBar = ({
                       <div
                         className={`absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300
                         ${
-                          !isMenuOpen && !isMobile
+                          !isMenuOpen && !isCompactDevice()
                             ? "bg-gradient-to-br from-yellow-400/6 via-yellow-300/8 to-yellow-200/4"
                             : "bg-gradient-to-r from-yellow-400/3 via-yellow-300/5 to-transparent"
                         }`}
                       ></div>
 
-                      {/* Icon container with enhanced styling for collapsed state */}
+                      {/* Icon container with device-specific sizing */}
                       <div
                         className={`relative flex items-center justify-center transition-all duration-300 flex-shrink-0
-                        ${isMenuOpen || isMobile ? "w-6 h-6" : "w-8 h-8"}
                         ${
                           isActive
                             ? "text-yellow-300/90 drop-shadow-md filter"
                             : "text-yellow-100/60 group-hover:text-yellow-300/80 group-hover:drop-shadow-sm"
                         }
                         ${
-                          !isMenuOpen && !isMobile
+                          !isMenuOpen && !isCompactDevice()
                             ? "group-hover:scale-115 group-hover:rotate-2"
                             : "group-hover:scale-110"
                         }`}
+                        style={{
+                          width:
+                            isMenuOpen || isCompactDevice()
+                              ? isDesktopDevice()
+                                ? "28px"
+                                : isLaptopDevice()
+                                ? "26px"
+                                : isTabletDevice()
+                                ? "24px"
+                                : "20px"
+                              : isDesktopDevice()
+                              ? "32px"
+                              : isLaptopDevice()
+                              ? "30px"
+                              : "28px",
+                          height:
+                            isMenuOpen || isCompactDevice()
+                              ? isDesktopDevice()
+                                ? "28px"
+                                : isLaptopDevice()
+                                ? "26px"
+                                : isTabletDevice()
+                                ? "24px"
+                                : "20px"
+                              : isDesktopDevice()
+                              ? "32px"
+                              : isLaptopDevice()
+                              ? "30px"
+                              : "28px",
+                        }}
                       >
                         <div className="w-full h-full flex items-center justify-center transition-transform duration-300">
                           {icon}
                         </div>
 
                         {/* Enhanced active indicator dots for collapsed state */}
-                        {isActive && !isMenuOpen && !isMobile && (
+                        {isActive && !isMenuOpen && !isCompactDevice() && (
                           <>
                             <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-gradient-to-r from-yellow-300/80 to-yellow-400/80 rounded-full shadow-md shadow-yellow-400/30 animate-pulse"></div>
                             <div
@@ -972,17 +1068,28 @@ const NavigationBar = ({
                         )}
 
                         {/* Subtle animation ring for collapsed state */}
-                        {!isMenuOpen && !isMobile && (
+                        {!isMenuOpen && !isCompactDevice() && (
                           <div className="absolute inset-0 rounded-full border border-yellow-400/0 group-hover:border-yellow-400/15 transition-all duration-300 group-hover:scale-110"></div>
                         )}
                       </div>
 
-                      {/* Text label with improved styling */}
+                      {/* Text label with device-specific styling */}
                       <span
-                        className="font-medium tracking-wide transition-all duration-300"
+                        className={`font-medium tracking-wide transition-all duration-300 ${getTextSize(
+                          "small"
+                        )}`}
                         style={{
-                          maxWidth: isMenuOpen || isMobile ? 140 : 0,
-                          opacity: isMenuOpen || isMobile ? 1 : 0,
+                          maxWidth:
+                            isMenuOpen || isCompactDevice()
+                              ? isDesktopDevice()
+                                ? "180px"
+                                : isLaptopDevice()
+                                ? "160px"
+                                : isTabletDevice()
+                                ? "140px"
+                                : "120px"
+                              : 0,
+                          opacity: isMenuOpen || isCompactDevice() ? 1 : 0,
                           display: "inline-block",
                           whiteSpace: "nowrap",
                           transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
@@ -992,13 +1099,19 @@ const NavigationBar = ({
                       </span>
 
                       {/* Enhanced active chevron */}
-                      {isActive && (isMenuOpen || isMobile) && (
+                      {isActive && (isMenuOpen || isCompactDevice()) && (
                         <div className="ml-auto">
                           <FaChevronRight
-                            size={12}
+                            size={
+                              isDesktopDevice()
+                                ? 14
+                                : isLaptopDevice()
+                                ? 12
+                                : 10
+                            }
                             className="text-yellow-400 drop-shadow-sm transition-transform duration-300 group-hover:translate-x-0.5"
                             style={{
-                              opacity: isMenuOpen || isMobile ? 1 : 0,
+                              opacity: isMenuOpen || isCompactDevice() ? 1 : 0,
                               transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
                             }}
                           />
@@ -1011,9 +1124,13 @@ const NavigationBar = ({
           </ul>
 
           {/* Subtle expand hint for collapsed state */}
-          {!isMenuOpen && !isMobile && (
+          {!isMenuOpen && !isCompactDevice() && (
             <div className="mt-6 flex justify-center">
-              <div className="w-8 h-0.5 bg-gradient-to-r from-transparent via-yellow-700/20 to-transparent rounded-full animate-pulse"></div>
+              <div
+                className={`bg-gradient-to-r from-transparent via-yellow-700/20 to-transparent rounded-full animate-pulse ${
+                  isDesktopDevice() ? "w-10 h-0.5" : "w-8 h-0.5"
+                }`}
+              ></div>
             </div>
           )}
         </nav>
@@ -1160,12 +1277,10 @@ const NavigationBar = ({
             "0 4px 20px rgba(0, 0, 0, 0.3), inset 0 -1px 0 rgba(251, 191, 36, 0.1)",
         }}
       >
-        {/* Enhanced Responsive Date Display */}
+        {/* Enhanced Responsive Header */}
         <section
           className={`flex items-center ${
-            screenSize === "xs" || screenSize === "sm"
-              ? "justify-center w-full"
-              : ""
+            isCompactDevice() ? "justify-center w-full" : ""
           }`}
         >
           <div className="relative">
@@ -1180,33 +1295,275 @@ const NavigationBar = ({
           </div>
         </section>
 
-        {/* Enhanced Responsive User Profile and Controls */}
-        {(!(screenSize === "xs" || screenSize === "sm") || !isMenuOpen) && (
+        {/* Enhanced Mobile User Profile - Show on compact devices */}
+        {isCompactDevice() && user && (
+          <div
+            className={`flex items-center justify-between w-full mt-1 mb-1 ${getPadding(
+              "xs"
+            )}`}
+          >
+            {/* User Info Section */}
+            <div className={`flex items-center ${getSpacing("xs")}`}>
+              {/* Avatar Button */}
+              <button
+                className={`flex items-center justify-center rounded-full bg-yellow-500/90 text-black font-bold border-2 border-yellow-400 shadow-md ${
+                  isMobileDevice() ? "w-8 h-8 text-sm" : "w-9 h-9 text-base"
+                }`}
+                style={{
+                  minWidth: isMobileDevice() ? 32 : 36,
+                  minHeight: isMobileDevice() ? 32 : 36,
+                }}
+                aria-label="User menu"
+              >
+                {user?.name
+                  ? user.name.charAt(0).toUpperCase()
+                  : user?.email?.charAt(0).toUpperCase() || "U"}
+              </button>
+              {/* Name and Role */}
+              <div className="flex flex-col items-start min-w-0">
+                <span
+                  className={`text-yellow-100 font-semibold leading-tight truncate ${getTextSize(
+                    "xs"
+                  )} ${isMobileDevice() ? "max-w-[70px]" : "max-w-[90px]"}`}
+                >
+                  {user?.name || user?.email || "User"}
+                </span>
+                {role && (
+                  <span
+                    className={`text-yellow-300 leading-tight capitalize truncate ${getTextSize(
+                      "xs"
+                    )} ${isMobileDevice() ? "max-w-[70px]" : "max-w-[90px]"}`}
+                  >
+                    {role}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Connection Status and Controls */}
+            <div className={`flex items-center ${getSpacing("xs")}`}>
+              {/* Connection Status Indicator */}
+              <div className="flex items-center">
+                {isActuallyOnline ? (
+                  <FaWifi className={`text-green-400 ${getTextSize("xs")}`} />
+                ) : (
+                  <MdWifiOff className={`text-red-400 ${getTextSize("xs")}`} />
+                )}
+              </div>
+
+              {/* Notification Bell for compact devices */}
+              <div className="relative" ref={bellRef}>
+                <button
+                  className={`relative rounded-xl hover:bg-gradient-to-br hover:from-yellow-400/10 hover:to-yellow-300/5 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 group ${getPadding(
+                    "small"
+                  )}`}
+                  aria-label="Notifications"
+                  onClick={() => setBellOpen(!bellOpen)}
+                >
+                  <FaBell
+                    className="text-yellow-300 group-hover:text-yellow-200 transition-colors duration-300"
+                    size={getIconSize()}
+                  />
+                  {unreadCount > 0 && (
+                    <span
+                      className={`absolute -top-1 -right-1 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full flex items-center justify-center font-bold shadow-lg animate-pulse ${
+                        isMobileDevice() ? "w-5 h-5 text-xs" : "w-6 h-6 text-xs"
+                      }`}
+                    >
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Mobile Notification Dropdown */}
+                {bellOpen && (
+                  <div>
+                    <div
+                      className={`absolute right-0 mt-3 bg-gradient-to-br from-black/98 via-gray-900/98 to-black/98 backdrop-blur-xl text-yellow-100 rounded-2xl shadow-2xl z-50 border border-yellow-400/20 ${
+                        isMobileDevice()
+                          ? "w-80 max-w-[calc(100vw-1rem)]"
+                          : "w-72 max-w-[calc(100vw-2rem)]"
+                      }`}
+                      style={{
+                        boxShadow:
+                          "0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(251, 191, 36, 0.1)",
+                      }}
+                    >
+                      <div className="p-4 font-bold border-b border-yellow-400/20 flex items-center justify-between bg-gradient-to-r from-yellow-400/5 to-transparent rounded-t-2xl">
+                        <span className="text-yellow-200">Notifications</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-yellow-400 px-2 py-1 bg-yellow-400/10 rounded-full border border-yellow-400/20">
+                            {unreadCount} unread
+                          </span>
+                          {notifications.length > 0 && (
+                            <button
+                              onClick={handleClearAllNotifications}
+                              className="text-xs text-red-400 hover:text-red-300 px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded-full border border-red-400/20 hover:border-red-400/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                              title="Clear all notifications"
+                            >
+                              Clear All
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {notifications.length === 0 ? (
+                          <div className="p-6 text-center">
+                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-yellow-400/10 to-yellow-300/5 flex items-center justify-center">
+                              <FaBell className="text-yellow-400/50 text-xl" />
+                            </div>
+                            <p className="text-gray-400 text-sm">
+                              No notifications
+                            </p>
+                          </div>
+                        ) : (
+                          notifications.map((n) => {
+                            // Decide color based on notification type or message
+                            let messageColor = "text-yellow-100";
+                            let bgColor = "";
+                            const msg = n.message?.toLowerCase() || "";
+                            const type = (n.type || "").toLowerCase();
+
+                            // Expired/expiring soon
+                            if (
+                              type === "expired" ||
+                              type === "expiring" ||
+                              msg.includes("expired") ||
+                              msg.includes("expiring soon")
+                            ) {
+                              messageColor = "text-red-500";
+                              bgColor =
+                                "bg-gradient-to-r from-red-800/18 via-red-700/15 to-transparent border-l-2 border-l-white";
+                            }
+                            // Low stock
+                            else if (
+                              type === "low_stock" ||
+                              msg.includes("low stock")
+                            ) {
+                              messageColor = "text-orange-400";
+                              bgColor =
+                                "bg-gradient-to-r from-orange-800/18 via-orange-700/15 to-transparent border-l-2 border-l-orange-300";
+                            }
+                            // Missing threshold
+                            else if (
+                              type === "missing_threshold" ||
+                              msg.includes("missing threshold") ||
+                              msg.includes("threshold not set")
+                            ) {
+                              messageColor = "text-blue-400";
+                              bgColor =
+                                "bg-gradient-to-r from-blue-800/18 via-blue-700/15 to-transparent border-l-2 border-l-blue-300";
+                            }
+                            // Default unread
+                            else if (n.status === "unread") {
+                              messageColor = "text-yellow-200";
+                              bgColor =
+                                "bg-gradient-to-r from-yellow-800/18 via-yellow-700/15 to-transparent border-l-2 border-l-yellow-300";
+                            }
+
+                            // Add visual indicator for unread/read
+                            const isUnread = n.status === "unread";
+
+                            return (
+                              <div
+                                key={`notification-${n.id}-${n.created_at}`}
+                                className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl ${bgColor} flex items-start gap-3 group`}
+                                onClick={() => handleNotificationClick(n)}
+                              >
+                                {/* Unread/Read dot indicator */}
+                                <span
+                                  className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                                    isUnread
+                                      ? "bg-yellow-400 animate-pulse shadow-yellow-400/40 shadow"
+                                      : "bg-gray-600"
+                                  }`}
+                                  title={isUnread ? "Unread" : "Read"}
+                                ></span>
+                                <div className="flex-1 min-w-0">
+                                  <div
+                                    className={`text-sm leading-relaxed font-medium ${messageColor}`}
+                                  >
+                                    {n.message}
+                                  </div>
+                                  <div className="text-xs text-yellow-400/70 mt-2 flex items-center gap-1">
+                                    <div className="w-1 h-1 bg-yellow-400 rounded-full"></div>
+                                    {new Date(n.created_at).toLocaleString(
+                                      "en-GB",
+                                      {
+                                        year: "numeric",
+                                        month: "short",
+                                        day: "2-digit",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        hour12: true,
+                                      }
+                                    )}
+                                    <span
+                                      className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                        isUnread
+                                          ? "bg-yellow-400/20 text-yellow-300 border border-yellow-400/40"
+                                          : "bg-gray-700/40 text-gray-300 border border-gray-500/40"
+                                      }`}
+                                    >
+                                      {isUnread ? "Unread" : "Read"}
+                                    </span>
+                                  </div>
+                                </div>
+                                {/* Remove notification button */}
+                                <button
+                                  onClick={(e) =>
+                                    handleRemoveNotification(n, e)
+                                  }
+                                  className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                                  title="Remove notification"
+                                  aria-label="Remove notification"
+                                >
+                                  <FaTimes size={12} />
+                                </button>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Enhanced Responsive User Profile and Controls - Desktop/Tablet Only */}
+        {!isCompactDevice() && (
           <div
             className={`flex items-center ${getSpacing(
               "medium"
             )} min-w-0 max-w-full`}
             style={{
-              height: "3.5rem", // Adjust height to fit nicely at the top
-              minHeight: "3.5rem",
-              maxHeight: "3.5rem",
+              height: getHeaderHeight(),
+              minHeight: getHeaderHeight(),
+              maxHeight: getHeaderHeight(),
             }}
           >
-            {/* User Info */}
-            {/* Enhanced Responsive Notification Bell */}
+            {/* Enhanced Responsive Notification Bell - Desktop/Tablet */}
             <div className="relative" ref={bellRef}>
               <button
-                className="relative p-2.5 rounded-xl hover:bg-gradient-to-br hover:from-yellow-400/10 hover:to-yellow-300/5 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 group"
+                className={`relative rounded-xl hover:bg-gradient-to-br hover:from-yellow-400/10 hover:to-yellow-300/5 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 group ${getPadding(
+                  "small"
+                )}`}
                 aria-label="Notifications"
                 onClick={() => setBellOpen(!bellOpen)}
-                style={{ height: "2.5rem", width: "2.5rem" }} // Make bell button more compact
               >
                 <FaBell
                   className="text-yellow-300 group-hover:text-yellow-200 transition-colors duration-300"
                   size={getIconSize()}
                 />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-red-500 to-red-600 text-white text-xs rounded-full flex items-center justify-center font-bold shadow-lg animate-pulse">
+                  <span
+                    className={`absolute -top-1 -right-1 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full flex items-center justify-center font-bold shadow-lg animate-pulse ${
+                      isDesktopDevice() ? "w-6 h-6 text-sm" : "w-5 h-5 text-xs"
+                    }`}
+                  >
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
@@ -1217,14 +1574,17 @@ const NavigationBar = ({
               {bellOpen && (
                 <div>
                   <div
-                    className={`absolute right-0 mt-3 bg-gradient-to-br from-black/98 via-gray-900/98 to-black/98 backdrop-blur-xl text-yellow-100 rounded-2xl shadow-2xl z-50 border border-yellow-400/20
-              ${
-                screenSize === "xs"
-                  ? "w-72 max-w-[calc(100vw-1rem)]"
-                  : screenSize === "sm"
-                  ? "w-80 max-w-[calc(100vw-2rem)]"
-                  : "w-80"
-              }`}
+                    className={`absolute right-0 mt-3 bg-gradient-to-br from-black/98 via-gray-900/98 to-black/98 backdrop-blur-xl text-yellow-100 rounded-2xl shadow-2xl z-50 border border-yellow-400/20 ${
+                      isDesktopDevice()
+                        ? "w-96"
+                        : isLaptopDevice()
+                        ? "w-80"
+                        : isTabletDevice()
+                        ? "w-72 max-w-[calc(100vw-2rem)]"
+                        : isSmallTablet()
+                        ? "w-80 max-w-[calc(100vw-2rem)]"
+                        : "w-72 max-w-[calc(100vw-1rem)]"
+                    }`}
                     style={{
                       boxShadow:
                         "0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(251, 191, 36, 0.1)",
@@ -1232,19 +1592,20 @@ const NavigationBar = ({
                   >
                     <div className="p-4 font-bold border-b border-yellow-400/20 flex items-center justify-between bg-gradient-to-r from-yellow-400/5 to-transparent rounded-t-2xl">
                       <span className="text-yellow-200">Notifications</span>
-                      <div className="flex items-center gap-2"></div>
-                      <span className="text-xs text-yellow-400 px-2 py-1 bg-yellow-400/10 rounded-full border border-yellow-400/20">
-                        {unreadCount} unread
-                      </span>
-                      {notifications.length > 0 && (
-                        <button
-                          onClick={handleClearAllNotifications}
-                          className="text-xs text-red-400 hover:text-red-300 px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded-full border border-red-400/20 hover:border-red-400/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400/50"
-                          title="Clear all notifications"
-                        >
-                          Clear All
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-yellow-400 px-2 py-1 bg-yellow-400/10 rounded-full border border-yellow-400/20">
+                          {unreadCount} unread
+                        </span>
+                        {notifications.length > 0 && (
+                          <button
+                            onClick={handleClearAllNotifications}
+                            className="text-xs text-red-400 hover:text-red-300 px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded-full border border-red-400/20 hover:border-red-400/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                            title="Clear all notifications"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="max-h-64 overflow-y-auto">
                       {notifications.length === 0 ? (
@@ -1372,72 +1733,107 @@ const NavigationBar = ({
             <div
               className={`flex items-center border border-yellow-400/30 rounded-xl bg-gradient-to-r from-black/60 via-black/40 to-black/60 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-yellow-400/40 transition-all duration-300 min-w-0 group ${getPadding(
                 "small"
-              )} ${getSpacing("small")}
-              ${
-                screenSize === "xs"
-                  ? "max-w-[180px]"
-                  : screenSize === "sm"
-                  ? "max-w-[200px]"
+              )} ${getSpacing("small")} ${
+                isDesktopDevice()
+                  ? "max-w-md"
+                  : isLaptopDevice()
+                  ? "max-w-sm"
                   : "max-w-xs"
               }`}
               style={{
-                height: "2.8rem", // Make user profile bar more compact
-                minHeight: "2.8rem",
-                maxHeight: "2.8rem",
+                height: isDesktopDevice()
+                  ? "60px"
+                  : isLaptopDevice()
+                  ? "54px"
+                  : "48px",
+                minHeight: isDesktopDevice()
+                  ? "60px"
+                  : isLaptopDevice()
+                  ? "54px"
+                  : "48px",
+                maxHeight: isDesktopDevice()
+                  ? "60px"
+                  : isLaptopDevice()
+                  ? "54px"
+                  : "48px",
               }}
             >
-              <div className="flex flex-col min-w-0 max-w-full">
+              <div
+                className={`flex flex-col min-w-0 ${
+                  isTabletDevice() ? "flex-1 mr-2" : "max-w-full"
+                }`}
+              >
                 <span
                   className={`font-bold bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent leading-tight font-poppins truncate drop-shadow-sm ${getTextSize(
                     "small"
                   )}`}
                   style={{ lineHeight: "1.2" }}
+                  title={user?.name || "User"}
                 >
                   {user?.name || "User"}
                 </span>
                 <span
                   className={`text-yellow-100/80 leading-tight font-inter truncate transition-colors duration-300 group-hover:text-yellow-200 ${getTextSize(
-                    "small"
+                    "xs"
                   )}`}
                   style={{ lineHeight: "1.1" }}
+                  title={role || "Role"}
                 >
                   {role || "Role"}
                 </span>
               </div>
 
               {/* Enhanced Responsive Status Indicators */}
-              <div className="flex flex-col gap-1.5">
+              <div
+                className={`flex flex-col flex-shrink-0 ${getSpacing("xs")}`}
+              >
                 {/* Network Status */}
                 <span
-                  className={`px-2.5 py-1 rounded-full font-medium flex items-center transition-all duration-300 backdrop-blur-sm ${getTextSize(
-                    "small"
-                  )} ${getSpacing("small")}
-                ${
-                  isActuallyOnline
-                    ? "bg-gradient-to-r from-green-500/20 to-green-600/20 text-green-300 border border-green-400/40 shadow-green-400/20"
-                    : "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-300 border border-red-400/40 shadow-red-400/20"
-                }`}
+                  className={`rounded-full font-medium flex items-center transition-all duration-300 backdrop-blur-sm ${
+                    isTabletDevice() ? "px-2 py-1" : `px-2.5 py-1`
+                  } ${getSpacing("xs")} ${
+                    isActuallyOnline
+                      ? "bg-gradient-to-r from-green-500/20 to-green-600/20 text-green-300 border border-green-400/40 shadow-green-400/20"
+                      : "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-300 border border-red-400/40 shadow-red-400/20"
+                  }`}
                   style={{
-                    height: "1.8rem",
-                    minWidth: "4.5rem",
-                    fontSize: "0.95em",
+                    height: isDesktopDevice()
+                      ? "32px"
+                      : isLaptopDevice()
+                      ? "28px"
+                      : "24px",
+                    minWidth: isDesktopDevice()
+                      ? "120px"
+                      : isLaptopDevice()
+                      ? "100px"
+                      : isTabletDevice()
+                      ? "80px"
+                      : "70px",
+                    fontSize: isDesktopDevice() ? "0.875rem" : "0.75rem",
                   }}
+                  title={isActuallyOnline ? "Online" : "Offline"}
                 >
                   {isActuallyOnline ? (
-                    <FaWifi size={Math.max(8, getIconSize() - 8)} />
+                    <FaWifi
+                      size={isDesktopDevice() ? 16 : isLaptopDevice() ? 14 : 12}
+                    />
                   ) : (
-                    <MdSignalWifiOff size={Math.max(8, getIconSize() - 8)} />
+                    <MdSignalWifiOff
+                      size={isDesktopDevice() ? 16 : isLaptopDevice() ? 14 : 12}
+                    />
                   )}
-                  {!(screenSize === "xs" || screenSize === "sm") &&
+                  {!isTabletDevice() &&
                     (isActuallyOnline ? "Online" : "Offline")}
                   {/* Show offline queue count when offline */}
-                  {!isActuallyOnline &&
-                    offlineActionsCount > 0 &&
-                    !(screenSize === "xs" || screenSize === "sm") && (
-                      <span className="ml-1 px-1.5 py-0.5 bg-gradient-to-r from-orange-500/30 to-orange-600/30 text-orange-200 rounded-full text-xs border border-orange-400/30">
-                        {offlineActionsCount}
-                      </span>
-                    )}
+                  {!isActuallyOnline && offlineActionsCount > 0 && (
+                    <span
+                      className={`ml-1 px-1.5 py-0.5 bg-gradient-to-r from-orange-500/30 to-orange-600/30 text-orange-200 rounded-full border border-orange-400/30 ${getTextSize(
+                        "xs"
+                      )}`}
+                    >
+                      {offlineActionsCount}
+                    </span>
+                  )}
                 </span>
               </div>
             </div>

@@ -35,48 +35,57 @@ export class PWAInstaller {
   }
 
   private setupInstallPrompt() {
-    // Prevent default browser install banners
-    window.addEventListener("beforeinstallprompt", (e) => {
-      // Prevent the mini-infobar from appearing on mobile
-      e.preventDefault();
-      // Stash the event so it can be triggered later
-      this.deferredPrompt = e as any;
-    });
+    // Listen for the beforeinstallprompt event
+    window.addEventListener(
+      "beforeinstallprompt",
+      (e) => {
+        // Prevent the mini-infobar from appearing on mobile
+        try {
+          e.preventDefault();
+        } catch (err) {
+          /* some browsers may throw if preventDefault is not allowed */
+        }
 
-    // Also try to prevent other browser install prompts
+        // Stash the event so it can be triggered later
+        this.deferredPrompt = e as any;
+        // Also expose on window as a fallback in case modules loaded in different orders
+        try {
+          (window as any).deferredInstallPrompt = e;
+        } catch (err) {
+          // ignore
+        }
+
+        console.log("Install prompt captured and ready", this.deferredPrompt);
+      },
+      true
+    );
+
+    // Listen for app installation
     window.addEventListener("appinstalled", () => {
       this.installed = true;
       this.deferredPrompt = null;
       console.log("PWA installed successfully");
     });
-
-    // Additional prevention for Chrome's install banner
-    if ("BeforeInstallPromptEvent" in window) {
-      document.addEventListener("DOMContentLoaded", () => {
-        // Hide any browser install prompts by default
-        const style = document.createElement("style");
-        style.innerHTML = `
-          @media (display-mode: browser) {
-            body::after {
-              content: none !important;
-            }
-          }
-        `;
-        document.head.appendChild(style);
-      });
-    }
   }
 
+
   async install(): Promise<boolean> {
-    if (!this.deferredPrompt) return false;
+    // Prefer the captured prompt on the instance, but fall back to a window-level prompt
+    const promptCandidate = this.deferredPrompt || (window as any).deferredInstallPrompt;
+    if (!promptCandidate) return false;
 
     try {
-      await this.deferredPrompt.prompt();
-      const { outcome } = await this.deferredPrompt.userChoice;
+      await promptCandidate.prompt();
+      const choice = await promptCandidate.userChoice;
+      const outcome = choice && choice.outcome ? choice.outcome : (choice as any);
 
       if (outcome === "accepted") {
         this.installed = true;
+        localStorage.setItem("pwa-installed", "true");
         this.deferredPrompt = null;
+        try {
+          (window as any).deferredInstallPrompt = null;
+        } catch (err) {}
         return true;
       }
     } catch (error) {
@@ -87,10 +96,21 @@ export class PWAInstaller {
   }
 
   canInstall(): boolean {
-    return !!this.deferredPrompt && !this.installed;
+    // Consider either the internal deferred prompt or the window fallback.
+    const hasPrompt = (!!this.deferredPrompt || !!(window as any).deferredInstallPrompt) && !this.installed;
+    console.log("canInstall check:", {
+      hasPrompt,
+      deferredPrompt: !!this.deferredPrompt,
+      installed: this.installed,
+    });
+    return hasPrompt;
   }
 
   isInstalled(): boolean {
+    // Check persistent install state
+    if (typeof window !== "undefined") {
+      if (localStorage.getItem("pwa-installed") === "true") return true;
+    }
     return this.installed || isPWA();
   }
 }

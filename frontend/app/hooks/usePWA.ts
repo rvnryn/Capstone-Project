@@ -87,9 +87,16 @@ export const usePWA = (): PWAHookReturn => {
       setIsInstalled(pwaInstaller.isInstalled());
     }, 1000);
 
+    // Listen for beforeinstallprompt to update canInstall immediately
+    const beforeInstallPromptHandler = () => {
+      setCanInstall(pwaInstaller.canInstall());
+    };
+    window.addEventListener("beforeinstallprompt", beforeInstallPromptHandler);
+
     return () => {
       networkStatus.removeListener(handleNetworkChange);
       clearInterval(installCheckInterval);
+      window.removeEventListener("beforeinstallprompt", beforeInstallPromptHandler);
     };
   }, []);
 
@@ -166,22 +173,29 @@ export const useInstallPrompt = () => {
   const [showPrompt, setShowPrompt] = useState(false);
 
   useEffect(() => {
-    // Show install prompt if can install and not dismissed
-    const dismissed = localStorage.getItem("pwa-install-dismissed") === "true";
-    setShowPrompt(canInstall && !isInstalled && !dismissed);
-  }, [canInstall, isInstalled]);
+    const checkPrompt = () => {
+      const dismissed = localStorage.getItem("pwa-install-dismissed") === "true";
+      const isPWAMode = typeof window !== "undefined" && window.matchMedia("(display-mode: standalone)").matches;
+      setShowPrompt(!dismissed && !isPWAMode && !isInstalled && canInstall);
+    };
+    checkPrompt();
+    // Listen for install state changes
+    const interval = setInterval(checkPrompt, 1000);
+    return () => clearInterval(interval);
+  }, [isInstalled, canInstall]);
 
   const handleInstall = useCallback(async () => {
     const success = await install();
     if (success) {
       setShowPrompt(false);
+      localStorage.setItem("pwa-install-dismissed", "true");
     }
     return success;
   }, [install]);
 
   const dismissPrompt = useCallback(() => {
-    setShowPrompt(false);
     localStorage.setItem("pwa-install-dismissed", "true");
+    setShowPrompt(false);
   }, []);
 
   return {

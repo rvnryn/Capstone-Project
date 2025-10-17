@@ -46,24 +46,40 @@ import {
 import { HiSparkles } from "react-icons/hi";
 import { GiBiohazard } from "react-icons/gi";
 
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/app/components/UI/tabs";
+
 export default function Dashboard() {
+  // Animation for Top Selling list transition
+  const [showList, setShowList] = useState(true);
+  // Period filter: daily, weekly, monthly (default: monthly)
+  const [filterType, setFilterType] = useState<"daily" | "weekly" | "monthly">(
+    "monthly"
+  );
+  const [topItemsCount, setTopItemsCount] = useState(5);
+  useEffect(() => {
+    setShowList(false);
+    const t = setTimeout(() => setShowList(true), 120);
+    return () => clearTimeout(t);
+  }, [filterType, topItemsCount]);
   // Ref to store last chart data for deep comparison
   const lastChartDataRef = useRef<any>(null);
   const topSalesCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [filterType, setFilterType] = useState<"daily" | "weekly" | "monthly">(
-    "daily"
-  );
-  const [topItemsCount, setTopItemsCount] = useState(5);
-  const [showHistoricalView, setShowHistoricalView] = useState(false);
+  // Removed showHistoricalView; always show Top Performers
 
-  // Use the combined analytics hook for better performance
-  const { prediction, historical, loading, error } = useSalesAnalytics(
+  // Use only historical analytics for Top Selling
+  // Map period to days
+  const periodDays =
+    filterType === "daily" ? 1 : filterType === "weekly" ? 7 : 30;
+  const { historical, loading, error } = useSalesAnalytics(
     filterType,
-    topItemsCount
+    topItemsCount,
+    periodDays // If your hook supports this, otherwise just filterType
   );
-  // Type guards for prediction/historical data
-  const predictionData: import("./hook/useSalesPrediction").SalesPrediction[] =
-    Array.isArray(prediction.data) ? prediction.data : [];
   const historicalData:
     | import("./hook/useSalesPrediction").HistoricalAnalysis
     | null =
@@ -178,396 +194,39 @@ export default function Dashboard() {
     setModalDate(null);
   };
 
-  // Interactive calendar section for custom holidays
-  useEffect(() => {
-    const topN = topItemsCount;
-    const filteredData = predictionData.slice(0, topN);
-
-    const chartDataString = JSON.stringify({ filteredData, filterType });
-    if (
-      loading ||
-      !filteredData.length ||
-      lastChartDataRef.current === chartDataString
-    ) {
-      // Skip if loading, no data, or data unchanged
-      return;
-    }
-    lastChartDataRef.current = chartDataString;
-
-    const canvas = topSalesCanvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    // Destroy existing chart before creating new one
-    const existingChart = Chart.getChart(canvas);
-    if (existingChart) {
-      existingChart.destroy();
-    }
-
-    let chart: Chart | null = null;
-
-    try {
-      // Chart type and style logic
-      let chartType: "bar" | "line" = "bar";
-      let datasetOptions: any = {};
-      if (filterType === "daily") {
-        chartType = "line";
-        datasetOptions = {
-          backgroundColor: (color: string) => color + "33",
-          borderColor: (color: string) => color,
-          borderWidth: 2,
-          tension: 0, // straight lines
-          fill: false,
-          pointRadius: 4,
-          pointHoverRadius: 7,
-          pointBorderWidth: 2,
-        };
-      } else if (filterType === "weekly") {
-        chartType = "bar";
-        datasetOptions = {
-          backgroundColor: (color: string) => color + "66",
-          borderWidth: 2,
-          tension: 0,
-          fill: false,
-          pointRadius: 0,
-          pointHoverRadius: 0,
-          pointBorderWidth: 0,
-          barPercentage: 0.7,
-          categoryPercentage: 0.7,
-        };
-      } else if (filterType === "monthly") {
-        chartType = "line";
-        datasetOptions = {
-          backgroundColor: (color: string) => color + "33",
-          borderWidth: 2,
-          tension: 0.5,
-          fill: { target: "origin", above: undefined }, // will set color below
-          pointRadius: 6,
-          pointHoverRadius: 10,
-          pointBorderWidth: 2,
-        };
-      }
-
-      // Ensure all datasets have the same labels and consistent data structure
-      let allLabels = filteredData[0]?.week ?? [];
-      // For daily, only show the last 7 dates (one week)
-      if (filterType === "daily" && allLabels.length > 7) {
-        allLabels = allLabels.slice(-7);
-      }
-      // For weekly, only show the last 4 weeks (about 1 month)
-      if (filterType === "weekly" && allLabels.length > 4) {
-        allLabels = allLabels.slice(-4);
-      }
-      // For monthly, only show the last 12 months (or less if not available)
-      if (filterType === "monthly" && allLabels.length > 12) {
-        allLabels = allLabels.slice(-12);
-      }
-
-      // Normalize datasets to ensure consistent data points
-      const normalizedDatasets = filteredData.map((trend) => {
-        // For daily, align sales data to last 7 days
-        let salesData = trend.sales;
-        if (filterType === "daily" && salesData.length > 7) {
-          salesData = salesData.slice(-7);
-        }
-        // For weekly, align sales data to last 4 weeks
-        if (filterType === "weekly" && salesData.length > 4) {
-          salesData = salesData.slice(-4);
-        }
-        // For monthly, align sales data to last 12 months
-        if (filterType === "monthly" && salesData.length > 12) {
-          salesData = salesData.slice(-12);
-        }
-        const normalizedSales = allLabels.map(
-          (_: string, index: number) => salesData[index] || 0
-        );
-        let base: any = {
-          label: trend.name,
-          data: normalizedSales,
-        };
-        if (filterType === "daily") {
-          base = {
-            ...base,
-            borderColor: datasetOptions.borderColor(trend.color),
-            backgroundColor: datasetOptions.backgroundColor(trend.color),
-            borderWidth: datasetOptions.borderWidth,
-            tension: datasetOptions.tension,
-            fill: datasetOptions.fill,
-            pointRadius: datasetOptions.pointRadius,
-            pointHoverRadius: datasetOptions.pointHoverRadius,
-            pointBackgroundColor: trend.color,
-            pointBorderColor: "#fff",
-            pointBorderWidth: datasetOptions.pointBorderWidth,
-          };
-        } else if (filterType === "weekly") {
-          base = {
-            ...base,
-            borderColor: trend.color,
-            backgroundColor: datasetOptions.backgroundColor(trend.color),
-            borderWidth: datasetOptions.borderWidth,
-            tension: datasetOptions.tension,
-            fill: datasetOptions.fill,
-            pointRadius: datasetOptions.pointRadius,
-            pointHoverRadius: datasetOptions.pointHoverRadius,
-            pointBackgroundColor: trend.color,
-            pointBorderColor: "#fff",
-            pointBorderWidth: datasetOptions.pointBorderWidth,
-            barPercentage: datasetOptions.barPercentage,
-            categoryPercentage: datasetOptions.categoryPercentage,
-          };
-        } else if (filterType === "monthly") {
-          base = {
-            ...base,
-            borderColor: trend.color,
-            backgroundColor: datasetOptions.backgroundColor(trend.color),
-            borderWidth: datasetOptions.borderWidth,
-            tension: datasetOptions.tension,
-            fill: { target: "origin", above: trend.color + "20" },
-            pointRadius: datasetOptions.pointRadius,
-            pointHoverRadius: datasetOptions.pointHoverRadius,
-            pointBackgroundColor: trend.color,
-            pointBorderColor: "#fff",
-            pointBorderWidth: datasetOptions.pointBorderWidth,
-          };
-        }
-        return base;
-      });
-
-      chart = new Chart(canvas, {
-        type: chartType,
-        data: {
-          labels: allLabels,
-          datasets: normalizedDatasets,
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          layout: {
-            padding: {
-              left: 0,
-              right: 0,
-              top: 0,
-              bottom: 0,
-            },
-          },
-          // Ensure consistent data alignment
-          skipNull: false,
-          spanGaps: false,
-          elements: {
-            bar: {
-              borderWidth: 2,
-            },
-          },
-          interaction: {
-            intersect: false,
-            mode: "index",
-          },
-          plugins: {
-            title: {
-              display: false,
-            },
-            legend: {
-              display: true,
-              position: "top",
-              align: "start",
-              maxHeight: 120,
-              labels: {
-                color: "#fff",
-                font: { size: 11, weight: 500 },
-                padding: 8,
-                usePointStyle: true,
-                pointStyle: "circle",
-                boxWidth: 10,
-                boxHeight: 10,
-                textAlign: "left",
-                generateLabels: function (chart: any) {
-                  const original =
-                    Chart.defaults.plugins.legend.labels.generateLabels;
-                  const labels = original.call(this, chart);
-
-                  const truncatedLabels = labels.map((label: any) => {
-                    if (label.text && label.text.length > 35) {
-                      label.text = label.text.substring(0, 32) + "...";
-                    }
-                    return label;
-                  });
-
-                  return truncatedLabels;
-                },
-              },
-            },
-            tooltip: {
-              backgroundColor: "rgba(0,0,0,0.95)",
-              titleFont: { size: 14, weight: 600 },
-              bodyFont: { size: 12 },
-              padding: 15,
-              cornerRadius: 10,
-              displayColors: true,
-              usePointStyle: true,
-              borderColor: "#fbbf24",
-              borderWidth: 2,
-              multiKeyBackground: "rgba(0,0,0,0.8)",
-              filter: function (tooltipItem: any) {
-                // Only show tooltip items that have sales > 0
-                return tooltipItem.parsed.y > 0;
-              },
-              callbacks: {
-                title: function (context: any) {
-                  return context[0].label || "";
-                },
-                label: function (context: any) {
-                  // Show full dataset label (menu item name) in tooltip
-                  const label = context.dataset.label || "";
-                  const value = context.parsed.y;
-                  return `${label}: ${value} sales`;
-                },
-                afterLabel: function (context: any) {
-                  // Calculate percentage only from items with sales > 0
-                  const dataIndex = context.dataIndex;
-                  const total = context.chart.data.datasets.reduce(
-                    (sum: number, dataset: any) => {
-                      const value = dataset.data[dataIndex] || 0;
-                      return sum + (value > 0 ? value : 0);
-                    },
-                    0
-                  );
-                  if (total > 0 && context.parsed.y > 0) {
-                    const percentage = (
-                      (context.parsed.y / total) *
-                      100
-                    ).toFixed(1);
-                    return `${percentage}% of total`;
-                  }
-                  return "";
-                },
-              },
-            },
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: {
-                color: "#374151",
-                lineWidth: 1,
-                display: true,
-              },
-              ticks: {
-                color: "#d1d5db",
-                font: { size: 11 },
-                padding: 4,
-              },
-              border: { display: false },
-            },
-            x: {
-              type: "category",
-              grid: {
-                display: false,
-              },
-              ticks: {
-                color: "#d1d5db",
-                font: { size: 11 },
-                padding: 4,
-                maxRotation: 0,
-                minRotation: 0,
-              },
-              border: { display: false },
-            },
-          },
-          animation: {
-            duration: 800,
-            easing: "easeInOutQuart",
-          },
-        },
-      });
-    } catch (error) {
-      console.error("Chart creation failed:", error);
-    }
-
-    const handleResize = () => {
-      if (chart) {
-        try {
-          chart.resize();
-        } catch (error) {
-          console.error("Chart resize failed:", error);
-        }
-      }
-    };
-
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      if (chart) {
-        try {
-          chart.destroy();
-        } catch (error) {
-          console.error("Chart destroy failed:", error);
-        }
-      }
-    };
-  }, [prediction.data, loading, filterType, topItemsCount]);
-
   type InventoryItem = {
     item_id: string | number;
     [key: string]: any;
   };
 
-  const renderFilterButtons = () => (
-    <div className="w-full sm:w-auto">
-      {/* First row: Time period buttons */}
-      <div className="flex flex-wrap gap-1 sm:gap-2 mb-2 sm:mb-0">
-        {["daily", "weekly", "monthly"].map((type) => (
-          <button
-            key={type}
-            onClick={() =>
-              setFilterType(type as "daily" | "weekly" | "monthly")
-            }
-            className={`text-xs sm:text-sm font-semibold px-2 xs:px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-all duration-200 flex-1 sm:flex-none min-w-0 ${
-              filterType === type
-                ? "bg-yellow-400 text-black shadow-lg shadow-yellow-400/30"
-                : "text-gray-300 hover:text-white hover:bg-gray-700/50 border border-gray-600"
-            }`}
-          >
-            {type.charAt(0).toUpperCase() + type.slice(1)}
-          </button>
-        ))}
-      </div>
-
-      {/* Second row: Controls */}
-      <div className="flex flex-wrap mt-5 items-center gap-2 sm:gap-3 justify-between sm:justify-start">
-        <div className="flex items-center gap-2">
-          <label className="text-gray-300 text-xs sm:text-sm whitespace-nowrap">
-            Items:
-          </label>
-          <select
-            value={topItemsCount}
-            onChange={(e) => setTopItemsCount(Number(e.target.value))}
-            className="bg-gray-700 text-white text-xs sm:text-sm px-2 py-1 rounded border border-gray-600 focus:border-yellow-400 focus:outline-none min-w-0"
-          >
-            <option value={3}>Top 3</option>
-            <option value={5}>Top 5</option>
-            <option value={10}>Top 10</option>
-          </select>
-        </div>
-
-        <button
-          onClick={() => setShowHistoricalView(!showHistoricalView)}
-          className={`text-xs sm:text-sm font-semibold px-2 xs:px-3 py-1.5 rounded-lg transition-all duration-200 whitespace-nowrap ${
-            showHistoricalView
-              ? "bg-blue-500 text-white"
-              : "text-gray-300 hover:text-white border border-gray-600"
-          }`}
-        >
-          <MdInsights className="inline mr-1" />
-          <span className="hidden xs:inline">
-            {showHistoricalView ? "Hide" : "Show"}
-          </span>
-          <span className="xs:hidden">
-            {showHistoricalView ? "Hide Top Performers" : "Show Top Performers"}
-          </span>
-        </button>
-      </div>
+  const renderTopItemsCountSelector = () => (
+    <div className="flex flex-wrap items-center gap-2">
+      <label className="text-gray-300 text-xs sm:text-sm whitespace-nowrap">
+        Items:
+      </label>
+      <select
+        value={topItemsCount}
+        onChange={(e) => setTopItemsCount(Number(e.target.value))}
+        className="bg-gray-700 text-white text-xs sm:text-sm px-2 py-1 rounded border border-gray-600 focus:border-yellow-400 focus:outline-none min-w-0"
+      >
+        <option value={3}>Top 3</option>
+        <option value={5}>Top 5</option>
+        <option value={10}>Top 10</option>
+      </select>
+      <label className="text-gray-300 text-xs sm:text-sm ml-2 whitespace-nowrap">
+        Period:
+      </label>
+      <select
+        value={filterType}
+        onChange={(e) =>
+          setFilterType(e.target.value as "daily" | "weekly" | "monthly")
+        }
+        className="bg-gray-700 text-white text-xs sm:text-sm px-2 py-1 rounded border border-gray-600 focus:border-yellow-400 focus:outline-none min-w-0 transition-all duration-200"
+      >
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
     </div>
   );
 
@@ -582,55 +241,105 @@ export default function Dashboard() {
     }
   };
 
-  const renderHistoricalInsights = () => {
-    if (!showHistoricalView || !historicalData) return null;
+  // --- Sales Forecast Chart (Original UI, Chart.js, prediction data) ---
+  const [forecastChartReady, setForecastChartReady] = useState(false);
+  const forecastCanvasRef = useRef<HTMLCanvasElement>(null);
+  // Use prediction data for sales forecast
+  const { data: prediction, loading: predictionLoading } = useSalesPrediction(
+    filterType,
+    topItemsCount
+  );
 
-    // Determine how many top performers to show based on topItemsCount
+  useEffect(() => {
+    if (!prediction || !prediction.data || !forecastCanvasRef.current) return;
+    const chartData = prediction.data;
+    const canvas = forecastCanvasRef.current;
+    // Destroy existing chart before creating new one
+    const existingChart = Chart.getChart(canvas);
+    if (existingChart) existingChart.destroy();
+    let chart: Chart | null = null;
+    try {
+      chart = new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: chartData.labels,
+          datasets: chartData.datasets,
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true },
+            tooltip: { enabled: true },
+          },
+          scales: {
+            y: { beginAtZero: true },
+            x: {},
+          },
+        },
+      });
+      setForecastChartReady(true);
+    } catch (err) {
+      setForecastChartReady(false);
+    }
+    return () => {
+      if (chart) chart.destroy();
+    };
+  }, [prediction, filterType, topItemsCount]);
+
+  // Render Top Selling Items from historical analytics
+  const renderTopSelling = (showList: boolean) => {
+    if (!historicalData) return null;
     const count = topItemsCount;
     const performers = historicalData.top_performers.by_total_sales;
-
+    // Period label for UI
+    const periodLabel =
+      filterType === "daily"
+        ? "daily"
+        : filterType === "weekly"
+        ? "weekly"
+        : "monthly";
     return (
       <section className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 rounded-xl p-4 mb-6 border border-blue-500/30">
-        <header className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-blue-500/20 rounded-lg">
-            <FaChartBar className="text-yellow-400 text-xl" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-blue-300">Top Performers</h3>
-          </div>
-        </header>
         <div className="bg-black/40 rounded-lg p-3">
-          <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
-            <FaChartBar className="text-yellow-400" />
-            Top Performers
-          </h4>
-          <div className="space-y-2">
-            {performers.slice(0, count).map(
-              (
-                item: {
-                  item: string;
-                  total_sales: number;
-                  avg_sales: number;
-                  frequency: number;
-                },
-                idx: number
-              ) => (
+          <div className="mb-2">
+            <span className="text-xs text-blue-200">
+              Based on{" "}
+              <span className="font-semibold text-blue-100">{periodLabel}</span>{" "}
+              historical analytics.
+            </span>
+          </div>
+          <div
+            className={`space-y-2 transition-opacity duration-200 ${
+              showList ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            {performers.slice(0, count).map((item: any, idx: number) => {
+              // Calculate total and average for the selected period
+              const total = item.total_sales;
+              const avg = item.avg_sales;
+              let avgLabel = "Avg";
+              if (filterType === "daily") avgLabel = "Avg/day";
+              else if (filterType === "weekly") avgLabel = "Avg/week";
+              else if (filterType === "monthly") avgLabel = "Avg/month";
+              return (
                 <div
                   key={item.item}
                   className="flex justify-between items-center text-sm"
                 >
-                  <span className="text-gray-300 truncate">{item.item}</span>
+                  <span className="text-gray-300 truncate flex items-center gap-2">
+                    <span className="font-bold text-blue-300">{idx + 1}.</span>
+                    {item.item}
+                  </span>
                   <div className="text-right">
-                    <div className="text-white font-medium">
-                      {item.total_sales}
-                    </div>
+                    <div className="text-white font-medium">{total}</div>
                     <div className="text-gray-400 text-xs">
-                      Avg: {item.avg_sales}
+                      {avgLabel}: {avg}
                     </div>
                   </div>
                 </div>
-              )
-            )}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -669,7 +378,6 @@ export default function Dashboard() {
   console.log("Dashboard State:", {
     loading,
     isOnline,
-    salesDataLength: prediction.data.length,
     historicalData: historical.data ? "loaded" : "none",
     lowStockCount: lowStock.data?.length,
     expiringCount: expiring.data?.length,
@@ -874,641 +582,878 @@ export default function Dashboard() {
         >
           <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
             {/* Dashboard Header */}
-            <header className="mb-6 sm:mb-8">
-              <div className="flex flex-row items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
-                <div className="p-2.5 sm:p-3 bg-black rounded-full shadow-lg">
-                  <MdDashboard className="text-2xl sm:text-2xl lg:text-3xl xl:text-3xl text-yellow-400" />
-                </div>
-                <h1 className="text-3xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-4xl font-bold text-black font-poppins leading-tight">
-                  Dashboard
-                </h1>
-                <HiSparkles className="text-black text-xl sm:text-2xl lg:text-3xl animate-pulse" />
-
-                {/* Sync Button */}
-                <div className="ml-auto hidden sm:block">
-                  <SyncButton
-                    onSync={() => window.location.reload()}
-                    isLoading={false}
-                    className="text-sm"
-                  />
+            <header className="flex flex-wrap justify-between items-center mb-6">
+              <div className="flex items-center gap-3">
+                <MdDashboard className="text-black text-3xl" />
+                <div>
+                  <h1 className="text-3xl font-bold text-black">Dashboard</h1>
+                  <p className="text-black text-sm">
+                    Restaurant Operations Overview
+                  </p>
                 </div>
               </div>
-
-              <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Offline Data Banner */}
-                {inventoryFromCache && (
-                  <OfflineDataBanner
-                    dataType="dashboard and inventory"
-                    isFromCache={inventoryFromCache}
-                  />
-                )}
-                <OfflineCard
-                  isFromCache={inventoryFromCache}
-                  lastUpdated={
-                    lastDataUpdate ? String(lastDataUpdate) : undefined
-                  }
-                  dataType="inventory"
-                >
-                  <StatCard
-                    icon={
-                      <FaClock className="text-red-400 text-lg sm:text-xl" />
-                    }
-                    title="Expired Items"
-                    count={expiredItem.length}
-                    color="border-l-red-500"
-                    bgColor="bg-black/75"
-                  />
-                </OfflineCard>
-
-                <OfflineCard
-                  isFromCache={inventoryFromCache}
-                  lastUpdated={
-                    lastDataUpdate ? String(lastDataUpdate) : undefined
-                  }
-                  dataType="inventory"
-                >
-                  <StatCard
-                    icon={
-                      <FaClock className="text-amber-400 text-lg sm:text-xl" />
-                    }
-                    title="Expiring Soon"
-                    count={expiringIngredients.length}
-                    color="border-l-amber-500"
-                    bgColor="bg-black/75"
-                  />
-                </OfflineCard>
-
-                <OfflineCard
-                  isFromCache={inventoryFromCache}
-                  lastUpdated={
-                    lastDataUpdate ? String(lastDataUpdate) : undefined
-                  }
-                  dataType="inventory"
-                >
-                  <StatCard
-                    icon={
-                      <GiBiohazard className="text-pink-400 text-lg sm:text-xl" />
-                    }
-                    title="Spoilage"
-                    count={spoilage?.data?.length ?? 0}
-                    color="border-l-pink-500"
-                    bgColor="bg-black/75"
-                  />
-                </OfflineCard>
-
-                <OfflineCard
-                  isFromCache={inventoryFromCache}
-                  lastUpdated={
-                    lastDataUpdate ? String(lastDataUpdate) : undefined
-                  }
-                  dataType="inventory"
-                >
-                  <StatCard
-                    icon={
-                      <FaExclamationTriangle className="text-yellow-400 text-lg sm:text-xl" />
-                    }
-                    title="Low Stock Items"
-                    count={lowStockIngredients.length}
-                    color="border-l-yellow-500"
-                    bgColor="bg-black/75"
-                  />
-                </OfflineCard>
-
-                <OfflineCard
-                  isFromCache={inventoryFromCache}
-                  lastUpdated={
-                    lastDataUpdate ? String(lastDataUpdate) : undefined
-                  }
-                  dataType="inventory"
-                >
-                  <StatCard
-                    icon={
-                      <FaWarehouse className="text-green-400 text-lg sm:text-xl" />
-                    }
-                    title="Surplus Items"
-                    count={surplus.data?.length ?? 0}
-                    color="border-l-green-500"
-                    bgColor="bg-black/75"
-                  />
-                </OfflineCard>
-
-                <OfflineCard
-                  isFromCache={inventoryFromCache}
-                  lastUpdated={
-                    lastDataUpdate ? String(lastDataUpdate) : undefined
-                  }
-                  dataType="inventory"
-                >
-                  <StatCard
-                    icon={
-                      <FaBoxes className="text-orange-400 text-lg sm:text-xl" />
-                    }
-                    title="Out of Stock"
-                    count={outOfStockItems.length}
-                    color="border-l-orange-500"
-                    bgColor="bg-black/75"
-                  />
-                </OfflineCard>
-              </section>
+              <SyncButton
+                onSync={() => window.location.reload()}
+                isLoading={false}
+              />
             </header>
 
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">
-              <section className="xl:col-span-8 flex flex-col gap-4 sm:gap-6">
-                {/* Chart Card: Top Selling Items */}
-                <section
-                  aria-label="Sales Analytics"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-gray-400"
-                >
-                  <header className="mb-3 sm:mb-4 lg:mb-6">
-                    <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                      <div className="p-1.5 sm:p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
-                        <FaChartLine className="text-yellow-400 text-lg sm:text-xl" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h2 className="text-lg sm:text-xl font-bold text-white">
-                          Top Selling Items
-                        </h2>
-                        <p className="text-gray-400 text-xs sm:text-sm">
-                          View sales trends for your top selling items. Analyze
-                          performance by day, week, or month to identify
-                          bestsellers and optimize inventory.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="w-full">{renderFilterButtons()}</div>
-                  </header>
-                  <div className="w-full h-56 xs:h-64 sm:h-72 md:h-80 lg:h-88 xl:h-[28rem] bg-gray-900/50 rounded-xl border border-gray-700">
-                    {loading ? (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="animate-pulse text-center">
-                          <div className="w-12 sm:w-16 h-12 sm:h-16 bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto">
-                            <MdTrendingUp className="text-yellow-400 text-xl sm:text-2xl animate-bounce" />
-                          </div>
-                          <p className="text-gray-400 text-center mt-3 sm:mt-4 text-sm">
-                            Loading historical sales data...
-                          </p>
-                        </div>
-                      </div>
-                    ) : error ? (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="text-center text-red-400">
-                          <p className="text-lg font-semibold">
-                            Failed to load chart
-                          </p>
-                          <p className="text-sm mt-2">{String(error)}</p>
-                        </div>
-                      </div>
-                    ) : !predictionData.length ? (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="text-center text-gray-400">
-                          <p className="text-lg font-semibold">
-                            No sales data available
-                          </p>
-                          <p className="text-sm mt-2">
-                            Try changing the date range or check back later.
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <canvas
-                        ref={topSalesCanvasRef}
-                        className="w-full h-full "
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className="bg-black">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="inventory">Inventory</TabsTrigger>
+                <TabsTrigger value="expired">Expiry</TabsTrigger>
+                <TabsTrigger value="calendar">Calendar</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="overview">
+                <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                    {/* Offline Data Banner */}
+                    {inventoryFromCache && (
+                      <OfflineDataBanner
+                        dataType="dashboard and inventory"
+                        isFromCache={inventoryFromCache}
                       />
                     )}
-                  </div>
-                  <div className="mt-6">{renderHistoricalInsights()}</div>
-                </section>
+                    <OfflineCard
+                      isFromCache={inventoryFromCache}
+                      lastUpdated={
+                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                      }
+                      dataType="inventory"
+                    >
+                      <StatCard
+                        icon={
+                          <FaClock className="text-red-400 text-lg sm:text-xl" />
+                        }
+                        title="Expired Items"
+                        count={expiredItem.length}
+                        color="border-l-red-500"
+                        bgColor="bg-black/75"
+                      />
+                    </OfflineCard>
 
-                <section
-                  aria-label="ML Sales Forecast"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl 
-             p-4 sm:p-6 flex flex-col"
-                >
-                  s{/* Header */}
-                  <header className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-start sm:items-center gap-3">
-                      <div className="p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
-                        <FaChartLine className="text-yellow-400 text-lg sm:text-xl" />
+                    <OfflineCard
+                      isFromCache={inventoryFromCache}
+                      lastUpdated={
+                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                      }
+                      dataType="inventory"
+                    >
+                      <StatCard
+                        icon={
+                          <FaClock className="text-amber-400 text-lg sm:text-xl" />
+                        }
+                        title="Expiring Soon"
+                        count={expiringIngredients.length}
+                        color="border-l-amber-500"
+                        bgColor="bg-black/75"
+                      />
+                    </OfflineCard>
+
+                    <OfflineCard
+                      isFromCache={inventoryFromCache}
+                      lastUpdated={
+                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                      }
+                      dataType="inventory"
+                    >
+                      <StatCard
+                        icon={
+                          <GiBiohazard className="text-pink-400 text-lg sm:text-xl" />
+                        }
+                        title="Spoilage"
+                        count={spoilage?.data?.length ?? 0}
+                        color="border-l-pink-500"
+                        bgColor="bg-black/75"
+                      />
+                    </OfflineCard>
+
+                    <OfflineCard
+                      isFromCache={inventoryFromCache}
+                      lastUpdated={
+                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                      }
+                      dataType="inventory"
+                    >
+                      <StatCard
+                        icon={
+                          <FaExclamationTriangle className="text-orange-400 text-lg sm:text-xl" />
+                        }
+                        title="Out of Stock Items"
+                        count={outOfStockItems.length}
+                        color="border-l-orange-500"
+                        bgColor="bg-black/75"
+                      />
+                    </OfflineCard>
+
+                    <OfflineCard
+                      isFromCache={inventoryFromCache}
+                      lastUpdated={
+                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                      }
+                      dataType="inventory"
+                    >
+                      <StatCard
+                        icon={
+                          <FaExclamationTriangle className="text-yellow-400 text-lg sm:text-xl" />
+                        }
+                        title="Low Stock Items"
+                        count={lowStockIngredients.length}
+                        color="border-l-yellow-500"
+                        bgColor="bg-black/75"
+                      />
+                    </OfflineCard>
+
+                    <OfflineCard
+                      isFromCache={inventoryFromCache}
+                      lastUpdated={
+                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                      }
+                      dataType="inventory"
+                    >
+                      <StatCard
+                        icon={
+                          <FaExclamationTriangle className="text-green-400 text-lg sm:text-xl" />
+                        }
+                        title="Surplus Items"
+                        count={surplus.data?.length ?? 0}
+                        color="border-l-green-500"
+                        bgColor="bg-black/75"
+                      />
+                    </OfflineCard>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <section
+                      aria-label="Top Selling Items"
+                      className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-5 border border-gray-400"
+                      style={{
+                        minHeight: "220px",
+                      }}
+                    >
+                      <header className="mb-2 sm:mb-3 lg:mb-4">
+                        {/* reduced margin-bottoms */}
+                        <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                          {/* reduced mb */}
+                          <div className="p-1.5 sm:p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
+                            <FaChartBar className="text-yellow-400 text-lg sm:text-xl" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h2 className="text-lg sm:text-xl font-bold text-white">
+                              Top Selling Items
+                            </h2>
+                            <p className="text-gray-400 text-xs sm:text-sm">
+                              Based on historical analytics
+                            </p>
+                          </div>
+                          <button
+                            onClick={() =>
+                              (window.location.href =
+                                "/Features/Report/Report_Sales")
+                            }
+                            className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black 
+                      font-semibold text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-lg shadow 
+                      transition-all duration-200 w-full sm:w-auto justify-center"
+                            title="Go to Sales Report"
+                          >
+                            <FaChartBar className="text-sm" />
+                            View Full Report
+                          </button>
+                        </div>
+                        <div className="w-full">
+                          {renderTopItemsCountSelector()}
+                        </div>
+                      </header>
+                      <div className="mt-4">{renderTopSelling(showList)}</div>
+                      {/* reduced mt */}
+                    </section>
+
+                    {/* Left: ML Sales Forecast Chart */}
+                    <section
+                      aria-label="ML Sales Forecast"
+                      className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl 
+                  p-4 sm:p-6 flex flex-col"
+                    >
+                      {/* Header */}
+                      <header className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-start sm:items-center gap-3">
+                          <div className="p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
+                            <FaChartLine className="text-yellow-400 text-lg sm:text-xl" />
+                          </div>
+                          <div>
+                            <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                              Sales Forecast
+                              <span className="relative group cursor-help">
+                                <AiOutlineInfoCircle
+                                  size={18}
+                                  className="text-yellow-400"
+                                  aria-label="Forecast info"
+                                  tabIndex={0}
+                                />
+                                <span
+                                  role="tooltip"
+                                  className="absolute left-6 top-1/2 -translate-y-1/2 z-20 w-max min-w-[200px] sm:min-w-[240px] 
+                              bg-black/90 text-yellow-100 text-xs rounded-lg px-3 py-2 shadow-lg border border-yellow-500 
+                              opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 
+                              pointer-events-none transition-opacity duration-200"
+                                >
+                                  Forecasts are estimates only and may not be
+                                  100% accurate.
+                                </span>
+                              </span>
+                            </h2>
+                            <p className="text-gray-400 text-xs sm:text-sm mt-0.5">
+                              Compare actual sales with machine learning
+                              predictions for each week. Highlighted weeks
+                              indicate official or custom holidays.
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() =>
+                            (window.location.href =
+                              "/Features/Report/Report_Sales")
+                          }
+                          className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black 
+                      font-semibold text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-lg shadow 
+                      transition-all duration-200 w-full sm:w-auto justify-center"
+                          title="Go to Sales Report"
+                        >
+                          <FaChartLine className="text-sm" />
+                          View Full Report
+                        </button>
+                      </header>
+                      {/* Chart Area */}
+                      <div
+                        className="w-full relative aspect-[2/1] xs:aspect-[2.2/1] sm:aspect-[2.5/1] 
+                    md:aspect-[2.8/1] lg:aspect-[3/1] xl:aspect-[3.5/1] flex items-center justify-center p-3"
+                      >
+                        <div className="w-full h-full min-h-[200px] flex items-center justify-center">
+                          <MLForecastChart />
+                        </div>
+                      </div>
+                      {/* Legend */}
+                      <div className="flex flex-wrap justify-center gap-4 mt-4 text-xs">
+                        <span className="flex items-center gap-1 text-blue-300">
+                          <span className="inline-block w-3 h-3 rounded-full bg-blue-400" />
+                          Official Holiday
+                        </span>
+                        <span className="flex items-center gap-1 text-pink-300">
+                          <span className="inline-block w-3 h-3 rounded-full bg-pink-400" />
+                          Custom Holiday
+                        </span>
+                      </div>
+                    </section>
+                    {/* Right: (empty for now, or add more content here if needed) */}
+                    <div />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="inventory">
+                <div>
+                  {/* Low stock, out of stock, surplus, spoilage */}
+                  <section
+                    aria-label="Spoilage List"
+                    className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-pink-400 mb-4"
+                  >
+                    <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                      <div className="p-1.5 sm:p-2 bg-pink-700/30 rounded-lg">
+                        <GiBiohazard className="text-pink-300 text-base sm:text-lg" />
                       </div>
                       <div>
-                        <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-                          Sales Forecast
-                          <span className="relative group cursor-help">
-                            <AiOutlineInfoCircle
-                              size={18}
-                              className="text-yellow-400"
-                              aria-label="Forecast info"
-                              tabIndex={0}
-                            />
-                            <span
-                              role="tooltip"
-                              className="absolute left-6 top-1/2 -translate-y-1/2 z-20 w-max min-w-[200px] sm:min-w-[240px] 
-                         bg-black/90 text-yellow-100 text-xs rounded-lg px-3 py-2 shadow-lg border border-yellow-500 
-                         opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 
-                         pointer-events-none transition-opacity duration-200"
-                            >
-                              Forecasts are estimates only and may not be 100%
-                              accurate.
-                            </span>
-                          </span>
+                        <h2 className="text-base sm:text-lg font-bold text-pink-200">
+                          Spoilage
                         </h2>
-                        <p className="text-gray-400 text-xs sm:text-sm mt-0.5">
-                          Compare actual sales with machine learning predictions
-                          for each week. Highlighted weeks indicate official or
-                          custom holidays.
+                        <p className="text-pink-400 text-xs">
+                          Items listed here have been marked as spoiled or
+                          wasted due to damage, contamination, or expiration.
+                          Review and address these records to minimize future
+                          losses.
                         </p>
                       </div>
-                    </div>
-
-                    <button
-                      onClick={() =>
-                        (window.location.href = "/Features/Report/Report_Sales")
-                      }
-                      className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black 
-                 font-semibold text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-lg shadow 
-                 transition-all duration-200 w-full sm:w-auto justify-center"
-                      title="Go to Sales Report"
-                    >
-                      <FaChartLine className="text-sm" />
-                      View Full Report
-                    </button>
-                  </header>
-                  {/* Chart Area */}
-                  <div
-                    className="w-full relative aspect-[2/1] xs:aspect-[2.2/1] sm:aspect-[2.5/1] 
-               md:aspect-[2.8/1] lg:aspect-[3/1] xl:aspect-[3.5/1] flex items-center justify-center p-3"
-                  >
-                    <div className="w-full h-full min-h-[200px] flex items-center justify-center">
-                      <MLForecastChart />
-                    </div>
-                  </div>
-                  {/* Legend */}
-                  <div className="flex flex-wrap justify-center gap-4 mt-4 text-xs">
-                    <span className="flex items-center gap-1 text-blue-300">
-                      <span className="inline-block w-3 h-3 rounded-full bg-blue-400" />
-                      Official Holiday
-                    </span>
-                    <span className="flex items-center gap-1 text-pink-300">
-                      <span className="inline-block w-3 h-3 rounded-full bg-pink-400" />
-                      Custom Holiday
-                    </span>
-                  </div>
-                </section>
-
-                {/* Expired Ingredients Table */}
-                <section
-                  aria-label="Expired Ingredients"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-pink-600/60"
-                >
-                  <header className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
-                    <div className="p-1.5 sm:p-2 bg-red-700/30 rounded-lg">
-                      <MdWarning className="text-red-400 text-lg sm:text-xl" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-red-500">
-                        Expired Stock
-                      </h2>
-                      <p className="text-pink-200 text-xs sm:text-sm">
-                        These items have passed their expiration date and should
-                        be discarded or removed from inventory immediately.
-                      </p>
-                    </div>
-                  </header>
-                  <div className="overflow-x-auto rounded-lg">
-                    <table className="min-w-full text-xs sm:text-sm">
-                      <thead>
-                        <tr className="bg-pink-900/40 border-b border-red-600/40">
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-400">
-                            Id
-                          </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-400">
-                            Name
-                          </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-400 hidden sm:table-cell">
-                            Category
-                          </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-400">
-                            Stock
-                          </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-400 hidden md:table-cell">
-                            Batch Date
-                          </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-400">
-                            Expired
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {!expired.data || expired.data.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={6}
-                              className="py-6 sm:py-8 px-4 text-center text-red-300"
+                    </header>
+                    <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
+                      {!spoilage?.data || spoilage.data.length === 0 ? (
+                        <div className="text-center py-3 sm:py-4">
+                          <GiBiohazard className="text-pink-500 text-lg sm:text-xl mx-auto mb-2" />
+                          <p className="text-pink-400 text-xs sm:text-sm">
+                            No spoilage records
+                          </p>
+                        </div>
+                      ) : (
+                        spoilage.data.map(
+                          (
+                            item: {
+                              id?: string | number;
+                              item_name?: string;
+                              quantity_spoiled?: number;
+                              reason?: string;
+                              spoilage_date?: string;
+                            },
+                            idx: number
+                          ) => (
+                            <div
+                              key={item.id || `${item.item_name}-${idx}`}
+                              className="bg-pink-700/10 border border-pink-700/20 rounded-lg p-2 sm:p-3 hover:bg-pink-700/15 transition-colors duration-200"
                             >
-                              <div className="flex flex-col items-center justify-center gap-2 w-full">
-                                <MdWarning className="text-red-400 text-xl sm:text-2xl" />
-                                <p className="text-sm">
-                                  No expired ingredients found
-                                </p>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          expired.data?.map(
-                            (
-                              item: {
-                                id?: string | number;
-                                item_id?: string | number;
-                                item_name?: string;
-                                stock_quantity?: number;
-                                expiration_date?: string;
-                                category?: string;
-                                batch_date?: string;
-                              },
-                              idx: number
-                            ) => (
-                              <tr
-                                key={
-                                  item.id ||
-                                  `${item.item_name}-${item.expiration_date}-${idx}`
-                                }
-                                className="border-b border-pink-900/40 hover:bg-pink-900/10 transition-colors duration-200"
-                              >
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
-                                  <div className="truncate max-w-[120px] sm:max-w-none">
-                                    {item.item_id}
-                                  </div>
-                                </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
-                                  <div className="truncate max-w-[120px] sm:max-w-none">
+                              <div className="flex justify-between items-center">
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-semibold text-pink-200 truncate">
                                     {item.item_name}
                                   </div>
-                                </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-red-200 hidden sm:table-cell">
-                                  {item.category || "N/A"}
-                                </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
-                                  <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red-700/30 text-red-200 rounded-full text-xs font-medium">
-                                    {item.stock_quantity}
-                                  </span>
-                                </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-red-200 hidden md:table-cell">
-                                  {item.batch_date
-                                    ? new Date(
-                                        item.batch_date
-                                      ).toLocaleDateString("en-US", {
-                                        month: "short",
-                                        day: "numeric",
-                                        year: "numeric",
-                                      })
-                                    : "N/A"}
-                                </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-red-200">
-                                  <div className="text-xs">
-                                    {item.expiration_date
-                                      ? new Date(
-                                          item.expiration_date
-                                        ).toLocaleDateString("en-US", {
-                                          month: "short",
-                                          day: "numeric",
-                                          year:
-                                            window.innerWidth < 640
-                                              ? undefined
-                                              : "numeric",
-                                        })
-                                      : "N/A"}
+                                  <div className="text-xs text-pink-300">
+                                    Qty: {item.quantity_spoiled}
+                                    {item.reason && (
+                                      <span className="ml-2 text-pink-400">
+                                        ({item.reason})
+                                      </span>
+                                    )}
                                   </div>
-                                </td>
-                              </tr>
-                            )
-                          )
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-
-                {/* Expiring Ingredients Table */}
-                <section
-                  aria-label="Expiring Ingredients"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-amber-700"
-                >
-                  <header className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
-                    <div className="p-1.5 sm:p-2 bg-amber-700/30 rounded-lg">
-                      <FaClock className="text-amber-400 text-lg sm:text-xl" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-amber-400">
-                        Expiring Soon
-                      </h2>
-                      <p className="text-amber-200 text-xs sm:text-sm">
-                        These items are approaching their expiration date and
-                        should be used or restocked soon to prevent waste.
-                      </p>
-                    </div>
-                  </header>
-                  <div className="overflow-x-auto rounded-lg">
-                    <table className="min-w-full text-xs sm:text-sm">
-                      <thead>
-                        <tr className="bg-amber-900/40 border-b border-amber-500/40">
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300">
-                            Id
-                          </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300">
-                            Name
-                          </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300 hidden sm:table-cell">
-                            Category
-                          </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300">
-                            Stock
-                          </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300 hidden md:table-cell">
-                            Batch Date
-                          </th>
-                          <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300">
-                            Expires
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {!expiring.data || expiring.data.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={6}
-                              className="py-6 sm:py-8 px-4 text-center text-amber-200"
-                            >
-                              <div className="flex flex-col items-center justify-center gap-2 w-full">
-                                <FaClock className="text-amber-400 text-xl sm:text-2xl" />
-                                <p className="text-sm">
-                                  No expiring ingredients found
-                                </p>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          expiring.data?.map(
-                            (
-                              item: {
-                                id?: string | number;
-                                item_id?: string | number;
-                                item_name?: string;
-                                stock_quantity?: number;
-                                expiration_date?: string;
-                                category?: string;
-                                batch_date?: string;
-                              },
-                              idx: number
-                            ) => (
-                              <tr
-                                key={
-                                  item.id ||
-                                  `${item.item_name}-${item.expiration_date}-${idx}`
-                                }
-                                className="border-b border-amber-900/40 hover:bg-amber-900/10 transition-colors duration-200"
-                              >
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
-                                  <div className="truncate max-w-[120px] sm:max-w-none">
-                                    {item.item_id}
+                                   <div className="text-right flex-shrink-0 ml-2">
+                                    <p className="text-orange-400 text-xs">
+                                      {item.spoilage_date
+                                        ? new Date(
+                                            item.spoilage_date
+                                          ).toLocaleDateString("en-US", {
+                                            month: "short",
+                                            day: "numeric",
+                                          })
+                                        : "N/A"}
+                                    </p>
                                   </div>
-                                </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
-                                  <div className="truncate max-w-[120px] sm:max-w-none">
-                                    {item.item_name}
-                                  </div>
-                                </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-amber-200 hidden sm:table-cell">
-                                  {item.category || "N/A"}
-                                </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
-                                  <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-amber-700/30 text-amber-200 rounded-full text-xs font-medium">
-                                    {item.stock_quantity}
-                                  </span>
-                                </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-amber-200 hidden md:table-cell">
-                                  {item.batch_date
-                                    ? new Date(
-                                        item.batch_date
-                                      ).toLocaleDateString("en-US", {
-                                        month: "short",
-                                        day: "numeric",
-                                        year: "numeric",
-                                      })
-                                    : "N/A"}
-                                </td>
-                                <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-amber-200">
-                                  <div className="text-xs">
-                                    {item.expiration_date
-                                      ? new Date(
-                                          item.expiration_date
-                                        ).toLocaleDateString("en-US", {
-                                          month: "short",
-                                          day: "numeric",
-                                          year:
-                                            window.innerWidth < 640
-                                              ? undefined
-                                              : "numeric",
-                                        })
-                                      : "N/A"}
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          )
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-
-                <section
-                  aria-label="Spoilage List"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-pink-400"
-                >
-                  <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                    <div className="p-1.5 sm:p-2 bg-pink-700/30 rounded-lg">
-                      <GiBiohazard className="text-pink-300 text-base sm:text-lg" />
-                    </div>
-                    <div>
-                      <h2 className="text-base sm:text-lg font-bold text-pink-200">
-                        Spoilage
-                      </h2>
-                      <p className="text-pink-400 text-xs">
-                        Items listed here have been marked as spoiled or wasted
-                        due to damage, contamination, or expiration. Review and
-                        address these records to minimize future losses.
-                      </p>
-                    </div>
-                  </header>
-                  <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
-                    {!spoilage?.data || spoilage.data.length === 0 ? (
-                      <div className="text-center py-3 sm:py-4">
-                        <GiBiohazard className="text-pink-500 text-lg sm:text-xl mx-auto mb-2" />
-                        <p className="text-pink-400 text-xs sm:text-sm">
-                          No spoilage records
-                        </p>
-                      </div>
-                    ) : (
-                      spoilage.data.map(
-                        (
-                          item: {
-                            id?: string | number;
-                            item_name?: string;
-                            quantity?: number;
-                            reason?: string;
-                            date_spoiled?: string;
-                          },
-                          idx: number
-                        ) => (
-                          <div
-                            key={item.id || `${item.item_name}-${idx}`}
-                            className="bg-pink-700/10 border border-pink-700/20 rounded-lg p-2 sm:p-3 hover:bg-pink-700/15 transition-colors duration-200"
-                          >
-                            <div className="flex justify-between items-center">
-                              <div className="min-w-0 flex-1">
-                                <div className="font-semibold text-pink-200 truncate">
-                                  {item.item_name}
                                 </div>
-                                <div className="text-xs text-pink-300">
-                                  Qty: {item.quantity}
-                                  {item.reason && (
-                                    <span className="ml-2 text-pink-400">
-                                      ({item.reason})
-                                    </span>
-                                  )}
-                                </div>
-                                {item.date_spoiled && (
-                                  <div className="text-xs text-pink-400">
-                                    {new Date(
-                                      item.date_spoiled
-                                    ).toLocaleDateString()}
-                                  </div>
-                                )}
                               </div>
                             </div>
-                          </div>
+                          )
                         )
-                      )
-                    )}
-                  </div>
-                </section>
-              </section>
+                      )}
+                    </div>
+                  </section>
 
-              {/* Right Sidebar */}
-              <aside
-                className="xl:col-span-4 flex flex-col gap-4 sm:gap-6 mt-4 xl:mt-0"
-                aria-label="Inventory Sidebar"
-              >
-                {/* Calendar Widget */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                    {/* Out of Stock List */}
+                    <section
+                      aria-label="Out of Stock"
+                      className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-orange-400"
+                    >
+                      <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                        <div className="p-1.5 sm:p-2 bg-orange-700/30 rounded-lg">
+                          <FaBoxes className="text-orange-300 text-base sm:text-lg" />
+                        </div>
+                        <div>
+                          <h2 className="text-base sm:text-lg font-bold text-orange-200">
+                            Out of Stock
+                          </h2>
+                          <p className="text-orange-400 text-xs">
+                            These items are currently out of stock and
+                            unavailable for use or sale. Please reorder or
+                            restock as soon as possible to avoid disruptions.
+                          </p>
+                        </div>
+                      </header>
+                      <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
+                        {!outOfStockItems.length ? (
+                          <div className="text-center py-3 sm:py-4">
+                            <FaBoxes className="text-orange-500 text-lg sm:text-xl mx-auto mb-2" />
+                            <p className="text-orange-400 text-xs sm:text-sm">
+                              No items are currently out of stock
+                            </p>
+                          </div>
+                        ) : (
+                          outOfStockItems.map(
+                            (
+                              item: {
+                                id?: string | number;
+                                item_id?: string | number;
+                                item_name?: string;
+                                stock_quantity?: number;
+                                expiration_date?: string;
+                              },
+                              idx: number
+                            ) => (
+                              <div
+                                key={item.id || `${item.item_name}-${idx}`}
+                                className="bg-orange-700/10 border border-orange-700/20 rounded-lg p-2 sm:p-3 hover:bg-orange-700/15 transition-colors duration-200"
+                              >
+                                <div className="flex justify-between items-center">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium text-white text-xs sm:text-sm truncate">
+                                      <span className="text-orange-300 font-semibold">
+                                        ID:
+                                      </span>{" "}
+                                      {item.item_id}
+                                      <span className="mx-1 text-orange-400">
+                                        |
+                                      </span>
+                                      <span className="font-semibold">
+                                        {item.item_name}
+                                      </span>
+                                    </p>
+                                  </div>
+                                  <div className="text-right flex-shrink-0 ml-2">
+                                    <p className="text-orange-400 text-xs">
+                                      {item.expiration_date
+                                        ? new Date(
+                                            item.expiration_date
+                                          ).toLocaleDateString("en-US", {
+                                            month: "short",
+                                            day: "numeric",
+                                          })
+                                        : "N/A"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          )
+                        )}
+                      </div>
+                    </section>
+
+                    {/* Low Stock */}
+                    <section
+                      aria-label="Low Stock"
+                      className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-yellow-500"
+                    >
+                      <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                        <div className="p-1.5 sm:p-2 bg-yellow-700/30 rounded-lg">
+                          <FaExclamationTriangle className="text-yellow-400 text-base sm:text-lg" />
+                        </div>
+                        <div>
+                          <h2 className="text-base sm:text-lg font-bold text-yellow-400">
+                            Low Stock
+                          </h2>
+                          <p className="text-yellow-200 text-xs">
+                            These items are running low and may require
+                            restocking soon to avoid shortages.
+                          </p>
+                        </div>
+                      </header>
+                      <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
+                        {!lowStock.data || lowStock.data.length === 0 ? (
+                          <div className="text-center py-3 sm:py-4">
+                            <FaBoxes className="text-gray-500 text-lg sm:text-xl mx-auto mb-2" />
+                            <p className="text-gray-400 text-xs sm:text-sm">
+                              All items well stocked
+                            </p>
+                          </div>
+                        ) : (
+                          lowStock.data?.map(
+                            (
+                              item: {
+                                id?: string | number;
+                                item_id?: string | number;
+                                item_name?: string;
+                                stock_quantity?: number;
+                                expiration_date?: string;
+                              },
+                              idx: number
+                            ) => (
+                              <div
+                                key={item.id || `${item.item_name}-${idx}`}
+                                className="bg-yellow-700/10 border border-yellow-700/20 rounded-lg p-2 sm:p-3 hover:bg-yellow-700/15 transition-colors duration-200"
+                              >
+                                <div className="flex justify-between items-center">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium text-white text-xs sm:text-sm truncate">
+                                      <span className="text-yellow-300 font-semibold">
+                                        ID:
+                                      </span>{" "}
+                                      {item.item_id}
+                                      <span className="mx-1 text-gray-400">
+                                        |
+                                      </span>
+                                      <span className="font-semibold">
+                                        {item.item_name}
+                                      </span>
+                                    </p>
+                                    <p className="text-yellow-300 text-xs">
+                                      Stock: {item.stock_quantity}
+                                    </p>
+                                  </div>
+                                  <div className="text-right flex-shrink-0 ml-2">
+                                    <p className="text-gray-400 text-xs">
+                                      {item.expiration_date
+                                        ? new Date(
+                                            item.expiration_date
+                                          ).toLocaleDateString("en-US", {
+                                            month: "short",
+                                            day: "numeric",
+                                          })
+                                        : "N/A"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          )
+                        )}
+                      </div>
+                    </section>
+                  </div>
+
+                  {/* Surplus */}
+                  <section
+                    aria-label="Surplus Stock"
+                    className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-green-500"
+                  >
+                    <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                      <div className="p-1.5 sm:p-2 bg-green-700/30 rounded-lg">
+                        <FaWarehouse className="text-green-400 text-base sm:text-lg" />
+                      </div>
+                      <div>
+                        <h2 className="text-base sm:text-lg font-bold text-green-400">
+                          Surplus Stock
+                        </h2>
+                        <p className="text-green-200 text-xs">
+                          These items have higher than usual stock levels.
+                          Consider using them in promotions or recipes to
+                          optimize inventory and reduce waste.
+                        </p>
+                      </div>
+                    </header>
+                    <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
+                      {!surplus.data || surplus.data.length === 0 ? (
+                        <div className="text-center py-3 sm:py-4">
+                          <FaWarehouse className="text-gray-500 text-lg sm:text-xl mx-auto mb-2" />
+                          <p className="text-gray-400 text-xs sm:text-sm">
+                            No surplus items
+                          </p>
+                        </div>
+                      ) : (
+                        surplus.data?.map(
+                          (
+                            item: {
+                              id?: string | number;
+                              item_id?: string | number;
+                              item_name?: string;
+                              stock_quantity?: number;
+                              expiration_date?: string;
+                            },
+                            idx: number
+                          ) => (
+                            <div
+                              key={item.id || `${item.item_name}-${idx}`}
+                              className="bg-green-700/10 border border-green-700/20 rounded-lg p-2 sm:p-3 hover:bg-green-700/15 transition-colors duration-200"
+                            >
+                              <div className="flex justify-between items-center">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-white text-xs sm:text-sm truncate">
+                                    <span className="text-green-300 font-semibold">
+                                      ID:
+                                    </span>{" "}
+                                    {item.item_id}
+                                    <span className="mx-1 text-gray-400">
+                                      |
+                                    </span>
+                                    <span className="font-semibold">
+                                      {item.item_name}
+                                    </span>
+                                  </p>
+                                  <p className="text-green-300 text-xs">
+                                    Stock: {item.stock_quantity}
+                                  </p>
+                                </div>
+                                <div className="text-right flex-shrink-0 ml-2">
+                                  <p className="text-gray-400 text-xs">
+                                    {item.expiration_date
+                                      ? new Date(
+                                          item.expiration_date
+                                        ).toLocaleDateString("en-US", {
+                                          month: "short",
+                                          day: "numeric",
+                                        })
+                                      : "N/A"}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        )
+                      )}
+                    </div>
+                  </section>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="expired">
+                {/* Expired and Expiring Soon Tables */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                  {/* Expired Ingredients Table - Left */}
+                  <section
+                    aria-label="Expired Ingredients"
+                    className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-red-700"
+                  >
+                    <header className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+                      <div className="p-1.5 sm:p-2 bg-red-700/30 rounded-lg">
+                        <FaClock className="text-red-400 text-lg sm:text-xl" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg sm:text-xl font-bold text-red-400">
+                          Expired Items
+                        </h2>
+                        <p className="text-red-200 text-xs sm:text-sm">
+                          These items have passed their expiration date and
+                          should be removed from inventory to ensure safety and
+                          compliance.
+                        </p>
+                      </div>
+                    </header>
+                    <div className="overflow-x-auto rounded-lg">
+                      <table className="min-w-full text-xs sm:text-sm">
+                        <thead>
+                          <tr className="bg-red-900/40 border-b border-red-500/40">
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300">
+                              Id
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300">
+                              Name
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-300 hidden md:table-cell">
+                              Batch Date
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300 hidden sm:table-cell">
+                              Category
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-300">
+                              Stock
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-300">
+                              Expiration Date
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-300">
+                              Reason
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(!expired || !Array.isArray(expired.data) || expired.data.length === 0) ? (
+                            <tr>
+                              <td
+                                colSpan={6}
+                                className="py-6 sm:py-8 px-4 text-center text-red-200"
+                              >
+                                <div className="flex flex-col items-center justify-center gap-2 w-full">
+                                  <FaClock className="text-red-400 text-xl sm:text-2xl" />
+                                  <p className="text-sm">
+                                    No expired items found
+                                  </p>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            expired.data.map(
+                              (
+                                item: {
+                                  id?: string | number;
+                                  item_id?: string | number;
+                                  item_name?: string;
+                                  category?: string;
+                                  quantity_spoiled?: number;
+                                  batch_date?: string;
+                                  reason?: string;
+                                  expiration_date?: string;
+                                },
+                                idx: number
+                              ) => (
+                                <tr
+                                  key={
+                                    item.id || 
+                                    `${item.item_name}-${item.batch_date}-${idx}`
+                                  }
+                                  className="border-b border-red-900/40 hover:bg-red-900/10 transition-colors duration-200"
+                                >
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
+                                    <div className="truncate max-w-[120px] sm:max-w-none">
+                                      {item.item_id}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
+                                    <div className="truncate max-w-[120px] sm:max-w-none">
+                                      {item.item_name}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-red-200 hidden md:table-cell">
+                                    {item.batch_date}
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-red-200 hidden sm:table-cell">
+                                    {item.category || "N/A"}
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
+                                    <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-red-700/30 text-red-200 rounded-full text-xs font-medium">
+                                      {item.quantity_spoiled}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-red-200">
+                                    <div className="text-xs">
+                                      {item.expiration_date}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-red-200">
+                                    <div className="text-xs">
+                                      {item.reason || "Expired"}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            )
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  {/* Expiring Ingredients Table - Right */}
+                  <section
+                    aria-label="Expiring Ingredients"
+                    className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-amber-700"
+                  >
+                    <header className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+                      <div className="p-1.5 sm:p-2 bg-amber-700/30 rounded-lg">
+                        <FaClock className="text-amber-400 text-lg sm:text-xl" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg sm:text-xl font-bold text-amber-400">
+                          Expiring Soon
+                        </h2>
+                        <p className="text-amber-200 text-xs sm:text-sm">
+                          These items are approaching their expiration date and
+                          should be used or restocked soon to prevent waste.
+                        </p>
+                      </div>
+                    </header>
+                    <div className="overflow-x-auto rounded-lg">
+                      <table className="min-w-full text-xs sm:text-sm">
+                        <thead>
+                          <tr className="bg-amber-900/40 border-b border-amber-500/40">
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300">
+                              Id
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300">
+                              Name
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300 hidden sm:table-cell">
+                              Category
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300">
+                              Stock
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300 hidden md:table-cell">
+                              Batch Date
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300">
+                              Expires
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {!expiring.data || expiring.data.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={6}
+                                className="py-6 sm:py-8 px-4 text-center text-amber-200"
+                              >
+                                <div className="flex flex-col items-center justify-center gap-2 w-full">
+                                  <FaClock className="text-amber-400 text-xl sm:text-2xl" />
+                                  <p className="text-sm">
+                                    No expiring ingredients found
+                                  </p>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            expiring.data?.map(
+                              (
+                                item: {
+                                  id?: string | number;
+                                  item_id?: string | number;
+                                  item_name?: string;
+                                  stock_quantity?: number;
+                                  expiration_date?: string;
+                                  category?: string;
+                                  batch_date?: string;
+                                },
+                                idx: number
+                              ) => (
+                                <tr
+                                  key={
+                                    item.id ||
+                                    `${item.item_name}-${item.expiration_date}-${idx}`
+                                  }
+                                  className="border-b border-amber-900/40 hover:bg-amber-900/10 transition-colors duration-200"
+                                >
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
+                                    <div className="truncate max-w-[120px] sm:max-w-none">
+                                      {item.item_id}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
+                                    <div className="truncate max-w-[120px] sm:max-w-none">
+                                      {item.item_name}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-amber-200 hidden sm:table-cell">
+                                    {item.category || "N/A"}
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
+                                    <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-amber-700/30 text-amber-200 rounded-full text-xs font-medium">
+                                      {item.stock_quantity}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-amber-200 hidden md:table-cell">
+                                    {item.batch_date
+                                      ? new Date(
+                                          item.batch_date
+                                        ).toLocaleDateString("en-US", {
+                                          month: "short",
+                                          day: "numeric",
+                                          year: "numeric",
+                                        })
+                                      : "N/A"}
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-amber-200">
+                                    <div className="text-xs">
+                                      {item.expiration_date
+                                        ? new Date(
+                                            item.expiration_date
+                                          ).toLocaleDateString("en-US", {
+                                            month: "short",
+                                            day: "numeric",
+                                            year:
+                                              typeof window !== "undefined" &&
+                                              window.innerWidth < 640
+                                                ? undefined
+                                                : "numeric",
+                                          })
+                                        : "N/A"}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            )
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="calendar">
                 <section
                   aria-label="Calendar Widget"
-                  className=" rounded-2xl shadow-xl p-2 sm:p-3"
+                  className="rounded-2xl shadow-none p-3 sm:p-4 lg:p-6
+                   h-[55vh] w-full max-w-full mx-auto flex flex-col mb-8"
                 >
                   <HolidayCalendar
                     holidays={customHolidays.data || []}
                     onAdd={handleAddHoliday}
                     onEdit={handleEditHoliday}
                   />
+
                   {modalOpen && (
                     <HolidayFormModal
                       initial={
@@ -1524,249 +1469,10 @@ export default function Dashboard() {
                     />
                   )}
                 </section>
-
-                {/* Out of Stock List */}
-                <section
-                  aria-label="Out of Stock"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-orange-400"
-                >
-                  <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                    <div className="p-1.5 sm:p-2 bg-orange-700/30 rounded-lg">
-                      <FaBoxes className="text-orange-300 text-base sm:text-lg" />
-                    </div>
-                    <div>
-                      <h2 className="text-base sm:text-lg font-bold text-orange-200">
-                        Out of Stock
-                      </h2>
-                      <p className="text-orange-400 text-xs">
-                        These items are currently out of stock and unavailable
-                        for use or sale. Please reorder or restock as soon as
-                        possible to avoid disruptions.
-                      </p>
-                    </div>
-                  </header>
-                  <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
-                    {!outOfStockItems.length ? (
-                      <div className="text-center py-3 sm:py-4">
-                        <FaBoxes className="text-orange-500 text-lg sm:text-xl mx-auto mb-2" />
-                        <p className="text-orange-400 text-xs sm:text-sm">
-                          No items are currently out of stock
-                        </p>
-                      </div>
-                    ) : (
-                      outOfStockItems.map(
-                        (
-                          item: {
-                            id?: string | number;
-                            item_id?: string | number;
-                            item_name?: string;
-                            stock_quantity?: number;
-                            expiration_date?: string;
-                          },
-                          idx: number
-                        ) => (
-                          <div
-                            key={item.id || `${item.item_name}-${idx}`}
-                            className="bg-orange-700/10 border border-orange-700/20 rounded-lg p-2 sm:p-3 hover:bg-orange-700/15 transition-colors duration-200"
-                          >
-                            <div className="flex justify-between items-center">
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                  <span className="text-orange-300 font-semibold">
-                                    ID:
-                                  </span>{" "}
-                                  {item.item_id}
-                                  <span className="mx-1 text-orange-400">
-                                    |
-                                  </span>
-                                  <span className="font-semibold">
-                                    {item.item_name}
-                                  </span>
-                                </p>
-                                <p className="text-orange-300 text-xs">
-                                  Stock: {item.stock_quantity}
-                                </p>
-                              </div>
-                              <div className="text-right flex-shrink-0 ml-2">
-                                <p className="text-orange-400 text-xs">
-                                  {item.expiration_date
-                                    ? new Date(
-                                        item.expiration_date
-                                      ).toLocaleDateString("en-US", {
-                                        month: "short",
-                                        day: "numeric",
-                                      })
-                                    : "N/A"}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      )
-                    )}
-                  </div>
-                </section>
-
-                {/* Low Stock */}
-                <section
-                  aria-label="Low Stock"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-yellow-500"
-                >
-                  <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                    <div className="p-1.5 sm:p-2 bg-yellow-700/30 rounded-lg">
-                      <FaExclamationTriangle className="text-yellow-400 text-base sm:text-lg" />
-                    </div>
-                    <div>
-                      <h2 className="text-base sm:text-lg font-bold text-yellow-400">
-                        Low Stock
-                      </h2>
-                      <p className="text-yellow-200 text-xs">
-                        These items are running low and may require restocking
-                        soon to avoid shortages.
-                      </p>
-                    </div>
-                  </header>
-                  <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
-                    {!lowStock.data || lowStock.data.length === 0 ? (
-                      <div className="text-center py-3 sm:py-4">
-                        <FaBoxes className="text-gray-500 text-lg sm:text-xl mx-auto mb-2" />
-                        <p className="text-gray-400 text-xs sm:text-sm">
-                          All items well stocked
-                        </p>
-                      </div>
-                    ) : (
-                      lowStock.data?.map(
-                        (
-                          item: {
-                            id?: string | number;
-                            item_id?: string | number;
-                            item_name?: string;
-                            stock_quantity?: number;
-                            expiration_date?: string;
-                          },
-                          idx: number
-                        ) => (
-                          <div
-                            key={item.id || `${item.item_name}-${idx}`}
-                            className="bg-yellow-700/10 border border-yellow-700/20 rounded-lg p-2 sm:p-3 hover:bg-yellow-700/15 transition-colors duration-200"
-                          >
-                            <div className="flex justify-between items-center">
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                  <span className="text-yellow-300 font-semibold">
-                                    ID:
-                                  </span>{" "}
-                                  {item.item_id}
-                                  <span className="mx-1 text-gray-400">|</span>
-                                  <span className="font-semibold">
-                                    {item.item_name}
-                                  </span>
-                                </p>
-                                <p className="text-yellow-300 text-xs">
-                                  Stock: {item.stock_quantity}
-                                </p>
-                              </div>
-                              <div className="text-right flex-shrink-0 ml-2">
-                                <p className="text-gray-400 text-xs">
-                                  {item.expiration_date
-                                    ? new Date(
-                                        item.expiration_date
-                                      ).toLocaleDateString("en-US", {
-                                        month: "short",
-                                        day: "numeric",
-                                      })
-                                    : "N/A"}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      )
-                    )}
-                  </div>
-                </section>
-
-                {/* Surplus */}
-                <section
-                  aria-label="Surplus Stock"
-                  className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-green-500"
-                >
-                  <header className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                    <div className="p-1.5 sm:p-2 bg-green-700/30 rounded-lg">
-                      <FaWarehouse className="text-green-400 text-base sm:text-lg" />
-                    </div>
-                    <div>
-                      <h2 className="text-base sm:text-lg font-bold text-green-400">
-                        Surplus Stock
-                      </h2>
-                      <p className="text-green-200 text-xs">
-                        These items have higher than usual stock levels.
-                        Consider using them in promotions or recipes to optimize
-                        inventory and reduce waste.
-                      </p>
-                    </div>
-                  </header>
-                  <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto">
-                    {!surplus.data || surplus.data.length === 0 ? (
-                      <div className="text-center py-3 sm:py-4">
-                        <FaWarehouse className="text-gray-500 text-lg sm:text-xl mx-auto mb-2" />
-                        <p className="text-gray-400 text-xs sm:text-sm">
-                          No surplus items
-                        </p>
-                      </div>
-                    ) : (
-                      surplus.data?.map(
-                        (
-                          item: {
-                            id?: string | number;
-                            item_id?: string | number;
-                            item_name?: string;
-                            stock_quantity?: number;
-                            expiration_date?: string;
-                          },
-                          idx: number
-                        ) => (
-                          <div
-                            key={item.id || `${item.item_name}-${idx}`}
-                            className="bg-green-700/10 border border-green-700/20 rounded-lg p-2 sm:p-3 hover:bg-green-700/15 transition-colors duration-200"
-                          >
-                            <div className="flex justify-between items-center">
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                  <span className="text-green-300 font-semibold">
-                                    ID:
-                                  </span>{" "}
-                                  {item.item_id}
-                                  <span className="mx-1 text-gray-400">|</span>
-                                  <span className="font-semibold">
-                                    {item.item_name}
-                                  </span>
-                                </p>
-                                <p className="text-green-300 text-xs">
-                                  Stock: {item.stock_quantity}
-                                </p>
-                              </div>
-                              <div className="text-right flex-shrink-0 ml-2">
-                                <p className="text-gray-400 text-xs">
-                                  {item.expiration_date
-                                    ? new Date(
-                                        item.expiration_date
-                                      ).toLocaleDateString("en-US", {
-                                        month: "short",
-                                        day: "numeric",
-                                      })
-                                    : "N/A"}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      )
-                    )}
-                  </div>
-                </section>
-              </aside>
-            </div>
+                {/* Add extra padding below the calendar tab */}
+                <div className="pb-32" />
+              </TabsContent>
+            </Tabs>
           </div>
         </main>
       </ResponsiveMain>

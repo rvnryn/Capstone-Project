@@ -6,6 +6,7 @@ import { routes } from "@/app/routes/routes";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { useUsersAPI } from "../hook/use-user";
+import { useAuth } from "@/app/context/AuthContext";
 import { FaUsers } from "react-icons/fa";
 import type { User } from "../hook/use-user";
 import { FiAlertTriangle, FiArrowRight, FiCheck, FiSave } from "react-icons/fi";
@@ -26,6 +27,7 @@ export default function EditUser() {
   const searchParams = useSearchParams();
   const { isMenuOpen, isMobile } = useNavigation();
   const { getUser, updateUser, changeUserPassword } = useUsersAPI();
+  const { user: currentUser } = useAuth();
   const userId = searchParams.get("id");
 
   const [formData, setFormData] = useState<Partial<User>>({});
@@ -48,13 +50,17 @@ export default function EditUser() {
 
   // Add state for password change modal
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showAdminPasswordModal, setShowAdminPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [reEnterPassword, setReEnterPassword] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [adminPasswordError, setAdminPasswordError] = useState("");
   const [initialSettings, setInitialSettings] = useState<any>(null);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showPasswordSuccess, setShowPasswordSuccess] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -738,6 +744,7 @@ export default function EditUser() {
         )}
 
         {/* Change Password Modal */}
+        {/* Step 1: New Password Modal */}
         {showPasswordModal && (
           <div
             role="dialog"
@@ -781,34 +788,52 @@ export default function EditUser() {
                   type="button"
                   onClick={async () => {
                     if (!newPassword || newPassword.length < 6) {
-                      setPasswordError(
-                        "Password must be at least 6 characters."
-                      );
+                      setPasswordError("Password must be at least 6 characters.");
                       return;
                     }
                     if (newPassword !== reEnterPassword) {
                       setPasswordError("Passwords do not match.");
                       return;
                     }
-                    try {
-                      await changeUserPassword(
-                        String(formData.auth_id),
-                        newPassword
-                      );
+                    // Prevent new password from being the same as the current password
+                    if (formData && formData.password && newPassword === formData.password) {
+                      setPasswordError("New password cannot be the same as the current password.");
+                      return;
+                    }
+                    setPasswordError("");
+                    // If editing own password, skip admin password modal
+                    if (
+                      currentUser &&
+                      currentUser.auth_id &&
+                      String(currentUser.auth_id) === String(formData.auth_id)
+                    ) {
+                      // Call changeUserPassword with own auth_id, newPassword, and empty admin_password
+                      try {
+                        await changeUserPassword(
+                          String(formData.auth_id),
+                          newPassword,
+                          ""
+                        );
+                        setShowPasswordModal(false);
+                        setShowAdminPasswordModal(false);
+                        setNewPassword("");
+                        setReEnterPassword("");
+                        setAdminPassword("");
+                        setAdminPasswordError("");
+                        setPasswordError("");
+                        setShowPasswordSuccess(true);
+                        setTimeout(() => setShowPasswordSuccess(false), 3000);
+                      } catch (err: any) {
+                        setPasswordError(err?.message || "Failed to change password.");
+                      }
+                    } else {
                       setShowPasswordModal(false);
-                      setNewPassword("");
-                      setReEnterPassword("");
-                      setPasswordError("");
-                    } catch (err: any) {
-                      setPasswordError(
-                        err?.response?.data?.detail ||
-                          "Failed to change password."
-                      );
+                      setShowAdminPasswordModal(true);
                     }
                   }}
                   className="px-8 py-3 rounded-lg border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
-                  Change
+                  {currentUser && currentUser.auth_id && String(currentUser.auth_id) === String(formData.auth_id) ? "Change Password" : "Next"}
                 </button>
                 <button
                   type="button"
@@ -817,6 +842,85 @@ export default function EditUser() {
                     setNewPassword("");
                     setReEnterPassword("");
                     setPasswordError("");
+                  }}
+                  className="px-8 py-3 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:text-white font-semibold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {showAdminPasswordModal && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-password-dialog-title"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <form
+              method="dialog"
+              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-blue-400/50 text-center space-y-4 sm:space-y-6 max-w-sm sm:max-w-md w-full"
+              onSubmit={(e) => e.preventDefault()}
+            >
+              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-blue-400/20 to-blue-500/20 rounded-full flex items-center justify-center">
+                <span className="text-blue-400 text-3xl">🔑</span>
+              </div>
+              <h3
+                id="admin-password-dialog-title"
+                className="text-xl sm:text-2xl font-bold text-white mb-2"
+              >
+                Confirm Owner Password
+              </h3>
+              <input
+                type="password"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-800 text-white mb-2"
+                placeholder="Enter your admin password to confirm"
+                autoComplete="current-password"
+              />
+              {adminPasswordError && (
+                <p className="text-red-400 text-sm">{adminPasswordError}</p>
+              )}
+              <div className="flex flex-col sm:flex-row justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!adminPassword) {
+                      setAdminPasswordError("Please enter your admin password to confirm.");
+                      return;
+                    }
+                    try {
+                      await changeUserPassword(
+                        String(formData.auth_id),
+                        newPassword,
+                        adminPassword
+                      );
+                      setShowAdminPasswordModal(false);
+                      setShowPasswordModal(false);
+                      setNewPassword("");
+                      setReEnterPassword("");
+                      setAdminPassword("");
+                      setAdminPasswordError("");
+                      setPasswordError("");
+                      setShowPasswordSuccess(true);
+                      setTimeout(() => setShowPasswordSuccess(false), 3000);
+                    } catch (err: any) {
+                      setAdminPasswordError(err?.message || "Failed to change password.");
+                    }
+                  }}
+                  className="px-8 py-3 rounded-lg border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black font-semibold transition-all cursor-pointer"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminPasswordModal(false);
+                    setAdminPassword("");
+                    setAdminPasswordError("");
                   }}
                   className="px-8 py-3 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:text-white font-semibold transition-all cursor-pointer"
                 >
@@ -835,6 +939,18 @@ export default function EditUser() {
               </div>
               <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
                 User Updated successfully!
+              </span>
+            </div>
+          </div>
+        )}
+        {showPasswordSuccess && (
+          <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+            <div className="flex items-center gap-2 xs:gap-3">
+              <div className="w-5 xs:w-6 h-5 xs:h-6 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <FiCheck className="w-3 xs:w-4 h-3 xs:h-4 text-white" />
+              </div>
+              <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
+                Password changed successfully!
               </span>
             </div>
           </div>

@@ -25,13 +25,49 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
     BackgroundTasks,
 )
 from typing import Optional
-from app.supabase import supabase, get_db
+from app.supabase import postgrest_client, supabase, get_db
+from starlette.concurrency import run_in_threadpool
 import uuid
 from datetime import datetime
 from app.routes.userActivity import UserActivityLog
 from app.utils.rbac import require_role
+import logging
+import math
 
 router = APIRouter()
+
+
+# Rate limited trigger endpoint for recalculation
+@limiter.limit("5/minute")
+@router.post("/menu/recalc")
+async def trigger_recalculate(
+    request: Request,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
+    # run in threadpool to avoid blocking
+    result = await run_in_threadpool(recalculate_stock_status)
+
+    # record activity (best-effort)
+    try:
+        user_row = getattr(user, "user_row", user)
+        desc = result.get("message") if isinstance(result, dict) else str(result)
+        new_activity = UserActivityLog(
+            user_id=user_row.get("user_id"),
+            action_type="recalculate stock status",
+            description=desc,
+            activity_date=datetime.utcnow(),
+            report_date=datetime.utcnow(),
+            user_name=user_row.get("name"),
+            role=user_row.get("user_role"),
+        )
+        db.add(new_activity)
+        await db.flush()
+        await db.commit()
+    except Exception as e:
+        print("Failed to record recalc activity:", e)
+
+    return result
 
 
 class MenuItem:
@@ -86,7 +122,7 @@ async def create_menu_with_ingredients(
 
             # Check inventory
             inv = (
-                supabase.table("inventory")
+                postgrest_client.table("inventory")
                 .select("stock_quantity,expiration_date")
                 .ilike("item_name", ing_name)
                 .limit(1)
@@ -107,7 +143,7 @@ async def create_menu_with_ingredients(
 
             # Check inventory_surplus
             surplus = (
-                supabase.table("inventory_surplus")
+                postgrest_client.table("inventory_surplus")
                 .select("stock_quantity,expiration_date")
                 .ilike("item_name", ing_name)
                 .limit(1)
@@ -128,7 +164,7 @@ async def create_menu_with_ingredients(
 
             # Check inventory_today
             today = (
-                supabase.table("inventory_today")
+                postgrest_client.table("inventory_today")
                 .select("stock_quantity,expiration_date")
                 .ilike("item_name", ing_name)
                 .limit(1)
@@ -167,7 +203,7 @@ async def create_menu_with_ingredients(
             "created_at": now,
             "updated_at": now,
         }
-        dbres = supabase.table("menu").insert(menu_data).execute()
+        dbres = postgrest_client.table("menu").insert(menu_data).execute()
         error = (
             getattr(dbres, "error", None)
             if hasattr(dbres, "error")
@@ -207,7 +243,7 @@ async def create_menu_with_ingredients(
             if not name or not quantity:
                 continue
             search_res = (
-                supabase.table("ingredients")
+                postgrest_client.table("ingredients")
                 .select("ingredient_id")
                 .ilike("ingredient_name", name)
                 .limit(1)
@@ -223,7 +259,7 @@ async def create_menu_with_ingredients(
                 ingredient_id = search_data[0].get("ingredient_id")
             if not ingredient_id:
                 create_res = (
-                    supabase.table("ingredients")
+                    postgrest_client.table("ingredients")
                     .insert({"ingredient_name": name})
                     .execute()
                 )
@@ -256,7 +292,7 @@ async def create_menu_with_ingredients(
             )
         if menu_ingredients:
             res_ing = (
-                supabase.table("menu_ingredients").insert(menu_ingredients).execute()
+                postgrest_client.table("menu_ingredients").insert(menu_ingredients).execute()
             )
             err_ing = (
                 getattr(res_ing, "error", None)
@@ -306,180 +342,162 @@ async def create_menu_with_ingredients(
 
 # Endpoint: get all menu items
 @router.get("/menu")
-def get_menu():
-    # Fetch all menu items
-    res = supabase.table("menu").select("*").execute()
-    error = (
-        getattr(res, "error", None)
-        if hasattr(res, "error")
-        else res.get("error") if isinstance(res, dict) else None
-    )
-    if error:
-        raise HTTPException(
-            status_code=400, detail=getattr(error, "message", str(error))
+async def get_menu():
+    def sync_get_menu():
+        res = postgrest_client.table("menu").select("*").execute()
+        error = (
+            getattr(res, "error", None)
+            if hasattr(res, "error")
+            else res.get("error") if isinstance(res, dict) else None
         )
-    data = (
-        getattr(res, "data", None)
-        if hasattr(res, "data")
-        else res.get("data") if isinstance(res, dict) else None
-    )
-    if not data:
-        return []
-
-    # Get all menu_ids, filter out None
-    menu_ids = [item.get("id") or item.get("menu_id") for item in data]
-    menu_ids = [mid for mid in menu_ids if mid is not None]
-    # Fetch all menu_ingredients for these menu_ids
-    if menu_ids:
-        ing_res = (
-            supabase.table("menu_ingredients")
-            .select("menu_id,ingredient_id,ingredient_name,quantity")
-            .in_("menu_id", menu_ids)
-            .execute()
-        )
-        ing_error = (
-            getattr(ing_res, "error", None)
-            if hasattr(ing_res, "error")
-            else ing_res.get("error") if isinstance(ing_res, dict) else None
-        )
-        if ing_error:
+        if error:
             raise HTTPException(
-                status_code=400, detail=getattr(ing_error, "message", str(ing_error))
+                status_code=400, detail=getattr(error, "message", str(error))
             )
-        ing_data = (
-            getattr(ing_res, "data", None)
-            if hasattr(ing_res, "data")
-            else ing_res.get("data") if isinstance(ing_res, dict) else None
+        data = (
+            getattr(res, "data", None)
+            if hasattr(res, "data")
+            else res.get("data") if isinstance(res, dict) else None
         )
-        # Group ingredients by menu_id
-        ing_map = {}
-        for ing in ing_data or []:
-            mid = ing.get("menu_id")
-            if mid not in ing_map:
-                ing_map[mid] = []
-            ing_map[mid].append(ing)
-        # Attach ingredients to each menu item
-        for item in data:
-            mid = item.get("id") or item.get("menu_id")
-            item["menu_id"] = item.get("menu_id", item.get("id"))
-            item["ingredients"] = ing_map.get(mid, [])
-            all_in_stock = True
-            for ing in item["ingredients"]:
-                ing_name = ing.get("ingredient_name") or ing.get("name")
-                # Check all inventory tables for this ingredient
-                available_stock = 0
+        if not data:
+            return []
 
-                # Check inventory
-                inv = (
-                    supabase.table("inventory")
-                    .select("stock_quantity,expiration_date")
-                    .ilike("item_name", ing_name)
-                    .execute()
+        menu_ids = [item.get("id") or item.get("menu_id") for item in data]
+        menu_ids = [mid for mid in menu_ids if mid is not None]
+        if menu_ids:
+            ing_res = (
+                postgrest_client.table("menu_ingredients")
+                .select("menu_id,ingredient_id,ingredient_name,quantity")
+                .in_("menu_id", menu_ids)
+                .execute()
+            )
+            ing_error = (
+                getattr(ing_res, "error", None)
+                if hasattr(ing_res, "error")
+                else ing_res.get("error") if isinstance(ing_res, dict) else None
+            )
+            if ing_error:
+                raise HTTPException(
+                    status_code=400, detail=getattr(ing_error, "message", str(ing_error))
                 )
-                for inv_item in inv.data or []:
-                    stock = inv_item.get("stock_quantity", 0) or 0
-                    expiry = inv_item.get("expiration_date")
-                    is_expired = False
-                    if expiry:
-                        try:
-                            if (
-                                datetime.strptime(expiry, "%Y-%m-%d").date()
-                                < datetime.now().date()
-                            ):
-                                is_expired = True
-                        except Exception:
-                            pass
-                    # Only count non-expired stock
-                    if not is_expired:
-                        available_stock += stock
-
-                # Check inventory_surplus
-                surplus = (
-                    supabase.table("inventory_surplus")
-                    .select("stock_quantity,expiration_date")
-                    .ilike("item_name", ing_name)
-                    .execute()
-                )
-                for surplus_item in surplus.data or []:
-                    stock = surplus_item.get("stock_quantity", 0) or 0
-                    expiry = surplus_item.get("expiration_date")
-                    is_expired = False
-                    if expiry:
-                        try:
-                            if (
-                                datetime.strptime(expiry, "%Y-%m-%d").date()
-                                < datetime.now().date()
-                            ):
-                                is_expired = True
-                        except Exception:
-                            pass
-                    # Only count non-expired stock
-                    if not is_expired:
-                        available_stock += stock
-
-                # Check inventory_today
-                today = (
-                    supabase.table("inventory_today")
-                    .select("stock_quantity,expiration_date")
-                    .ilike("item_name", ing_name)
-                    .execute()
-                )
-                for today_item in today.data or []:
-                    stock = today_item.get("stock_quantity", 0) or 0
-                    expiry = today_item.get("expiration_date")
-                    is_expired = False
-                    if expiry:
-                        try:
-                            if (
-                                datetime.strptime(expiry, "%Y-%m-%d").date()
-                                < datetime.now().date()
-                            ):
-                                is_expired = True
-                        except Exception:
-                            pass
-                    # Only count non-expired stock
-                    if not is_expired:
-                        available_stock += stock
-
-                # If no available (non-expired) stock, mark as not available
-                if not available_stock or available_stock <= 0:
-                    all_in_stock = False
-                    break
-
-            new_status = "Available" if all_in_stock else "Out of Stock"
-            if item.get("stock_status") != new_status:
-                # Update DB if status changed - use the correct primary key column
-                # Check if using 'id' or 'menu_id' as primary key
-                pk_column = "id" if "id" in item else "menu_id"
-                pk_value = item.get("id") or item.get("menu_id")
-                update_res = (
-                    supabase.table("menu")
-                    .update({"stock_status": new_status})
-                    .eq(pk_column, pk_value)
-                    .execute()
-                )
-                print(
-                    f"Updating menu item {item.get('dish_name')} from {item.get('stock_status')} to {new_status}"
-                )
-                update_error = (
-                    getattr(update_res, "error", None)
-                    if hasattr(update_res, "error")
-                    else (
-                        update_res.get("error")
-                        if isinstance(update_res, dict)
-                        else None
+            ing_data = (
+                getattr(ing_res, "data", None)
+                if hasattr(ing_res, "data")
+                else ing_res.get("data") if isinstance(ing_res, dict) else None
+            )
+            ing_map = {}
+            for ing in ing_data or []:
+                mid = ing.get("menu_id")
+                if mid not in ing_map:
+                    ing_map[mid] = []
+                ing_map[mid].append(ing)
+            for item in data:
+                mid = item.get("id") or item.get("menu_id")
+                item["menu_id"] = item.get("menu_id", item.get("id"))
+                item["ingredients"] = ing_map.get(mid, [])
+                all_in_stock = True
+                for ing in item["ingredients"]:
+                    ing_name = ing.get("ingredient_name") or ing.get("name")
+                    available_stock = 0
+                    inv = (
+                        postgrest_client.table("inventory")
+                        .select("stock_quantity,expiration_date")
+                        .ilike("item_name", ing_name)
+                        .execute()
                     )
-                )
-                if update_error:
+                    for inv_item in inv.data or []:
+                        stock = inv_item.get("stock_quantity", 0) or 0
+                        expiry = inv_item.get("expiration_date")
+                        is_expired = False
+                        if expiry:
+                            try:
+                                if (
+                                    datetime.strptime(expiry, "%Y-%m-%d").date()
+                                    < datetime.now().date()
+                                ):
+                                    is_expired = True
+                            except Exception:
+                                pass
+                        if not is_expired:
+                            available_stock += stock
+                    surplus = (
+                        postgrest_client.table("inventory_surplus")
+                        .select("stock_quantity,expiration_date")
+                        .ilike("item_name", ing_name)
+                        .execute()
+                    )
+                    for surplus_item in surplus.data or []:
+                        stock = surplus_item.get("stock_quantity", 0) or 0
+                        expiry = surplus_item.get("expiration_date")
+                        is_expired = False
+                        if expiry:
+                            try:
+                                if (
+                                    datetime.strptime(expiry, "%Y-%m-%d").date()
+                                    < datetime.now().date()
+                                ):
+                                    is_expired = True
+                            except Exception:
+                                pass
+                        if not is_expired:
+                            available_stock += stock
+                    today = (
+                        postgrest_client.table("inventory_today")
+                        .select("stock_quantity,expiration_date")
+                        .ilike("item_name", ing_name)
+                        .execute()
+                    )
+                    for today_item in today.data or []:
+                        stock = today_item.get("stock_quantity", 0) or 0
+                        expiry = today_item.get("expiration_date")
+                        is_expired = False
+                        if expiry:
+                            try:
+                                if (
+                                    datetime.strptime(expiry, "%Y-%m-%d").date()
+                                    < datetime.now().date()
+                                ):
+                                    is_expired = True
+                            except Exception:
+                                pass
+                        if not is_expired:
+                            available_stock += stock
+                    if not available_stock or available_stock <= 0:
+                        all_in_stock = False
+                        break
+                new_status = "Available" if all_in_stock else "Out of Stock"
+                if item.get("stock_status") != new_status:
+                    pk_column = "id" if "id" in item else "menu_id"
+                    pk_value = item.get("id") or item.get("menu_id")
+                    update_res = (
+                        postgrest_client.table("menu")
+                        .update({"stock_status": new_status})
+                        .eq(pk_column, pk_value)
+                        .execute()
+                    )
                     print(
-                        f"Failed to update stock_status for menu item {item.get('dish_name')}: {update_error}"
+                        f"Updating menu item {item.get('dish_name')} from {item.get('stock_status')} to {new_status}"
                     )
-            item["stock_status"] = new_status
-    else:
-        for item in data:
-            item["menu_id"] = item.get("menu_id", item.get("id"))
-            item["ingredients"] = []
-    return data
+                    update_error = (
+                        getattr(update_res, "error", None)
+                        if hasattr(update_res, "error")
+                        else (
+                            update_res.get("error")
+                            if isinstance(update_res, dict)
+                            else None
+                        )
+                    )
+                    if update_error:
+                        print(
+                            f"Failed to update stock_status for menu item {item.get('dish_name')}: {update_error}"
+                        )
+                item["stock_status"] = new_status
+        else:
+            for item in data:
+                item["menu_id"] = item.get("menu_id", item.get("id"))
+                item["ingredients"] = []
+        return data
+    return await run_in_threadpool(sync_get_menu)
 
 
 @router.patch("/menu/{menu_id}")
@@ -509,7 +527,7 @@ async def update_menu(
     ingredients = menu_update.get("ingredients")
     if ingredients is not None:
         # Remove all existing menu_ingredients for this menu
-        supabase.table("menu_ingredients").delete().eq("menu_id", menu_id).execute()
+        postgrest_client.table("menu_ingredients").delete().eq("menu_id", menu_id).execute()
         # Insert new menu_ingredients if any
         menu_ingredients = []
         for ing in ingredients:
@@ -519,7 +537,7 @@ async def update_menu(
                 continue
             # Find or create ingredient_id
             search_res = (
-                supabase.table("ingredients")
+                postgrest_client.table("ingredients")
                 .select("ingredient_id")
                 .ilike("ingredient_name", name)
                 .limit(1)
@@ -535,7 +553,7 @@ async def update_menu(
                 ingredient_id = search_data[0].get("ingredient_id")
             if not ingredient_id:
                 create_res = (
-                    supabase.table("ingredients")
+                    postgrest_client.table("ingredients")
                     .insert({"ingredient_name": name})
                     .execute()
                 )
@@ -567,7 +585,7 @@ async def update_menu(
             )
         if menu_ingredients:
             res_ing = (
-                supabase.table("menu_ingredients").insert(menu_ingredients).execute()
+                postgrest_client.table("menu_ingredients").insert(menu_ingredients).execute()
             )
             err_ing = (
                 getattr(res_ing, "error", None)
@@ -585,7 +603,7 @@ async def update_menu(
     menu_row = None
     if update_data:
         res = (
-            supabase.table("menu").update(update_data).eq("menu_id", menu_id).execute()
+            postgrest_client.table("menu").update(update_data).eq("menu_id", menu_id).execute()
         )
         error = (
             getattr(res, "error", None)
@@ -647,9 +665,9 @@ async def delete_menu(
     db=Depends(get_db),
 ):
     # Delete all menu_ingredients for this menu first
-    supabase.table("menu_ingredients").delete().eq("menu_id", menu_id).execute()
+    postgrest_client.table("menu_ingredients").delete().eq("menu_id", menu_id).execute()
     # Then delete the menu item
-    res = supabase.table("menu").delete().eq("menu_id", menu_id).execute()
+    res = postgrest_client.table("menu").delete().eq("menu_id", menu_id).execute()
     error = (
         getattr(res, "error", None)
         if hasattr(res, "error")
@@ -737,7 +755,7 @@ async def update_menu_with_image_and_ingredients(
 
         # Update menu table
         res = (
-            supabase.table("menu").update(update_data).eq("menu_id", menu_id).execute()
+            postgrest_client.table("menu").update(update_data).eq("menu_id", menu_id).execute()
         )
         error = (
             getattr(res, "error", None)
@@ -765,8 +783,10 @@ async def update_menu_with_image_and_ingredients(
             raise HTTPException(
                 status_code=400, detail=f"Invalid ingredients format: {str(e)}"
             )
+
         # Remove all existing menu_ingredients for this menu
-        supabase.table("menu_ingredients").delete().eq("menu_id", menu_id).execute()
+        postgrest_client.table("menu_ingredients").delete().eq("menu_id", menu_id).execute()
+
         # Insert new menu_ingredients if any
         menu_ingredients = []
         for ing in ingredients_list:
@@ -776,7 +796,7 @@ async def update_menu_with_image_and_ingredients(
             if not name or not quantity:
                 continue
             search_res = (
-                supabase.table("ingredients")
+                postgrest_client.table("ingredients")
                 .select("ingredient_id")
                 .ilike("ingredient_name", name)
                 .limit(1)
@@ -792,7 +812,7 @@ async def update_menu_with_image_and_ingredients(
                 ingredient_id = search_data[0].get("ingredient_id")
             if not ingredient_id:
                 create_res = (
-                    supabase.table("ingredients")
+                    postgrest_client.table("ingredients")
                     .insert({"ingredient_name": name})
                     .execute()
                 )
@@ -823,9 +843,10 @@ async def update_menu_with_image_and_ingredients(
                     "measurements": measurements,
                 }
             )
+
         if menu_ingredients:
             res_ing = (
-                supabase.table("menu_ingredients").insert(menu_ingredients).execute()
+                postgrest_client.table("menu_ingredients").insert(menu_ingredients).execute()
             )
             err_ing = (
                 getattr(res_ing, "error", None)
@@ -848,7 +869,7 @@ async def update_menu_with_image_and_ingredients(
 
 @router.get("/menu/{menu_id}")
 def get_menu_by_id(menu_id: int):
-    res = supabase.table("menu").select("*").eq("menu_id", menu_id).single().execute()
+    res = postgrest_client.table("menu").select("*").eq("menu_id", menu_id).single().execute()
     error = (
         getattr(res, "error", None)
         if hasattr(res, "error")
@@ -868,7 +889,7 @@ def get_menu_by_id(menu_id: int):
 
     # Fetch ingredients for this menu item with availability information
     ing_res = (
-        supabase.table("menu_ingredients")
+        postgrest_client.table("menu_ingredients")
         .select("menu_id,ingredient_id,ingredient_name,quantity")
         .eq("menu_id", menu_id)
         .execute()
@@ -890,7 +911,7 @@ def get_menu_by_id(menu_id: int):
 
         # Check inventory
         inv = (
-            supabase.table("inventory")
+            postgrest_client.table("inventory")
             .select("stock_quantity,expiration_date")
             .ilike("item_name", ing_name)
             .limit(1)
@@ -911,7 +932,7 @@ def get_menu_by_id(menu_id: int):
 
         # Check inventory_surplus
         surplus = (
-            supabase.table("inventory_surplus")
+            postgrest_client.table("inventory_surplus")
             .select("stock_quantity,expiration_date")
             .ilike("item_name", ing_name)
             .limit(1)
@@ -932,7 +953,7 @@ def get_menu_by_id(menu_id: int):
 
         # Check inventory_today
         today = (
-            supabase.table("inventory_today")
+            postgrest_client.table("inventory_today")
             .select("stock_quantity,expiration_date")
             .ilike("item_name", ing_name)
             .limit(1)
@@ -960,7 +981,7 @@ def get_menu_by_id(menu_id: int):
         # Check all inventory tables for detailed stock information
         for table_name in ["inventory", "inventory_surplus", "inventory_today"]:
             table_res = (
-                supabase.table(table_name)
+                postgrest_client.table(table_name)
                 .select("stock_quantity,expiration_date")
                 .ilike("item_name", ing_name)
                 .execute()
@@ -1023,7 +1044,7 @@ def get_menu_by_id(menu_id: int):
     if data.get("stock_status") != new_status:
         # Update DB if status changed
         update_res = (
-            supabase.table("menu")
+            postgrest_client.table("menu")
             .update({"stock_status": new_status})
             .eq("menu_id", menu_id)
             .execute()
@@ -1043,7 +1064,7 @@ async def delete_menu_ingredient(
 ):
     # Get ingredient name before deletion
     ing_res = (
-        supabase.table("menu_ingredients")
+        postgrest_client.table("menu_ingredients")
         .select("ingredient_name")
         .eq("menu_id", menu_id)
         .eq("ingredient_id", ingredient_id)
@@ -1051,7 +1072,7 @@ async def delete_menu_ingredient(
         .execute()
     )
     menu_name_res = (
-        supabase.table("menu")
+        postgrest_client.table("menu")
         .select("dish_name")
         .eq("menu_id", menu_id)
         .single()
@@ -1067,7 +1088,7 @@ async def delete_menu_ingredient(
     menu_name = menu_name_data.get("dish_name") if menu_name_data else None
 
     res = (
-        supabase.table("menu_ingredients")
+        postgrest_client.table("menu_ingredients")
         .delete()
         .eq("menu_id", menu_id)
         .eq("ingredient_id", ingredient_id)
@@ -1104,102 +1125,283 @@ async def delete_menu_ingredient(
 
 @router.post("/menu/recalculate-stock-status")
 def recalculate_stock_status():
-    inventory_data = []
-    for table in ["inventory", "inventory_surplus", "inventory_today"]:
-        res = (
-            supabase.table(table)
-            .select("item_name,stock_quantity,expiration_date")
-            .execute()
-        )
-        data = (
-            getattr(res, "data", None)
-            if hasattr(res, "data")
-            else res.get("data") if isinstance(res, dict) else None
-        )
-        if data:
-            inventory_data.extend(data)
+    """
+    New recalc logic (menu-centric):
+    - Aggregates non-expired inventory across inventory, inventory_surplus, inventory_today by ingredient_id
+    - Uses inventory_settings to convert quantities to a base UoM per ingredient
+    - Computes max sellable portions per menu as min(floor(total_base / qty_per_portion_base)) across gating ingredients
+    - Updates menu.stock_status and (optionally) menu.portions_left
+    """
 
-    # 2. Build a lookup map for item_name -> {stock, expired}
-    inventory_map = {}
-    for row in inventory_data:
-        name = row.get("item_name")
-        stock = row.get("stock_quantity", 0) or 0
-        expiry = row.get("expiration_date")
-        if not name:
+    logger = logging.getLogger("app.routes.menu.recalc")
+
+    def to_base(qty, from_uom, ing_id, settings_map):
+        """Convert qty (from_uom) to the ingredient's base_uom using inventory_settings mapping.
+        Returns converted qty (float) or None if conversion not possible.
+        """
+        if qty is None:
+            return None
+        try:
+            qty = float(qty)
+        except Exception:
+            return None
+
+        settings = settings_map.get(ing_id)
+        # If no settings, cannot convert reliably
+        if not settings:
+            # try common conversions heuristics if from_uom looks like kg/g/L/ml
+            base = None
+            conv = None
+        else:
+            base = settings.get("base_uom")
+            convs = settings.get("conversions")
+            # If conversions stored as JSON string, try parse
+            if isinstance(convs, str):
+                try:
+                    import json as _json
+
+                    convs = _json.loads(convs)
+                except Exception:
+                    convs = None
+
+        # If no settings or no base, try simple common conversions
+        if not settings or not base:
+            # common pairs
+            simple = {
+                ("kg", "g"): 1000,
+                ("g", "kg"): 1 / 1000,
+                ("l", "ml"): 1000,
+                ("ml", "l"): 1 / 1000,
+            }
+            if from_uom and from_uom.lower() == "pcs":
+                return qty
+            # if from_uom equals base unknown, return qty
+            # fallback: if from_uom in simple mapping to a guessed base, apply if obvious
+            for (a, b), f in simple.items():
+                if from_uom and from_uom.lower() == a and base and b == base:
+                    return qty * f
+            # try same-unit passthrough
+            return qty
+
+        # If from_uom equals base
+        if not from_uom or from_uom == base:
+            return qty
+
+        # If conversion available in settings (e.g., {'kg_to_g':1000} or {'kg->g':1000})
+        if convs:
+            # try several key formats
+            keys = [f"{from_uom}->{base}", f"{from_uom}_to_{base}", f"{from_uom}to{base}"]
+            for k in keys:
+                if k in convs:
+                    try:
+                        return qty * float(convs[k])
+                    except Exception:
+                        pass
+
+        # last-resort common conversions
+        lc_from = (from_uom or "").lower()
+        lc_base = (base or "").lower()
+        simple = {
+            ("kg", "g"): 1000,
+            ("g", "kg"): 1 / 1000,
+            ("l", "ml"): 1000,
+            ("ml", "l"): 1 / 1000,
+        }
+        if (lc_from, lc_base) in simple:
+            return qty * simple[(lc_from, lc_base)]
+
+        logger.warning(f"Missing conversion for ingredient {ing_id}: {from_uom} -> {base}")
+        return None
+
+    # 1) load all menu_ingredients (single fetch)
+    mi_res = postgrest_client.table("menu_ingredients").select("*").execute()
+    mi_data = getattr(mi_res, "data", None) or mi_res.get("data") if isinstance(mi_res, dict) else None
+    mi_data = mi_data or []
+
+    # Build menu->ingredients mapping and collect ingredient_ids
+    menu_map = {}
+    ingredient_ids = set()
+    legacy_names = set()
+    for row in mi_data:
+        mid = row.get("menu_id")
+        if mid is None:
             continue
-        if name not in inventory_map:
-            inventory_map[name] = {"total_stock": 0, "available_stock": 0}
+        menu_map.setdefault(mid, []).append(row)
+        iid = row.get("ingredient_id")
+        if iid:
+            ingredient_ids.add(iid)
+        else:
+            name = (row.get("ingredient_name") or row.get("name") or "").strip()
+            if name:
+                legacy_names.add(name)
 
-        inventory_map[name]["total_stock"] += stock
-
-        # Check if this specific entry is expired
-        is_expired = False
-        if expiry:
+    # 2) Try to resolve legacy names to ingredient_id once and update menu_ingredients rows
+    name_to_id = {}
+    if legacy_names:
+        for name in legacy_names:
             try:
-                if datetime.strptime(expiry, "%Y-%m-%d").date() < datetime.now().date():
-                    is_expired = True
+                res = (
+                    postgrest_client.table("ingredients")
+                    .select("ingredient_id,ingredient_name")
+                    .ilike("ingredient_name", name)
+                    .limit(1)
+                    .execute()
+                )
+                d = getattr(res, "data", None) or res.get("data") if isinstance(res, dict) else None
+                if d and isinstance(d, list) and len(d) > 0:
+                    found = d[0]
+                    iid = found.get("ingredient_id")
+                    if iid:
+                        name_to_id[name] = iid
+                        ingredient_ids.add(iid)
+                        # One-time update: set ingredient_id on matching menu_ingredients
+                        try:
+                            postgrest_client.table("menu_ingredients").update({"ingredient_id": iid}).ilike("ingredient_name", name).execute()
+                        except Exception:
+                            # best-effort update; ignore failures
+                            pass
             except Exception:
-                pass
+                continue
 
-        # Only add to available stock if not expired
-        if not is_expired:
-            inventory_map[name]["available_stock"] += stock
+    # 3) Load inventory_settings for these ingredients
+    settings_map = {}
+    if ingredient_ids:
+        try:
+            sres = postgrest_client.table("inventory_settings").select("*").in_("ingredient_id", list(ingredient_ids)).execute()
+            sdata = getattr(sres, "data", None) or sres.get("data") if isinstance(sres, dict) else None
+            for s in sdata or []:
+                ing = s.get("ingredient_id")
+                if ing:
+                    settings_map[ing] = s
+        except Exception:
+            logger.exception("Failed to load inventory_settings")
 
-    # 3. Fetch all menu items and ingredients
-    res = supabase.table("menu").select("*").execute()
-    data = (
-        getattr(res, "data", None)
-        if hasattr(res, "data")
-        else res.get("data") if isinstance(res, dict) else None
-    )
-    if not data:
-        return {"message": "No menu items found."}
-    menu_ids = [item.get("id") or item.get("menu_id") for item in data]
-    if not menu_ids:
-        return {"message": "No menu items found."}
-    ing_res = (
-        supabase.table("menu_ingredients")
-        .select("menu_id,ingredient_id,ingredient_name,quantity")
-        .in_("menu_id", menu_ids)
-        .execute()
-    )
-    ing_data = (
-        getattr(ing_res, "data", None)
-        if hasattr(ing_res, "data")
-        else ing_res.get("data") if isinstance(ing_res, dict) else None
-    )
-    ing_map = {}
-    for ing in ing_data or []:
-        mid = ing.get("menu_id")
-        if mid not in ing_map:
-            ing_map[mid] = []
-        ing_map[mid].append(ing)
+    # 4) Aggregate available (non-expired) inventory across three tables
+    today = datetime.utcnow().date()
+    available_base = {iid: 0.0 for iid in ingredient_ids}
 
-    # 4. For each menu item, check ingredients against inventory_map and update instantly
+    for table in ["inventory", "inventory_surplus", "inventory_today"]:
+        try:
+            # fetch rows that have ingredient_id in our set
+            if ingredient_ids:
+                q = postgrest_client.table(table).select("ingredient_id,ingredient_name,stock_quantity,quantity,remaining_stock,expiration_date,uom,unit").in_("ingredient_id", list(ingredient_ids)).execute()
+                rows = getattr(q, "data", None) or q.get("data") if isinstance(q, dict) else None
+                rows = rows or []
+            else:
+                rows = []
+        except Exception:
+            logger.exception(f"Failed to fetch from {table}")
+            rows = []
+
+        for r in rows:
+            try:
+                exp = r.get("expiration_date")
+                if exp:
+                    try:
+                        if isinstance(exp, str):
+                            exp_date = datetime.strptime(exp[:10], "%Y-%m-%d").date()
+                        else:
+                            exp_date = exp
+                        if exp_date < today:
+                            continue
+                    except Exception:
+                        # if parsing fails, be conservative and include the row
+                        pass
+
+                iid = r.get("ingredient_id")
+                if not iid:
+                    continue
+                qty = r.get("stock_quantity") or r.get("quantity") or r.get("remaining_stock") or 0
+                from_uom = r.get("uom") or r.get("unit")
+                conv = to_base(qty, from_uom, iid, settings_map)
+                if conv is None:
+                    # skip ingredient if cannot convert; don't crash
+                    logger.warning(f"Skipping inventory row for ingredient {iid} in {table} due to missing conversion")
+                    continue
+                available_base[iid] = available_base.get(iid, 0.0) + float(conv)
+            except Exception:
+                logger.exception("Error processing inventory row")
+
+    # 5) Load ingredient gating information (ingredients.is_gating)
+    ingredients_map = {}
+    if ingredient_ids:
+        try:
+            ires = postgrest_client.table("ingredients").select("ingredient_id,is_gating").in_("ingredient_id", list(ingredient_ids)).execute()
+            idata = getattr(ires, "data", None) or ires.get("data") if isinstance(ires, dict) else None
+            for it in idata or []:
+                ingredients_map[it.get("ingredient_id")] = it
+        except Exception:
+            logger.exception("Failed to load ingredients info")
+
+    # 6) Fetch menus list to update
+    mres = postgrest_client.table("menu").select("menu_id,stock_status,portions_left").execute()
+    mdata = getattr(mres, "data", None) or mres.get("data") if isinstance(mres, dict) else None
+    mdata = mdata or []
     updated = 0
-    for item in data:
-        mid = item.get("id") or item.get("menu_id")
-        ingredients = ing_map.get(mid, [])
-        all_in_stock = True
-        for ing in ingredients:
-            ing_name = ing.get("ingredient_name") or ing.get("name")
-            inv_info = inventory_map.get(ing_name)
-            available_stock = inv_info["available_stock"] if inv_info else 0
-            # Ingredient is available if there's non-expired stock
-            if not available_stock or available_stock <= 0:
-                all_in_stock = False
-                break
-        new_status = "Available" if all_in_stock else "Out of Stock"
-        if item.get("stock_status") != new_status:
-            print(f"Updating menu_id {mid}: {item.get('stock_status')} -> {new_status}")
-            # Use the correct primary key column
-            pk_column = "id" if "id" in item else "menu_id"
-            pk_value = item.get("id") or item.get("menu_id")
-            supabase.table("menu").update({"stock_status": new_status}).eq(
-                pk_column, pk_value
-            ).execute()
-            updated += 1
 
-    return {
-        "message": f"Stock status recalculation completed. {updated} menu items updated."
-    }
+    for m in mdata:
+        mid = m.get("menu_id") or m.get("id")
+        if mid is None:
+            continue
+        recipe = menu_map.get(mid, [])
+        # compute portions per gating ingredient
+        portions_list = []
+        for ing in recipe:
+            iid = ing.get("ingredient_id") or name_to_id.get((ing.get("ingredient_name") or ing.get("name") or "").strip())
+            if not iid:
+                logger.warning(f"Menu {mid}: missing ingredient_id for recipe row, skipping")
+                continue
+            # determine if gating; default True
+            ing_info = ingredients_map.get(iid, {})
+            is_gating = ing_info.get("is_gating") if ing_info and ing_info.get("is_gating") is not None else True
+            if not is_gating:
+                continue
+
+            qty_per_portion = ing.get("qty_per_portion") or ing.get("quantity") or ing.get("qty") or 0
+            recipe_uom = ing.get("uom") or ing.get("unit")
+            if not qty_per_portion or float(qty_per_portion) == 0:
+                logger.warning(f"Menu {mid} ingredient {iid}: missing qty_per_portion; skipping from limiting math")
+                continue
+
+            qty_per_base = to_base(qty_per_portion, recipe_uom, iid, settings_map)
+            if qty_per_base is None or qty_per_base == 0:
+                logger.warning(f"Menu {mid} ingredient {iid}: cannot convert recipe qty to base; skipping")
+                continue
+
+            total_available = available_base.get(iid, 0.0)
+            try:
+                possible = math.floor(total_available / float(qty_per_base))
+            except Exception:
+                possible = 0
+            portions_list.append(possible)
+
+        # determine max_portions
+        if portions_list:
+            max_portions = min(portions_list)
+        else:
+            # If there are no gating ingredients or none contributed to math, treat as Available but unknown portions
+            max_portions = None
+
+        new_status = "Available" if (max_portions is None or max_portions > 0) else "Out of Stock"
+
+        # Update only if changed
+        to_update = {}
+        if m.get("stock_status") != new_status:
+            to_update["stock_status"] = new_status
+        # persist portions_left optionally
+        if max_portions is not None:
+            if m.get("portions_left") != max_portions:
+                to_update["portions_left"] = max_portions
+        else:
+            # if previously set, clear it
+            if m.get("portions_left") is not None:
+                to_update["portions_left"] = None
+
+        if to_update:
+            try:
+                postgrest_client.table("menu").update(to_update).eq("menu_id", mid).execute()
+                updated += 1
+            except Exception:
+                logger.exception(f"Failed to update menu {mid}")
+
+    return {"message": f"Stock status recalculation completed. {updated} menu items updated."}

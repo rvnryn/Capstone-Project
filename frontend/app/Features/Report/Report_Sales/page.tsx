@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import ExcelJS from "exceljs";
 import {
   FaSearch,
@@ -10,12 +10,21 @@ import {
   FaCalendarAlt,
   FaDownload,
   FaFilter,
+  FaChartBar,
 } from "react-icons/fa";
-import { MdCheckCircle, MdAssessment, MdTrendingUp } from "react-icons/md";
+import {
+  MdCheckCircle,
+  MdAssessment,
+  MdTrendingUp,
+  MdInsights,
+} from "react-icons/md";
 import { FiBarChart, FiPieChart, FiActivity } from "react-icons/fi";
 import { TbReportAnalytics } from "react-icons/tb";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import { useSimpleSalesReport } from "./hooks/useSimpleSalesReport";
+import annotationPlugin from "chartjs-plugin-annotation";
+import Chart from "chart.js/auto";
+import { useHistoricalAnalysis } from "../../Dashboard/hook/useSalesPrediction";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { saveAs } from "file-saver";
@@ -70,20 +79,17 @@ const GoogleSheetIntegration = ({
 };
 
 export default function ReportSales() {
-  // Use the sales report hook
-  const {
-    data: reportData,
-    loading: isLoading,
-    error,
-    fetchReportData,
-    fetchTodayReport,
-    fetchWeekReport,
-    fetchMonthReport,
-  } = useSimpleSalesReport();
+  // ...existing variable and hook declarations...
+
+  // ...existing variable and hook declarations...
+
+  // ...all state and hook declarations above...
 
   // UI state
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingSearch, setPendingSearch] = useState("");
+  // Top selling analytics state (historical only)
+  const [topItemsCount, setTopItemsCount] = useState(5);
   const [showPopup, setShowPopup] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -99,17 +105,111 @@ export default function ReportSales() {
     direction: "asc" as "asc" | "desc",
   });
 
-  // Place debug useEffects here, after all state/variable declarations
+  // Fetch report data on mount and when period changes
+  // Use the sales report hook
+  const {
+    data: reportData,
+    loading: isLoading,
+    error,
+    fetchReportData,
+    fetchTodayReport,
+    fetchWeekReport,
+    fetchMonthReport,
+  } = useSimpleSalesReport();
+
+  // Fetch report data on mount and when period changes
   useEffect(() => {
-    // Call fetchReportData on mount and whenever period changes
-    fetchReportData()
-      .then((data) => {
-        console.log("[ReportSales] fetchReportData result:", data);
-      })
-      .catch((err) => {
-        console.error("[ReportSales] fetchReportData error:", err);
+    if (period === "today") {
+      fetchTodayReport();
+    } else if (period === "week") {
+      fetchWeekReport();
+    } else if (period === "month") {
+      fetchMonthReport();
+    } else if (period === "all" || period === "all_time") {
+      // Log for debugging
+      console.log("[ReportSales] Fetching ALL TIME data");
+      // You may want to set a very early start date, or leave undefined to let backend handle
+      fetchReportData("2000-01-01", undefined).then((data) => {
+        console.log("[ReportSales] ALL TIME API response", data);
       });
-  }, [period, fetchReportData]);
+    } else {
+      // Unknown period, fallback
+      fetchReportData();
+    }
+  }, [
+    period,
+    fetchTodayReport,
+    fetchWeekReport,
+    fetchMonthReport,
+    fetchReportData,
+  ]);
+
+  // ...existing code...
+
+  // Use historical analytics for top selling
+  const {
+    data: historicalData,
+    loading: historicalLoading,
+    error: historicalError,
+  } = useHistoricalAnalysis();
+
+  // (Removed chart effect for Top Selling - not needed for historical analytics table)
+
+  // Compute top items list from historical analytics (by_total_sales)
+  const topItems = useMemo(() => {
+    if (
+      !historicalData ||
+      !historicalData.top_performers ||
+      !Array.isArray(historicalData.top_performers.by_total_sales)
+    )
+      return [];
+    // If unit price is available in historicalData, use it; otherwise, fallback to '-'
+    // For now, assume unit price is not available, so show '-'.
+    return historicalData.top_performers.by_total_sales
+      .filter((item: any) => item.total_sales > 0)
+      .sort((a: any, b: any) => b.total_sales - a.total_sales)
+      .slice(0, topItemsCount)
+      .map((item: any, idx: number) => ({
+        name: item.item,
+        quantity: item.total_sales,
+        unitPrice: "-",
+        totalSales: "-",
+        rank: idx + 1,
+        avgSales: item.avg_sales,
+        frequency: item.frequency,
+      }));
+  }, [historicalData, topItemsCount]);
+
+  // Format a period/week label into a nicer display. If the label is already human-friendly keep it.
+  const formatPeriodLabel = (label?: string | null) => {
+    if (!label) return "-";
+    // If label already contains words like 'Week' assume it's friendly
+    if (/week/i.test(label)) return label;
+    // Try parse as date
+    const d = new Date(label);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
+    return label;
+  };
+
+  // Only show item count selector for Top Selling
+  const renderTopItemsCountSelector = () => (
+    <div className="flex items-center gap-2">
+      <label className="text-gray-300 text-xs sm:text-sm whitespace-nowrap">
+        Items:
+      </label>
+      <select
+        value={topItemsCount}
+        onChange={(e) => setTopItemsCount(Number(e.target.value))}
+        className="bg-gray-700 text-white text-xs sm:text-sm px-2 py-1 rounded border border-gray-600 focus:border-yellow-400 focus:outline-none min-w-0"
+      >
+        <option value={3}>Top 3</option>
+        <option value={5}>Top 5</option>
+        <option value={10}>Top 10</option>
+      </select>
+    </div>
+  );
 
   useEffect(() => {
     console.log("[ReportSales] reportData:", reportData);
@@ -336,14 +436,15 @@ export default function ReportSales() {
   // Convert hook data to the format expected by the component
   const salesData = useMemo(() => {
     if (!reportData) return [];
-    // Add report_date to each item for date filtering
+    // Add report_date, rangeStart, and rangeEnd to each item for date filtering and table display
     return reportData.topItems.map((item) => ({
       name: item.name,
       quantity: item.quantity,
-      unitPrice: item.revenue / item.quantity,
+      unitPrice: (item.revenue / item.quantity).toFixed(2),
       totalRevenue: item.revenue,
       category: item.category || "",
       report_date: "",
+      // rangeStart and rangeEnd removed as they do not exist on item
     }));
   }, [reportData]);
 
@@ -354,7 +455,7 @@ export default function ReportSales() {
   };
 
   const filterByPeriod = (item: any, period: string) => {
-    if (!period || period === "all") return true;
+    if (!period || period === "all" || period === "all_time") return true;
     if (!item.report_date) return true;
     const today = new Date();
     const itemDate = new Date(item.report_date);
@@ -381,12 +482,13 @@ export default function ReportSales() {
 
   const filteredSales = useMemo(() => {
     return salesData.filter((item: any) => {
-      // Search query filter
-      const matchesSearch = searchQuery
-        ? Object.values(item)
-            .join(" ")
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase())
+      // Robust search query filter: trim, ignore case, collapse spaces
+      const normalize = (str: string) =>
+        str.toLowerCase().replace(/\s+/g, " ").trim();
+      const normalizedSearch = normalize(searchQuery);
+      const normalizedItem = normalize(Object.values(item).join(" "));
+      const matchesSearch = normalizedSearch
+        ? normalizedItem.includes(normalizedSearch)
         : true;
 
       // Category filter
@@ -459,14 +561,27 @@ export default function ReportSales() {
 
   const groupedSales = filteredSales;
 
+  // Enhanced sorting: sort by selected key and direction
   const sortedSales = useMemo(() => {
     const data = groupedSales;
     if (!sortConfig.key) return data;
     const sorted = [...data].sort((a, b) => {
-      if (b.quantity !== a.quantity) return b.quantity - a.quantity;
-      if (b.totalRevenue !== a.totalRevenue)
-        return b.totalRevenue - a.totalRevenue;
-      return a.name.localeCompare(b.name);
+      let aValue = a[sortConfig.key as keyof typeof a];
+      let bValue = b[sortConfig.key as keyof typeof b];
+      // Numeric sort for quantity, unitPrice, totalRevenue
+      if (["quantity", "unitPrice", "totalRevenue"].includes(sortConfig.key)) {
+        aValue = Number(aValue);
+        bValue = Number(bValue);
+        if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+      }
+      // String sort for name, category
+      aValue = (aValue || "").toString().toLowerCase();
+      bValue = (bValue || "").toString().toLowerCase();
+      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
+      return 0;
     });
     return sorted;
   }, [groupedSales, sortConfig]);
@@ -808,7 +923,8 @@ export default function ReportSales() {
                               sortedSales.length > 0
                                 ? (
                                     sortedSales.reduce(
-                                      (sum, item) => sum + item.unitPrice,
+                                      (sum, item) =>
+                                        sum + Number(item.unitPrice),
                                       0
                                     ) / sortedSales.length
                                   ).toFixed(2)
@@ -819,7 +935,7 @@ export default function ReportSales() {
                             {sortedSales.length > 0
                               ? (
                                   sortedSales.reduce(
-                                    (sum, item) => sum + item.unitPrice,
+                                    (sum, item) => sum + Number(item.unitPrice),
                                     0
                                   ) / sortedSales.length
                                 ).toFixed(2)
@@ -909,135 +1025,213 @@ export default function ReportSales() {
                   </div>
                 </header>
 
-                {(forecast.length > 0 || historicalPredictions.length > 0) && (
-                  <section className="my-8">
-                    <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-yellow-400 mb-4 flex items-center gap-2">
-                      <FaChartLine className="text-yellow-400" />
-                      Weekly Sales Forecast{" "}
-                      <span className="relative group">
-                        <AiOutlineInfoCircle size={18} color="orange" />
-                        <span className="absolute left-6 top-1/2 -translate-y-1/2 z-20 w-max min-w-[220px] bg-black text-orange-200 text-xs rounded-lg px-3 py-2 shadow-lg border border-yellow-500 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 whitespace-nowrap">
-                          Forecasts are estimates only and may not be 100%
-                          accurate.
-                        </span>
-                      </span>
-                    </h3>
-                    {/* Holiday Type Filter */}
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <label className="text-xs text-gray-300 font-medium">
-                        Holiday Type:
-                      </label>
-                      <select
-                        value={holidayTypeFilter}
-                        onChange={(e) =>
-                          setHolidayTypeFilter(e.target.value as any)
-                        }
-                        className="bg-gray-800/60 border border-gray-700 text-white rounded px-2 py-1 text-xs"
-                      >
-                        <option value="all">All</option>
-                        <option value="official">Official PH</option>
-                        <option value="custom">Custom</option>
-                        <option value="none">Not a Holiday</option>
-                      </select>
+                {/* Top Selling Items List (from useHistoricalAnalysis) */}
+                <section aria-label="Top Selling Items" className="mb-6">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 gap-3">
+                    <div className="">
+                      <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-yellow-400 flex items-center gap-2">
+                        <FaChartBar className="text-yellow-400" /> Top Selling
+                        Items
+                      </h3>
+                      <p className="text-gray-400 text-xs">
+                        List of top-selling items (date · name · quantity)
+                      </p>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="table-auto w-full text-sm text-left border-collapse min-w-[400px] bg-gray-900/60 rounded-lg">
-                        <thead>
-                          <tr>
-                            <th className="px-4 py-2 text-yellow-400">
-                              Week Start
-                            </th>
-                            <th className="px-4 py-2 text-yellow-400">
-                              Predicted Sales
-                            </th>
-                            <th className="px-4 py-2 text-green-400">
-                              Actual Sales
-                            </th>
-                            <th className="px-4 py-2 text-blue-400">
-                              Holiday?
-                            </th>
-                            <th className="px-4 py-2 text-pink-400">Type</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredWeeks.map((row) => (
-                            <tr
-                              key={row.week_start}
-                              className="border-b border-gray-800"
-                            >
-                              <td className="px-4 py-2 font-mono">
-                                {row.week_start}
-                              </td>
-                              <td className="px-4 py-2 text-yellow-200 font-semibold">
-                                ₱{row.predicted_sales.toLocaleString()}
-                              </td>
-                              <td className="px-4 py-2 text-green-300 font-semibold">
-                                {row.actual_sales !== null &&
-                                row.actual_sales !== undefined ? (
-                                  `₱${row.actual_sales.toLocaleString()}`
-                                ) : (
-                                  <span className="text-gray-500">N/A</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-2 text-center">
-                                {row.is_holiday_week ? (
-                                  row.holiday_type === "official" ? (
-                                    <span
-                                      className="inline-flex items-center gap-1 text-blue-400 font-bold"
-                                      title="Official PH Holiday"
-                                    >
-                                      <span className="inline-block w-3 h-3 rounded-full bg-blue-400 mr-1" />
-                                      Yes
-                                    </span>
-                                  ) : row.holiday_type === "custom" ? (
-                                    <span
-                                      className="inline-flex items-center gap-1 text-pink-400 font-bold"
-                                      title="Custom Holiday"
-                                    >
-                                      <span className="inline-block w-3 h-3 rounded-full bg-pink-400 mr-1" />
-                                      Yes
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-blue-400 font-bold">
-                                      Yes
-                                    </span>
-                                  )
-                                ) : (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-gray-500 font-normal"
-                                    title="Not a holiday"
-                                  >
-                                    <span className="inline-block w-3 h-3 rounded-full bg-gray-500 mr-1" />
-                                    No
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-2 text-center">
-                                {row.holiday_type === "official" && (
-                                  <span className="text-blue-400">
-                                    Official
-                                  </span>
-                                )}
-                                {row.holiday_type === "custom" && (
-                                  <span className="text-pink-400">Custom</span>
-                                )}
-                                {!row.is_holiday_week && (
-                                  <span className="text-gray-500">-</span>
-                                )}
-                              </td>
+                    <div className="mt-2 sm:mt-0">
+                      {renderTopItemsCountSelector()}
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-3 border border-gray-700">
+                    {/* Metric selector removed for historical analytics */}
+                    {!topItems || topItems.length === 0 ? (
+                      <div className="text-center text-gray-400 py-8">
+                        <p className="text-lg font-semibold mb-2">
+                          No sales data available for this period.
+                        </p>
+                        <p className="text-sm">
+                          Try adjusting your filters or select a different
+                          period.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm text-left">
+                          <thead>
+                            <tr className="text-gray-300 text-xs">
+                              <th className="px-4 py-2">Item Name</th>
+                              <th className="px-4 py-2">Quantity Sold</th>
+                              <th className="px-4 py-2">Date Range</th>
+                              <th className="px-4 py-2">Rank</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {holidayLegend}
+                          </thead>
+                          <tbody>
+                            {topItems.map((item: any, idx: number) => (
+                              <tr
+                                key={item.name + idx}
+                                className="border-t border-gray-800"
+                              >
+                                <td className="px-4 py-2 font-medium text-white">
+                                  {item.name}
+                                </td>
+                                <td className="px-4 py-2">{item.quantity}</td>
+                                <td className="px-4 py-2">
+                                  {historicalData?.overview?.analysis_period ||
+                                    "-"}
+                                </td>
+                                <td className="px-4 py-2">{item.rank}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="my-8">
+                  <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-yellow-400 mb-4 flex items-center gap-2">
+                    <FaChartLine className="text-yellow-400" />
+                    Weekly Sales Forecast{" "}
+                    <span className="relative group">
+                      <AiOutlineInfoCircle size={18} color="orange" />
+                      <span className="absolute left-6 top-1/2 -translate-y-1/2 z-20 w-max min-w-[220px] bg-black text-orange-200 text-xs rounded-lg px-3 py-2 shadow-lg border border-yellow-500 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 whitespace-nowrap">
+                        Forecasts are estimates only and may not be 100%
+                        accurate.
+                      </span>
+                    </span>
+                  </h3>
+                  {/* Holiday Type Filter */}
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <label className="text-xs text-gray-300 font-medium">
+                      Holiday Type:
+                    </label>
+                    <select
+                      value={holidayTypeFilter}
+                      onChange={(e) =>
+                        setHolidayTypeFilter(e.target.value as any)
+                      }
+                      className="bg-gray-800/60 border border-gray-700 text-white rounded px-2 py-1 text-xs"
+                    >
+                      <option value="all">All</option>
+                      <option value="official">Official PH</option>
+                      <option value="custom">Custom</option>
+                      <option value="none">Not a Holiday</option>
+                    </select>
+                  </div>
+                  {forecast.length === 0 &&
+                  historicalPredictions.length === 0 ? (
+                    <div className="text-center text-gray-400 py-8">
+                      <p className="text-lg font-semibold mb-2">
+                        No forecast data available for this period.
+                      </p>
+                      <p className="text-sm">
+                        Try adjusting your filters or select a different period.
+                      </p>
                     </div>
-                    <p className="text-xs text-gray-400 mt-2">
-                      * Forecast includes seasonality, official Philippine
-                      holidays, and custom holidays/events for improved
-                      accuracy.
-                    </p>
-                  </section>
-                )}
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="table-auto w-full text-sm text-left border-collapse min-w-[400px] bg-gray-900/60 rounded-lg">
+                          <thead>
+                            <tr>
+                              <th className="px-4 py-2 text-yellow-400">
+                                Week Start
+                              </th>
+                              <th className="px-4 py-2 text-yellow-400">
+                                Predicted Sales
+                              </th>
+                              <th className="px-4 py-2 text-green-400">
+                                Actual Sales
+                              </th>
+                              <th className="px-4 py-2 text-blue-400">
+                                Holiday?
+                              </th>
+                              <th className="px-4 py-2 text-pink-400">Type</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredWeeks.map((row) => (
+                              <tr
+                                key={row.week_start}
+                                className="border-b border-gray-800"
+                              >
+                                <td className="px-4 py-2 font-mono">
+                                  {row.week_start}
+                                </td>
+                                <td className="px-4 py-2 text-yellow-200 font-semibold">
+                                  ₱{row.predicted_sales.toLocaleString()}
+                                </td>
+                                <td className="px-4 py-2 text-green-300 font-semibold">
+                                  {row.actual_sales !== null &&
+                                  row.actual_sales !== undefined ? (
+                                    `₱${row.actual_sales.toLocaleString()}`
+                                  ) : (
+                                    <span className="text-gray-500">N/A</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  {row.is_holiday_week ? (
+                                    row.holiday_type === "official" ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 text-blue-400 font-bold"
+                                        title="Official PH Holiday"
+                                      >
+                                        <span className="inline-block w-3 h-3 rounded-full bg-blue-400 mr-1" />
+                                        Yes
+                                      </span>
+                                    ) : row.holiday_type === "custom" ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 text-pink-400 font-bold"
+                                        title="Custom Holiday"
+                                      >
+                                        <span className="inline-block w-3 h-3 rounded-full bg-pink-400 mr-1" />
+                                        Yes
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-blue-400 font-bold">
+                                        Yes
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span
+                                      className="inline-flex items-center gap-1 text-gray-500 font-normal"
+                                      title="Not a holiday"
+                                    >
+                                      <span className="inline-block w-3 h-3 rounded-full bg-gray-500 mr-1" />
+                                      No
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  {row.holiday_type === "official" && (
+                                    <span className="text-blue-400">
+                                      Official
+                                    </span>
+                                  )}
+                                  {row.holiday_type === "custom" && (
+                                    <span className="text-pink-400">
+                                      Custom
+                                    </span>
+                                  )}
+                                  {!row.is_holiday_week && (
+                                    <span className="text-gray-500">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {holidayLegend}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2">
+                        * Forecast includes seasonality, official Philippine
+                        holidays, and custom holidays/events for improved
+                        accuracy.
+                      </p>
+                    </>
+                  )}
+                </section>
 
                 {/* Divider */}
                 <div className="relative mb-2 xs:mb-3 sm:mb-4 lg:mb-6">
@@ -1132,6 +1326,7 @@ export default function ReportSales() {
                           <option value="today">Today</option>
                           <option value="week">This Week</option>
                           <option value="month">This Month</option>
+                          <option value="all_time">All Time</option>
                         </select>
                       </div>
 
@@ -1503,23 +1698,39 @@ export default function ReportSales() {
                           ].map((col) => (
                             <th
                               key={col.key}
-                              onClick={() => requestSort(col.key)}
-                              className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 text-left font-semibold cursor-pointer select-none whitespace-nowrap text-xs lg:text-sm xl:text-base transition-colors text-gray-300 hover:text-yellow-400 no-select touch-target"
-                              scope="col"
-                              tabIndex={0}
-                              aria-label={`Sort by ${col.label}`}
+                              className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 text-left font-semibold whitespace-nowrap text-xs lg:text-sm xl:text-base text-gray-300 cursor-pointer select-none group hover:text-yellow-400 transition"
+                              onClick={() =>
+                                setSortConfig((prev) => ({
+                                  key: col.key,
+                                  direction:
+                                    prev.key === col.key &&
+                                    prev.direction === "asc"
+                                      ? "desc"
+                                      : "asc",
+                                }))
+                              }
+                              aria-sort={
+                                sortConfig.key === col.key
+                                  ? sortConfig.direction === "asc"
+                                    ? "ascending"
+                                    : "descending"
+                                  : undefined
+                              }
                             >
-                              <div className="flex items-center gap-1.5 lg:gap-2">
-                                <span className="truncate">{col.label}</span>
-                                {sortConfig.key === col.key && (
-                                  <span className="text-yellow-400 flex-shrink-0">
-                                    {sortConfig.direction === "asc" ? "↑" : "↓"}
+                              <span className="flex items-center gap-1">
+                                {col.label}
+                                {sortConfig.key === col.key ? (
+                                  sortConfig.direction === "asc" ? (
+                                    <span className="text-yellow-400">▲</span>
+                                  ) : (
+                                    <span className="text-yellow-400">▼</span>
+                                  )
+                                ) : (
+                                  <span className="text-gray-500 group-hover:text-yellow-300">
+                                    ⇅
                                   </span>
                                 )}
-                                {sortConfig.key !== col.key && (
-                                  <FaSort className="text-gray-500 text-xs opacity-50 flex-shrink-0" />
-                                )}
-                              </div>
+                              </span>
                             </th>
                           ))}
                         </tr>
@@ -1864,7 +2075,7 @@ export default function ReportSales() {
                             {sortedSales.length > 0
                               ? (
                                   sortedSales.reduce(
-                                    (sum, item) => sum + item.unitPrice,
+                                    (sum, item) => sum + Number(item.unitPrice),
                                     0
                                   ) / sortedSales.length
                                 ).toFixed(2)
@@ -1971,7 +2182,6 @@ export default function ReportSales() {
                           </div>
                         </div>
                       </div>
-
                       <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-transparent bg-gradient-to-r from-blue-400 to-blue-500 bg-clip-text font-poppins">
                         Exporting to Google Sheets...
                       </h3>

@@ -21,6 +21,7 @@ import {
   FiTrendingDown,
   FiMinus,
   FiEye,
+  FiRefreshCw,
 } from "react-icons/fi";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
@@ -145,9 +146,11 @@ export default function InventoryPage() {
   const router = useRouter();
 
   // Fetch master inventory using React Query
-  const { data: inventoryData = [], isLoading } = useQuery<
-    (InventoryItem & { unit?: string })[]
-  >({
+  const {
+    data: inventoryData = [],
+    isLoading,
+    isFetching,
+  } = useQuery<(InventoryItem & { unit?: string })[]>({
     queryKey: ["masterInventory", settings],
     queryFn: async (): Promise<(InventoryItem & { unit?: string })[]> => {
       try {
@@ -390,6 +393,11 @@ export default function InventoryPage() {
     setSortConfig({ key: "", direction: "asc" });
   };
 
+  const handleRefresh = () => {
+    console.log("Refreshing inventory table...");
+    queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
+  };
+
   // Get summary statistics
   const summaryStats = useMemo(() => {
     const total = inventoryData.length;
@@ -625,8 +633,7 @@ export default function InventoryPage() {
               <header className="flex flex-col space-y-3 xs:space-y-4 sm:space-y-5 md:space-y-6 mb-4 xs:mb-5 sm:mb-6 md:mb-8">
                 {/* PWA Status Bar */}
                 <PWAStatusBar
-                  dataKey="masterInventory"
-                  dataType="inventory"
+                  key="masterInventory"
                   className="mb-2 xs:mb-3 sm:mb-4"
                 />
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 xs:gap-3 sm:gap-4 md:gap-6">
@@ -650,6 +657,15 @@ export default function InventoryPage() {
                     aria-label="Inventory actions"
                     className="flex items-center gap-1 xs:gap-2 sm:gap-3 w-full sm:w-auto"
                   >
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                    >
+                      <FiRefreshCw className="text-xs xs:text-sm" />
+                      <span className="sm:inline">Refresh</span>
+                    </button>
+
                     {["Owner", "General Manager", "Store Manager"].includes(
                       role || ""
                     ) && (
@@ -949,21 +965,26 @@ export default function InventoryPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {isLoading ? (
+                      {isLoading || isFetching ? (
                         <tr>
                           <td
                             colSpan={9}
-                            className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-8 xs:py-10 sm:py-12 md:py-14 lg:py-16 text-center"
+                            className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-10 xs:py-12 sm:py-16 md:py-20 lg:py-24 text-center bg-yellow-900/10 animate-pulse"
+                            aria-busy="true"
+                            aria-live="polite"
                           >
-                            <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                              <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                              <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                            <div className="flex flex-col items-center gap-3 sm:gap-5">
+                              <div className="relative">
+                                <div className="absolute inset-0 w-full h-full rounded-full bg-yellow-400/20 blur-lg"></div>
+                                <div className="relative w-12 h-12 sm:w-16 sm:h-16 border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+                              </div>
+                              <div className="text-yellow-300 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
                                 {isOnline
-                                  ? "Loading inventory data..."
+                                  ? "Refreshing inventory data..."
                                   : "Loading from offline cache..."}
                               </div>
                               {!isOnline && (
-                                <div className="text-gray-400 text-xs xs:text-sm">
+                                <div className="text-gray-400 text-xs sm:text-sm">
                                   Data may not be current
                                 </div>
                               )}

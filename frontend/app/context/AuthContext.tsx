@@ -112,10 +112,12 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     }
 
     const supabaseUser = session.user;
+    // Always set auth_id for robust identity checks
     const newUser = {
       id: supabaseUser.id,
       email: supabaseUser.email,
       ...supabaseUser.user_metadata,
+      auth_id: supabaseUser.user_metadata?.auth_id || supabaseUser.id,
     };
     setUser(newUser);
 
@@ -137,6 +139,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       setUser((prev) => ({
         ...prev,
         ...data.user,
+        auth_id: data.user?.auth_id || prev?.auth_id || prev?.id,
       }));
       // Cache user and role for offline login
       if (typeof window !== "undefined") {

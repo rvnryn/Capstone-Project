@@ -34,6 +34,18 @@ export default function ViewMenu() {
   const { role } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+    const [isOnline, setIsOnline] = useState(true);
+    useEffect(() => {
+      setIsOnline(navigator.onLine);
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+      return () => {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      };
+    }, []);
   const { fetchMenuById } = useMenuAPI();
   const [menu, setMenu] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -511,10 +523,7 @@ export default function ViewMenu() {
                 {["Owner", "General Manager", "Store Manager"].includes(
                   role || ""
                 ) && (
-                  <button
-                    onClick={() => router.push(routes.UpdateMenu(menu.menu_id))}
-                    className="group flex items-center justify-center gap-1.5 xs:gap-2 px-3 xs:px-4 sm:px-5 md:px-6 py-2 xs:py-2.5 sm:py-3 rounded-lg xs:rounded-xl border-2 border-yellow-400/50 text-yellow-400 hover:border-yellow-400 hover:bg-yellow-400/10 hover:text-yellow-300 font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto order-2 xs:order-1"
-                  >
+                  <button disabled={!isOnline} title={!isOnline ? 'You can use this when online.' : ''} onClick={() => router.push(routes.UpdateMenu(menu.menu_id))} className="group flex items-center justify-center gap-1.5 xs:gap-2 px-3 xs:px-4 sm:px-5 md:px-6 py-2 xs:py-2.5 sm:py-3 rounded-lg xs:rounded-xl border-2 border-yellow-400/50 text-yellow-400 hover:border-yellow-400 hover:bg-yellow-400/10 hover:text-yellow-300 font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto order-2 xs:order-1">
                     <FiEdit3 className="w-4 h-4 sm:w-5 sm:h-5 group-hover:rotate-12 transition-transform duration-300" />
                     <span className="hidden sm:inline">Edit Menu Item</span>
                     <span className="sm:hidden">Edit</span>

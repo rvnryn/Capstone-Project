@@ -8,7 +8,7 @@ from slowapi import Limiter
 from fastapi import Request
 from datetime import datetime, date
 from pydantic import BaseModel
-from app.supabase import supabase, get_db
+from app.supabase import postgrest_client, get_db
 from app.routes.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 from typing import Optional, List
@@ -16,6 +16,21 @@ from app.routes.menu import recalculate_stock_status
 import asyncio
 import time
 import logging
+import importlib
+from postgrest.exceptions import APIError
+
+_fastapi_utils = importlib.util.find_spec("fastapi_utils.tasks")
+if _fastapi_utils is not None:
+    _mod = importlib.import_module("fastapi_utils.tasks")
+    repeat_every = getattr(_mod, "repeat_every")
+else:
+    # Provide a no-op fallback so the module imports cleanly in environments
+    # where fastapi-utils isn't available (e.g., in static analysis or tests).
+    def repeat_every(*args, **kwargs):
+        def _decorator(func):
+            return func
+
+        return _decorator
 
 
 async def log_user_activity(db, user, action_type, description):
@@ -68,19 +83,25 @@ async def get_threshold_for_item(item_name: str) -> float:
 
     @run_blocking
     def _fetch(name: str):
-        return (
-            supabase.table("inventory_settings")
-            .select("low_stock_threshold")
-            .eq("name", name)
-            .single()
-            .execute()
-        )
+        try:
+            return (
+                postgrest_client.table("inventory_settings")
+                .select("low_stock_threshold")
+                .eq("name", name)
+                .single()
+                .execute()
+            )
+        except APIError as e:
+            # If no row found, return None
+            if getattr(e, 'code', None) == 'PGRST116':
+                return None
+            raise
 
     try:
         response = await _fetch(item_name)
         threshold = (
             response.data["low_stock_threshold"]
-            if response.data and "low_stock_threshold" in response.data
+            if response and response.data and "low_stock_threshold" in response.data
             else None
         )
         if threshold is not None:
@@ -196,7 +217,7 @@ async def list_inventory(
         @run_blocking
         def _fetch():
             return (
-                supabase.table("inventory")
+                postgrest_client.table("inventory")
                 .select("*")
                 .range(skip, skip + limit - 1)
                 .execute()
@@ -218,7 +239,7 @@ async def get_inventory_item(request: Request, item_id: int):
         @run_blocking
         def _fetch():
             return (
-                supabase.table("inventory")
+                postgrest_client.table("inventory")
                 .select("*")
                 .eq("item_id", item_id)
                 .single()
@@ -256,13 +277,31 @@ async def add_inventory_item(
 
         @run_blocking
         def _insert():
-            return supabase.table("inventory").insert(payload).execute()
+            return postgrest_client.table("inventory").insert(payload).execute()
 
         response = await _insert()
         await log_user_activity(
             db, user, "add master inventory", f"Added inventory item: {item.item_name}"
         )
-        recalculate_stock_status()
+        result = recalculate_stock_status()
+        # Log recalc activity
+        try:
+            user_row = getattr(user, "user_row", user)
+            desc = result.get("message") if isinstance(result, dict) else str(result)
+            new_activity = UserActivityLog(
+                user_id=user_row.get("user_id"),
+                action_type="recalculate stock status",
+                description=desc,
+                activity_date=datetime.utcnow(),
+                report_date=datetime.utcnow(),
+                user_name=user_row.get("name"),
+                role=user_row.get("user_role"),
+            )
+            db.add(new_activity)
+            await db.flush()
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to record recalc activity: {e}")
         return {"message": "Item added successfully", "data": response.data}
     except Exception as e:
         logger.exception("Error during add_master_inventory_item")
@@ -289,7 +328,7 @@ async def update_inventory_item(
             @run_blocking
             def _fetch():
                 return (
-                    supabase.table("inventory")
+                    postgrest_client.table("inventory")
                     .select("item_name")
                     .eq("item_id", item_id)
                     .single()
@@ -312,7 +351,7 @@ async def update_inventory_item(
         @run_blocking
         def _update():
             return (
-                supabase.table("inventory")
+                postgrest_client.table("inventory")
                 .update(update_data)
                 .eq("item_id", item_id)
                 .execute()
@@ -328,7 +367,25 @@ async def update_inventory_item(
                 "update master inventory",
                 f"Updated inventory item: {item_id}",
             )
-        recalculate_stock_status()
+        result = recalculate_stock_status()
+        # Log recalc activity
+        try:
+            user_row = getattr(user, "user_row", user)
+            desc = result.get("message") if isinstance(result, dict) else str(result)
+            new_activity = UserActivityLog(
+                user_id=user_row.get("user_id"),
+                action_type="recalculate stock status",
+                description=desc,
+                activity_date=datetime.utcnow(),
+                report_date=datetime.utcnow(),
+                user_name=user_row.get("name"),
+                role=user_row.get("user_role"),
+            )
+            db.add(new_activity)
+            await db.flush()
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to record recalc activity: {e}")
         return {"message": "Item updated successfully"}
     except Exception as e:
         logger.exception("Error during update_inventory_item")
@@ -348,7 +405,7 @@ async def delete_inventory_item(
         @run_blocking
         def _check():
             return (
-                supabase.table("inventory")
+                postgrest_client.table("inventory")
                 .select("item_id")
                 .eq("item_id", item_id)
                 .execute()
@@ -360,14 +417,35 @@ async def delete_inventory_item(
 
         @run_blocking
         def _delete():
-            return supabase.table("inventory").delete().eq("item_id", item_id).execute()
+            return postgrest_client.table("inventory").delete().eq("item_id", item_id).execute()
 
         response = await _delete()
         await log_user_activity(
             db, user, "delete master inventory", f"Deleted inventory item: {item_id}"
         )
-        recalculate_stock_status()
+        result = recalculate_stock_status()
+        # Log recalc activity
+        try:
+            user_row = getattr(user, "user_row", user)
+            desc = result.get("message") if isinstance(result, dict) else str(result)
+            new_activity = UserActivityLog(
+                user_id=user_row.get("user_id"),
+                action_type="recalculate stock status",
+                description=desc,
+                activity_date=datetime.utcnow(),
+                report_date=datetime.utcnow(),
+                user_name=user_row.get("name"),
+                role=user_row.get("user_role"),
+            )
+            db.add(new_activity)
+            await db.flush()
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to record recalc activity: {e}")
         return {"message": "Item deleted successfully", "data": response.data}
+    except HTTPException:
+        # Let FastAPI handle HTTPExceptions (like 404) as-is
+        raise
     except Exception as e:
         logger.exception("Error deleting inventory item")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -387,7 +465,7 @@ async def transfer_to_today_inventory(
         @run_blocking
         def _fetch_inventory():
             return (
-                supabase.table("inventory")
+                postgrest_client.table("inventory")
                 .select("*")
                 .eq("item_id", item_id)
                 .single()
@@ -406,18 +484,25 @@ async def transfer_to_today_inventory(
         now = datetime.utcnow().isoformat()
 
         # Check if item_id already exists in inventory_today
+        from postgrest.exceptions import APIError
+
         @run_blocking
         def _fetch_today():
-            return (
-                supabase.table("inventory_today")
-                .select("*")
-                .eq("item_id", item_id)
-                .single()
-                .execute()
-            )
+            try:
+                return (
+                    postgrest_client.table("inventory_today")
+                    .select("*")
+                    .eq("item_id", item_id)
+                    .single()
+                    .execute()
+                )
+            except APIError as e:
+                if getattr(e, 'code', None) == 'PGRST116':
+                    return None
+                raise
 
         today_response = await _fetch_today()
-        today_item = today_response.data
+        today_item = today_response.data if today_response else None
 
         if today_item:
             # If exists, add to the stock_quantity and update stock_status
@@ -427,7 +512,7 @@ async def transfer_to_today_inventory(
             @run_blocking
             def _update_today():
                 return (
-                    supabase.table("inventory_today")
+                    postgrest_client.table("inventory_today")
                     .update(
                         {
                             "stock_quantity": new_today_quantity,
@@ -456,7 +541,7 @@ async def transfer_to_today_inventory(
 
             @run_blocking
             def _insert_today():
-                return supabase.table("inventory_today").insert(payload).execute()
+                return postgrest_client.table("inventory_today").insert(payload).execute()
 
             insert_response = await _insert_today()
 
@@ -466,7 +551,7 @@ async def transfer_to_today_inventory(
             @run_blocking
             def _delete():
                 return (
-                    supabase.table("inventory")
+                    postgrest_client.table("inventory")
                     .delete()
                     .eq("item_id", item_id)
                     .execute()
@@ -479,7 +564,7 @@ async def transfer_to_today_inventory(
             @run_blocking
             def _update():
                 return (
-                    supabase.table("inventory")
+                    postgrest_client.table("inventory")
                     .update(
                         {
                             "stock_quantity": new_stock,
@@ -515,7 +600,7 @@ async def list_inventory_today(request: Request):
 
         @run_blocking
         def _fetch():
-            return supabase.table("inventory_today").select("*").execute()
+            return postgrest_client.table("inventory_today").select("*").execute()
 
         items = await _fetch()
         return items.data
@@ -532,7 +617,7 @@ async def get_inventory_today_item(request: Request, item_id: int):
         @run_blocking
         def _fetch():
             return (
-                supabase.table("inventory_today")
+                postgrest_client.table("inventory_today")
                 .select("*")
                 .eq("item_id", item_id)
                 .single()
@@ -561,7 +646,7 @@ async def delete_inventory_today_item(
         @run_blocking
         def _delete():
             return (
-                supabase.table("inventory_today")
+                postgrest_client.table("inventory_today")
                 .delete()
                 .eq("item_id", item_id)
                 .execute()
@@ -614,7 +699,7 @@ async def update_inventory_today_item(
             @run_blocking
             def _fetch():
                 return (
-                    supabase.table("inventory_today")
+                    postgrest_client.table("inventory_today")
                     .select("item_name")
                     .eq("item_id", item_id)
                     .single()
@@ -638,7 +723,7 @@ async def update_inventory_today_item(
         @run_blocking
         def _update():
             return (
-                supabase.table("inventory_today")
+                postgrest_client.table("inventory_today")
                 .update(update_data)
                 .eq("item_id", item_id)
                 .execute()
@@ -685,7 +770,7 @@ async def transfer_to_today(
         @run_blocking
         def _fetch():
             return (
-                supabase.table("inventory_today")
+                postgrest_client.table("inventory_today")
                 .select("*")
                 .eq("item_id", item_id)
                 .single()
@@ -717,7 +802,7 @@ async def transfer_to_today(
 
         @run_blocking
         def _insert_surplus():
-            return supabase.table("inventory_surplus").insert(payload).execute()
+            return postgrest_client.table("inventory_surplus").insert(payload).execute()
 
         insert_response = await _insert_surplus()
         new_stock = item["stock_quantity"] - transfer_quantity
@@ -726,7 +811,7 @@ async def transfer_to_today(
             @run_blocking
             def _delete():
                 return (
-                    supabase.table("inventory_today")
+                    postgrest_client.table("inventory_today")
                     .delete()
                     .eq("item_id", item_id)
                     .execute()
@@ -739,7 +824,7 @@ async def transfer_to_today(
             @run_blocking
             def _update():
                 return (
-                    supabase.table("inventory_today")
+                    postgrest_client.table("inventory_today")
                     .update(
                         {
                             "stock_quantity": new_stock,
@@ -783,7 +868,7 @@ async def list_surplus(request: Request):
 
         @run_blocking
         def _fetch():
-            return supabase.table("inventory_surplus").select("*").execute()
+            return postgrest_client.table("inventory_surplus").select("*").execute()
 
         items = await _fetch()
         return items.data
@@ -800,7 +885,7 @@ async def get_surplus_item(request: Request, item_id: int):
         @run_blocking
         def _fetch():
             return (
-                supabase.table("inventory_surplus")
+                postgrest_client.table("inventory_surplus")
                 .select("*")
                 .eq("item_id", item_id)
                 .single()
@@ -829,7 +914,7 @@ async def delete_surplus_item(
         @run_blocking
         def _delete():
             return (
-                supabase.table("inventory_surplus")
+                postgrest_client.table("inventory_surplus")
                 .delete()
                 .eq("item_id", item_id)
                 .execute()
@@ -875,7 +960,7 @@ async def transfer_to_surplus(
         @run_blocking
         def _fetch():
             return (
-                supabase.table("inventory_surplus")
+                postgrest_client.table("inventory_surplus")
                 .select("*")
                 .eq("item_id", item_id)
                 .single()
@@ -907,7 +992,7 @@ async def transfer_to_surplus(
 
         @run_blocking
         def _insert_today():
-            return supabase.table("inventory_today").insert(payload).execute()
+            return postgrest_client.table("inventory_today").insert(payload).execute()
 
         insert_response = await _insert_today()
         new_stock = item["stock_quantity"] - transfer_quantity
@@ -916,7 +1001,7 @@ async def transfer_to_surplus(
             @run_blocking
             def _delete():
                 return (
-                    supabase.table("inventory_surplus")
+                    postgrest_client.table("inventory_surplus")
                     .delete()
                     .eq("item_id", item_id)
                     .execute()
@@ -929,7 +1014,7 @@ async def transfer_to_surplus(
             @run_blocking
             def _update():
                 return (
-                    supabase.table("inventory_surplus")
+                    postgrest_client.table("inventory_surplus")
                     .update(
                         {
                             "stock_quantity": new_stock,
@@ -980,7 +1065,7 @@ async def list_spoilage(
         @run_blocking
         def _fetch():
             return (
-                supabase.table("inventory_spoilage")
+                postgrest_client.table("inventory_spoilage")
                 .select("*")
                 .range(skip, skip + limit - 1)
                 .execute()
@@ -1026,7 +1111,7 @@ async def transfer_to_spoilage(
         @run_blocking
         def _fetch():
             return (
-                supabase.table("inventory")
+                postgrest_client.table("inventory")
                 .select("*")
                 .eq("item_id", item_id)
                 .single()
@@ -1062,7 +1147,7 @@ async def transfer_to_spoilage(
         @run_blocking
         def _insert_spoilage():
             return (
-                supabase.table("inventory_spoilage").insert(spoilage_payload).execute()
+                postgrest_client.table("inventory_spoilage").insert(spoilage_payload).execute()
             )
 
         spoilage_response = await _insert_spoilage()
@@ -1073,7 +1158,7 @@ async def transfer_to_spoilage(
             @run_blocking
             def _delete_item():
                 return (
-                    supabase.table("inventory")
+                    postgrest_client.table("inventory")
                     .delete()
                     .eq("item_id", item_id)
                     .execute()
@@ -1087,7 +1172,7 @@ async def transfer_to_spoilage(
             @run_blocking
             def _update():
                 return (
-                    supabase.table("inventory")
+                    postgrest_client.table("inventory")
                     .update(
                         {
                             "stock_quantity": new_stock,
@@ -1129,7 +1214,7 @@ async def delete_spoilage_item(
         @run_blocking
         def _delete():
             return (
-                supabase.table("inventory_spoilage")
+                postgrest_client.table("inventory_spoilage")
                 .delete()
                 .eq("spoilage_id", spoilage_id)
                 .execute()
@@ -1162,3 +1247,104 @@ async def delete_spoilage_item(
     except Exception as e:
         logger.exception("Error deleting spoilage record")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# Background task: automatically move expired items from all inventories to spoilage
+
+
+@router.on_event("startup")
+@repeat_every(seconds=300)  # runs every hour
+async def auto_transfer_expired_to_spoilage() -> None:
+    try:
+        now = datetime.utcnow().isoformat()
+        today = datetime.utcnow().date()
+        # Fetch expired items from inventory and inventory_today
+        sources = [
+            ("inventory", "stock_quantity"),
+            ("inventory_today", "stock_quantity"),
+            ("inventory_surplus", "stock_quantity"),
+        ]
+        expired_items_all = []
+        for table, qty_field in sources:
+
+
+            @run_blocking
+            def _fetch_expired():
+                return (
+                    postgrest_client.table(table)
+                    .select("*")
+                    .lte("expiration_date", today.isoformat())
+                    .execute()
+                )
+
+            expired_resp = await _fetch_expired()
+            expired_items = expired_resp.data or []
+            for item in expired_items:
+                item["_source_table"] = table
+                item["_qty_field"] = qty_field
+            expired_items_all.extend(expired_items)
+
+        # Group by (item_id, batch_date) for inventory and inventory_today
+        group_map = {}
+        for item in expired_items_all:
+            key = (item.get("item_id"), str(item.get("batch_date")))
+            if key not in group_map:
+                group_map[key] = {
+                    "item_id": item.get("item_id"),
+                    "item_name": item.get("item_name") or item.get("name"),
+                    "batch_date": item.get("batch_date"),
+                    "expiration_date": item.get("expiration_date"),
+                    "category": item.get("category"),
+                    "spoilage_date": now[:10],
+                    "reason": "Expired",
+                    "user_id": None,
+                    "created_at": now,
+                    "updated_at": now,
+                    "quantity_spoiled": 0,
+                    "_source_items": [],
+                }
+            # Sum quantity from the correct field
+            qty = (
+                item.get(item["_qty_field"])
+                or item.get("remaining_stock")
+                or item.get("quantity")
+                or 0
+            )
+            group_map[key]["quantity_spoiled"] += qty
+            group_map[key]["_source_items"].append(item)
+
+        # Insert grouped spoilage and delete originals
+        for group in group_map.values():
+            if group["quantity_spoiled"] <= 0:
+                continue
+            spoilage_payload = {k: v for k, v in group.items() if not k.startswith("_")}
+            if "spoilage_id" in spoilage_payload:
+                del spoilage_payload["spoilage_id"]
+
+            @run_blocking
+            def _insert_spoilage():
+                return (
+                    postgrest_client.table("inventory_spoilage")
+                    .insert(spoilage_payload)
+                    .execute()
+                )
+
+            await _insert_spoilage()
+
+            # Delete all source items for this group
+            for item in group["_source_items"]:
+                table = item["_source_table"]
+                item_id = item.get("item_id")
+
+                @run_blocking
+                def _delete():
+                    return (
+                        postgrest_client.table(table).delete().eq("item_id", item_id).execute()
+                    )
+
+                await _delete()
+                logger.info(
+                    f"Auto-moved expired item {item_id} ({item.get('item_name') or item.get('name')}) from {table} to spoilage."
+                )
+    except Exception as e:
+        logger.exception("Error during auto_transfer_expired_to_spoilage")

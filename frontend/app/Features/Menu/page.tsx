@@ -21,7 +21,7 @@ import {
 } from "react-icons/fa";
 import { useMenuAPI, MenuItem as MenuItemType } from "./hook/use-menu";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
-import { FiEye, FiMinus, FiTrendingDown } from "react-icons/fi";
+import { FiEye, FiMinus, FiRefreshCw, FiTrendingDown } from "react-icons/fi";
 import { MdWarning, MdCheckCircle } from "react-icons/md";
 
 const columns = [
@@ -64,6 +64,18 @@ const Menu: React.FC = () => {
   React.useEffect(() => {
     setMounted(true);
   }, []);
+    const [isOnline, setIsOnline] = useState(true);
+    React.useEffect(() => {
+      setIsOnline(navigator.onLine);
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+      return () => {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      };
+    }, []);
   const router = useRouter();
   const { fetchMenu, deleteMenu } = useMenuAPI();
   const queryClient = useQueryClient();
@@ -78,12 +90,18 @@ const Menu: React.FC = () => {
   const {
     data: menuData = [],
     isLoading,
+    isFetching,
     isError,
   } = useQuery({
     queryKey: ["menu"],
     queryFn: fetchMenu,
     refetchOnWindowFocus: true,
   });
+
+  const handleRefresh = () => {
+    console.log("Refreshing inventory table...");
+    queryClient.invalidateQueries({ queryKey: ["menu"] });
+  };
 
   // Delete mutation
   const deleteMutation = useMutation({
@@ -235,6 +253,15 @@ const Menu: React.FC = () => {
                     className="flex items-center gap-1 xs:gap-2 sm:gap-3 w-full sm:w-auto"
                     aria-label="Menu actions"
                   >
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                    >
+                      <FiRefreshCw className="text-xs xs:text-sm" />
+                      <span className="sm:inline">Refresh</span>
+                    </button>
+
                     {/* Add Item Button */}
                     {["Owner", "General Manager", "Store Manager"].includes(
                       role || ""
@@ -247,6 +274,7 @@ const Menu: React.FC = () => {
                         <span className="sm:inline">Add Menu</span>
                       </button>
                     )}
+                      <button disabled={!isOnline} title={!isOnline ? 'You can use this when online.' : ''}>Edit</button>
                   </nav>
                 </div>
                 <section
@@ -428,13 +456,17 @@ const Menu: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {isLoading ? (
+                      {isLoading || isFetching ? (
                         <tr>
                           <td
                             colSpan={columns.length}
                             className="text-center py-8"
                           >
-                            Loading...
+                            <div className="text-yellow-300 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
+                              {(typeof navigator !== "undefined" && navigator.onLine)
+                                ? "Refreshing menu data..."
+                                : "Loading from offline cache..."}
+                            </div>
                           </td>
                         </tr>
                       ) : isError ? (

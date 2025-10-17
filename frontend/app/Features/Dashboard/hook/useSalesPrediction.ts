@@ -79,8 +79,7 @@ export function useSalesHistory(
   return { data, loading, error, fetchSalesHistory };
 }
 
-export function useHistoricalAnalysis() {
-  const days = 90;
+export function useHistoricalAnalysis(days: number = 90) {
   const {
     data = null,
     isLoading: loading,
@@ -120,10 +119,11 @@ export function useSalesPrediction(
 
 export function useSalesAnalytics(
   timeframe: "daily" | "weekly" | "monthly",
-  top_n: number
+  top_n: number,
+  days?: number
 ) {
   const salesHistory = useSalesHistory(timeframe, top_n);
-  const historical = useHistoricalAnalysis();
+  const historical = useHistoricalAnalysis(days);
   return {
     prediction: salesHistory,
     historical,

@@ -6,6 +6,17 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from app.supabase import supabase, get_db
+import os
+
+# Debug: Print SUPABASE_URL and supabase client internals
+print(f"[DEBUG][notification.py] SUPABASE_URL from env: {os.getenv('SUPABASE_URL')!r}")
+try:
+    print(f"[DEBUG][notification.py] supabase._supabase_url: {getattr(supabase, '_supabase_url', None)!r}")
+    if hasattr(supabase, 'postgrest'):
+        print(f"[DEBUG][notification.py] supabase.postgrest.url: {getattr(supabase.postgrest, 'url', None)!r}")
+except Exception as e:
+    print(f"[DEBUG][notification.py] Error inspecting supabase client: {e}")
+from app.supabase import postgrest_client
 from app.routes.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 import json
@@ -38,7 +49,7 @@ class Notification(BaseModel):
 def get_notification_settings(request: Request, user_id: int):
     try:
         resp = (
-            supabase.table("notification_settings")
+            postgrest_client.table("notification_settings")
             .select("*")
             .eq("user_id", user_id)
             .single()
@@ -63,7 +74,7 @@ async def update_notification_settings(
     try:
         # Upsert (insert or update)
         result = (
-            supabase.table("notification_settings")
+            postgrest_client.table("notification_settings")
             .upsert(settings.dict(), on_conflict=["user_id"])
             .execute()
         )
@@ -103,7 +114,7 @@ def create_notification(user_id, type, message, details=None):
         now = datetime.utcnow().isoformat()
         today = now[:10]
         existing = (
-            supabase.table("notification")
+            postgrest_client.table("notification")
             .select("id")
             .eq("user_id", user_id)
             .eq("type", type)
@@ -127,7 +138,7 @@ def create_notification(user_id, type, message, details=None):
             payload["details"] = (
                 details  # Make sure your Supabase table has a 'details' column (text)
             )
-        result = supabase.table("notification").insert(payload).execute()
+        result = postgrest_client.table("notification").insert(payload).execute()
         print("Insert result:", result)
     except Exception as e:
         print("Error creating notification:", e)
@@ -151,7 +162,7 @@ def check_inventory_alerts():
     print("check_inventory_alerts called")
     from datetime import datetime, timedelta
 
-    users_response = supabase.table("users").select("user_id").execute()
+    users_response = postgrest_client.table("users").select("user_id").execute()
     users = [u["user_id"] for u in users_response.data] if users_response.data else []
 
     for user_id in users:
@@ -161,7 +172,7 @@ def check_inventory_alerts():
         # Collect items from all inventory tables
         for table_name in ["inventory", "inventory_surplus", "inventory_today"]:
             inventory_response = (
-                supabase.table(table_name)
+                postgrest_client.table(table_name)
                 .select(
                     "item_id,item_name,batch_date,stock_quantity,expiration_date,category"
                 )
@@ -192,7 +203,7 @@ def check_inventory_alerts():
             # Get threshold from inventory_settings (match by item_name or category)
             threshold = None
             threshold_resp = (
-                supabase.table("inventory_settings")
+                    postgrest_client.table("inventory_settings")
                 .select("low_stock_threshold")
                 .eq("name", item_name)
                 .execute()
@@ -206,7 +217,7 @@ def check_inventory_alerts():
             # If not found by name, try by category
             if threshold is None and category:
                 threshold_resp = (
-                    supabase.table("inventory_settings")
+                        postgrest_client.table("inventory_settings")
                     .select("low_stock_threshold")
                     .eq("category", category)
                     .execute()
@@ -346,10 +357,11 @@ def check_inventory_alerts():
 def get_notifications(user_id: int):
     try:
         response = (
-            supabase.table("notification").select("*").eq("user_id", user_id).execute()
+              postgrest_client.table("notification").select("*").eq("user_id", user_id).execute()
         )
         return {"notifications": response.data}
     except Exception as e:
+        print("[ERROR /notifications]", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -360,7 +372,7 @@ async def mark_notifications_read(
 ):
     try:
         response = (
-            supabase.table("notification")
+                postgrest_client.table("notification")
             .update({"status": "read"})
             .eq("user_id", user_id)
             .eq("id", notification_id)
@@ -381,7 +393,7 @@ async def delete_notification(
     try:
         # Verify the notification belongs to the user before deleting
         response = (
-            supabase.table("notification")
+                postgrest_client.table("notification")
             .select("id")
             .eq("user_id", user_id)
             .eq("id", notification_id)
@@ -393,7 +405,7 @@ async def delete_notification(
 
         # Delete the notification
         delete_response = (
-            supabase.table("notification")
+                postgrest_client.table("notification")
             .delete()
             .eq("user_id", user_id)
             .eq("id", notification_id)
@@ -411,7 +423,7 @@ async def clear_all_notifications(user_id: int = Query(...)):
     try:
         # Delete all notifications for the user
         response = (
-            supabase.table("notification").delete().eq("user_id", user_id).execute()
+                postgrest_client.table("notification").delete().eq("user_id", user_id).execute()
         )
 
         return {
@@ -426,12 +438,12 @@ async def clear_all_notifications(user_id: int = Query(...)):
 def get_empty_notifications():
     from datetime import datetime, timedelta
 
-    users_response = supabase.table("users").select("user_id").execute()
+    users_response = postgrest_client.table("users").select("user_id").execute()
     users = [u["user_id"] for u in users_response.data] if users_response.data else []
     for user_id in users:
         # Get notification settings for user
         settings_resp = (
-            supabase.table("notification_settings")
+                postgrest_client.table("notification_settings")
             .select("*")
             .eq("user_id", user_id)
             .single()
@@ -444,7 +456,7 @@ def get_empty_notifications():
         )
         # Query inventory for this user
         inventory_response = (
-            supabase.table("inventory")
+                postgrest_client.table("inventory")
             .select("id,item_name,stock_quantity,threshold,expiration_date")
             .eq("user_id", user_id)
             .execute()
@@ -490,7 +502,7 @@ def get_empty_notifications():
                         and stock > threshold
                     ):
                         notif_resp = (
-                            supabase.table("notification")
+                                postgrest_client.table("notification")
                             .select("id")
                             .eq("user_id", user_id)
                             .eq("type", "inapp")

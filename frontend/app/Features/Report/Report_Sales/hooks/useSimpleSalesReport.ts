@@ -63,50 +63,124 @@ export function useSimpleSalesReport() {
         if (options?.category)
           forecastParams.append("category", options.category);
 
-        // Fetch all required data in parallel using fetch
-        const [summaryRes, itemsRes, dateRes, forecastRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/sales-summary?${params.toString()}`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-          }).then(async (res) => {
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return { data: await res.json() };
-          }),
-          fetch(`${API_BASE_URL}/api/sales-by-item?${params.toString()}`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-          }).then(async (res) => {
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return { data: await res.json() };
-          }),
-          fetch(
-            `${API_BASE_URL}/api/sales-by-date?${params.toString()}&grouping=daily`,
-            {
+        // Fetch all required data in parallel using fetch with offline handling
+        const [summaryRes, itemsRes, dateRes, forecastRes] =
+          await Promise.allSettled([
+            fetch(`${API_BASE_URL}/api/sales-summary?${params.toString()}`, {
               method: "GET",
               headers: { "Content-Type": "application/json" },
-            }
-          ).then(async (res) => {
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return { data: await res.json() };
-          }),
-          fetch(
-            `${API_BASE_URL}/api/weekly-sales-forecast${
-              forecastParams.toString() ? `?${forecastParams.toString()}` : ""
-            }`,
-            {
+            })
+              .then(async (res) => {
+                if (!res.ok)
+                  throw new Error(`HTTP error! status: ${res.status}`);
+                return { data: await res.json() };
+              })
+              .catch((error) => {
+                console.log(
+                  "Sales summary API failed - using cached data or defaults"
+                );
+                const cached = localStorage.getItem("cached_sales_summary");
+                return {
+                  data: cached
+                    ? JSON.parse(cached)
+                    : {
+                        total_revenue: 0,
+                        total_orders: 0,
+                        total_items_sold: 0,
+                        avg_order_value: 0,
+                      },
+                };
+              }),
+            fetch(`${API_BASE_URL}/api/sales-by-item?${params.toString()}`, {
               method: "GET",
               headers: { "Content-Type": "application/json" },
-            }
-          ).then(async (res) => {
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return { data: await res.json() };
-          }),
-        ]);
+            })
+              .then(async (res) => {
+                if (!res.ok)
+                  throw new Error(`HTTP error! status: ${res.status}`);
+                return { data: await res.json() };
+              })
+              .catch((error) => {
+                console.log(
+                  "Sales by item API failed - using cached data or defaults"
+                );
+                const cached = localStorage.getItem("cached_sales_items");
+                return { data: cached ? JSON.parse(cached) : { items: [] } };
+              }),
+            fetch(
+              `${API_BASE_URL}/api/sales-by-date?${params.toString()}&grouping=daily`,
+              {
+                method: "GET",
+                headers: { "Content-Type": "application/json" },
+              }
+            )
+              .then(async (res) => {
+                if (!res.ok)
+                  throw new Error(`HTTP error! status: ${res.status}`);
+                return { data: await res.json() };
+              })
+              .catch((error) => {
+                console.log(
+                  "Sales by date API failed - using cached data or defaults"
+                );
+                const cached = localStorage.getItem("cached_sales_dates");
+                return { data: cached ? JSON.parse(cached) : { data: [] } };
+              }),
+            fetch(
+              `${API_BASE_URL}/api/weekly-sales-forecast${
+                forecastParams.toString() ? `?${forecastParams.toString()}` : ""
+              }`,
+              {
+                method: "GET",
+                headers: { "Content-Type": "application/json" },
+              }
+            )
+              .then(async (res) => {
+                if (!res.ok)
+                  throw new Error(`HTTP error! status: ${res.status}`);
+                return { data: await res.json() };
+              })
+              .catch((error) => {
+                console.log(
+                  "Weekly forecast API failed - using cached data or defaults"
+                );
+                const cached = localStorage.getItem("cached_forecast");
+                return {
+                  data: cached
+                    ? JSON.parse(cached)
+                    : { forecast: [], historical_predictions: [] },
+                };
+              }),
+          ]);
 
-        const summary = summaryRes.data;
-        const items = itemsRes.data;
-        const dates = dateRes.data;
-        const forecast = forecastRes.data;
+        // Extract data from settled promises
+        const summary =
+          summaryRes.status === "fulfilled"
+            ? summaryRes.value.data
+            : {
+                total_revenue: 0,
+                total_orders: 0,
+                total_items_sold: 0,
+                avg_order_value: 0,
+              };
+        const items =
+          itemsRes.status === "fulfilled" ? itemsRes.value.data : { items: [] };
+        const dates =
+          dateRes.status === "fulfilled" ? dateRes.value.data : { data: [] };
+        const forecast =
+          forecastRes.status === "fulfilled"
+            ? forecastRes.value.data
+            : { forecast: [], historical_predictions: [] };
+
+        // Cache successful responses
+        if (summaryRes.status === "fulfilled")
+          localStorage.setItem("cached_sales_summary", JSON.stringify(summary));
+        if (itemsRes.status === "fulfilled")
+          localStorage.setItem("cached_sales_items", JSON.stringify(items));
+        if (dateRes.status === "fulfilled")
+          localStorage.setItem("cached_sales_dates", JSON.stringify(dates));
+        if (forecastRes.status === "fulfilled")
+          localStorage.setItem("cached_forecast", JSON.stringify(forecast));
 
         const reportData: SalesReportData = {
           totalRevenue: summary.total_revenue,

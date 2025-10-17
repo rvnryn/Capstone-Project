@@ -8,6 +8,7 @@ import { routes } from "@/app/routes/routes";
 import { useUsersAPI } from "./hook/use-user";
 import type { User } from "./hook/use-user";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
+import { FiRefreshCw } from "react-icons/fi";
 
 const columns = [
   { key: "user_id", label: "ID" },
@@ -42,19 +43,77 @@ export default function UserManagement() {
   const [passwordError, setPasswordError] = useState("");
 
   useEffect(() => {
+    // Debug cached data
+    const cachedUsers = localStorage.getItem("cached_users");
+    console.log(
+      "🗄️ UserManagement: Cached users in localStorage:",
+      cachedUsers
+    );
+    if (cachedUsers) {
+      try {
+        const parsed = JSON.parse(cachedUsers);
+        console.log("📦 UserManagement: Parsed cached users:", parsed);
+      } catch (e) {
+        console.error("❌ UserManagement: Error parsing cached users:", e);
+      }
+    }
+
+    console.log("🔍 UserManagement: Starting to fetch users...");
+    setLoading(true);
+
     listUsers()
       .then((data: User[]) => {
-        console.log("Fetched users:", data); // Add this line
+        console.log("✅ UserManagement: Raw data received:", data);
+        console.log("📊 UserManagement: Data type:", typeof data);
+        console.log("📊 UserManagement: Is array:", Array.isArray(data));
+        console.log("📊 UserManagement: Length:", data?.length);
+
+        if (data && Array.isArray(data) && data.length > 0) {
+          const processedUsers = data.map((user) => ({
+            ...user,
+            last_login: user.last_login ?? "",
+          }));
+          console.log("✅ UserManagement: Processed users:", processedUsers);
+          setUsers(processedUsers);
+        } else {
+          console.log(
+            "⚠️ UserManagement: No users found or invalid data structure"
+          );
+          setUsers([]);
+        }
+      })
+      .catch((error) => {
+        console.error("❌ UserManagement: Error fetching users:", error);
+        setUsers([]);
+      })
+      .finally(() => {
+        console.log("🏁 UserManagement: Finished loading users");
+        setLoading(false);
+      });
+  }, [listUsers]);
+
+  // Refresh user list by re-calling listUsers and updating state
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      const data = await listUsers();
+      if (data && Array.isArray(data)) {
         setUsers(
           data.map((user) => ({
             ...user,
             last_login: user.last_login ?? "",
           }))
         );
-      })
-      .catch(() => setUsers([]))
-      .finally(() => setLoading(false));
-  }, [listUsers]);
+      } else {
+        setUsers([]);
+      }
+    } catch (error) {
+      console.error("Error refreshing users:", error);
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const sortedUsers = [...users];
@@ -83,16 +142,6 @@ export default function UserManagement() {
       }
     }
   };
-
-  function getMainContentStyles(): string {
-    // Adjusts main content padding based on navigation menu and mobile state
-    if (isMobile) {
-      return "pt-24 px-2";
-    }
-    return isMenuOpen
-      ? "ml-64 pt-24 px-8 transition-all duration-300"
-      : "pt-24 px-8 transition-all duration-300";
-  }
 
   function requestSort(key: string): void {
     setSortConfig((prev) => {
@@ -145,6 +194,15 @@ export default function UserManagement() {
                     aria-label="User actions"
                     className="flex items-center gap-1 xs:gap-2 sm:gap-3 w-full sm:w-auto"
                   >
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                    >
+                      <FiRefreshCw className="text-xs xs:text-sm" />
+                      <span className="sm:inline">Refresh</span>
+                    </button>
+
                     <button
                       onClick={() => router.push(routes.addUsers)}
                       className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Offline - Cardiac Delights</title>
+    <title>Cardiac Delights - Offline Mode</title>
     <style>
       * {
         margin: 0;
@@ -12,163 +12,158 @@
       }
 
       body {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        background: linear-gradient(
-          135deg,
-          #0f1419 0%,
-          #1a1a1a 50%,
-          #2d2d2d 100%
-        );
-        color: #fbbf24;
-        min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
         display: flex;
         align-items: center;
         justify-content: center;
+        min-height: 100vh;
         padding: 20px;
       }
 
-      .offline-container {
+      .container {
         text-align: center;
         max-width: 600px;
-        background: rgba(0, 0, 0, 0.8);
-        border: 1px solid rgba(251, 191, 36, 0.3);
-        border-radius: 20px;
-        padding: 3rem 2rem;
-        backdrop-filter: blur(10px);
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        width: 100%;
       }
 
       .logo {
-        width: 80px;
-        height: 80px;
-        background: linear-gradient(45deg, #fbbf24, #f59e0b);
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 30px;
+        background: white;
         border-radius: 50%;
-        margin: 0 auto 2rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 2rem;
-        font-weight: bold;
-        color: #1f2937;
-        border: 3px solid rgba(251, 191, 36, 0.5);
+        font-size: 48px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
       }
 
       h1 {
         font-size: 2.5rem;
         margin-bottom: 1rem;
-        background: linear-gradient(45deg, #fbbf24, #f59e0b);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        font-weight: 700;
       }
 
       .subtitle {
-        font-size: 1.2rem;
-        color: #d1d5db;
+        font-size: 1.25rem;
         margin-bottom: 2rem;
         opacity: 0.9;
       }
 
-      .offline-icon {
-        font-size: 4rem;
-        margin-bottom: 1.5rem;
-        opacity: 0.7;
+      .status {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        padding: 30px;
+        border-radius: 20px;
+        margin-bottom: 30px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .pulse {
+        width: 12px;
+        height: 12px;
+        background: #ff6b6b;
+        border-radius: 50%;
+        margin: 0 auto 15px;
         animation: pulse 2s infinite;
-      }
-
-      .message {
-        background: rgba(251, 191, 36, 0.1);
-        border: 1px solid rgba(251, 191, 36, 0.3);
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 2rem 0;
-        line-height: 1.6;
-      }
-
-      .features {
-        text-align: left;
-        margin: 2rem 0;
-      }
-
-      .features h3 {
-        color: #fbbf24;
-        margin-bottom: 1rem;
-        font-size: 1.1rem;
-      }
-
-      .features ul {
-        list-style: none;
-        padding-left: 0;
-      }
-
-      .features li {
-        padding: 0.5rem 0;
-        color: #d1d5db;
-        position: relative;
-        padding-left: 1.5rem;
-      }
-
-      .features li:before {
-        content: "✓";
-        position: absolute;
-        left: 0;
-        color: #10b981;
-        font-weight: bold;
-      }
-
-      .retry-button {
-        background: linear-gradient(45deg, #fbbf24, #f59e0b);
-        color: #1f2937;
-        border: none;
-        padding: 1rem 2rem;
-        border-radius: 12px;
-        font-size: 1.1rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        margin-top: 2rem;
-        box-shadow: 0 4px 15px rgba(251, 191, 36, 0.3);
-      }
-
-      .retry-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(251, 191, 36, 0.4);
-      }
-
-      .connection-status {
-        margin-top: 2rem;
-        padding: 1rem;
-        border-radius: 8px;
-        font-size: 0.9rem;
-      }
-
-      .offline-status {
-        background: rgba(239, 68, 68, 0.2);
-        border: 1px solid rgba(239, 68, 68, 0.4);
-        color: #fca5a5;
-      }
-
-      .online-status {
-        background: rgba(16, 185, 129, 0.2);
-        border: 1px solid rgba(16, 185, 129, 0.4);
-        color: #6ee7b7;
       }
 
       @keyframes pulse {
         0%,
         100% {
-          opacity: 0.7;
+          transform: scale(1);
+          opacity: 1;
         }
         50% {
-          opacity: 1;
+          transform: scale(1.5);
+          opacity: 0.5;
         }
       }
 
-      @media (max-width: 768px) {
-        .offline-container {
-          padding: 2rem 1.5rem;
-        }
+      .features {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        padding: 25px;
+        border-radius: 15px;
+        text-align: left;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        margin-bottom: 30px;
+      }
 
+      .features h3 {
+        margin-bottom: 15px;
+        font-size: 1.25rem;
+      }
+
+      .features ul {
+        list-style: none;
+        padding: 0;
+      }
+
+      .features li {
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .features li:last-child {
+        border-bottom: none;
+      }
+
+      .features li::before {
+        content: "✓";
+        background: rgba(76, 175, 80, 0.3);
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      button {
+        background: white;
+        color: #667eea;
+        border: none;
+        padding: 15px 40px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+        margin: 5px;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 7px 25px rgba(0, 0, 0, 0.3);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      .secondary-btn {
+        background: transparent;
+        color: white;
+        border: 2px solid white;
+      }
+
+      .info {
+        margin-top: 20px;
+        font-size: 0.9rem;
+        opacity: 0.8;
+      }
+
+      @media (max-width: 600px) {
         h1 {
           font-size: 2rem;
         }
@@ -177,81 +172,71 @@
           font-size: 1rem;
         }
 
-        .offline-icon {
-          font-size: 3rem;
+        .logo {
+          width: 90px;
+          height: 90px;
+          font-size: 36px;
         }
       }
     </style>
   </head>
   <body>
-    <div class="offline-container">
-      <div class="logo">CD</div>
-
-      <div class="offline-icon">📡</div>
+    <div class="container">
+      <div class="logo">❤️</div>
 
       <h1>You're Offline</h1>
-      <p class="subtitle">Cardiac Delights Restaurant Management</p>
+      <p class="subtitle">
+        Don't worry! Cardiac Delights works offline too.
+      </p>
 
-      <div class="message">
-        <p><strong>No internet connection detected.</strong></p>
-        <p>
-          Don't worry! Some features are still available while you're offline.
+      <div class="status">
+        <div class="pulse"></div>
+        <p><strong>No internet connection</strong></p>
+        <p style="font-size: 0.9rem; margin-top: 10px; opacity: 0.8">
+          You can still browse and make changes. Everything will sync when you're
+          back online.
         </p>
       </div>
 
       <div class="features">
-        <h3>Available Offline:</h3>
+        <h3>What you can do offline:</h3>
         <ul>
-          <li>View cached dashboard data</li>
-          <li>Browse previously loaded menu items</li>
-          <li>Check inventory levels (last sync)</li>
-          <li>Review cached reports</li>
-          <li>Access settings and preferences</li>
+          <li>View and browse all your data</li>
+          <li>Add new menu items, inventory, suppliers</li>
+          <li>Update existing records</li>
+          <li>Delete items (will sync later)</li>
+          <li>View reports and analytics</li>
         </ul>
       </div>
 
-      <div id="connectionStatus" class="connection-status offline-status">
-        🔴 Currently offline - Some features may be limited
+      <div>
+        <button onclick="window.location.href = '/'">
+          Open Cardiac Delights
+        </button>
+        <button class="secondary-btn" onclick="window.location.reload()">
+          Retry Connection
+        </button>
       </div>
 
-      <button class="retry-button" onclick="window.location.reload()">
-        🔄 Retry Connection
-      </button>
+      <p class="info">
+        All changes made offline will automatically sync when you reconnect.
+      </p>
     </div>
 
     <script>
-      // Monitor connection status
-      function updateConnectionStatus() {
-        const statusElement = document.getElementById("connectionStatus");
+      // Auto-redirect when connection is restored
+      window.addEventListener("online", () => {
+        setTimeout(() => {
+          window.location.href = "/";
+        }, 500);
+      });
 
-        if (navigator.onLine) {
-          statusElement.className = "connection-status online-status";
-          statusElement.innerHTML = "🟢 Connection restored! Refreshing...";
-
-          // Auto-refresh when connection is restored
-          setTimeout(() => {
-            window.location.href = "/";
-          }, 2000);
-        } else {
-          statusElement.className = "connection-status offline-status";
-          statusElement.innerHTML =
-            "🔴 Currently offline - Some features may be limited";
-        }
-      }
-
-      // Listen for online/offline events
-      window.addEventListener("online", updateConnectionStatus);
-      window.addEventListener("offline", updateConnectionStatus);
-
-      // Initial status check
-      updateConnectionStatus();
-
-      // Periodic connection check
+      // Check connection status periodically
       setInterval(() => {
         if (navigator.onLine) {
-          updateConnectionStatus();
+          window.location.href = "/";
         }
-      }, 5000);
+      }, 3000);
     </script>
   </body>
 </html>

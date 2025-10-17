@@ -11,6 +11,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSupplierAPI } from "./hook/useSupplierAPI";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { MdWarning } from "react-icons/md";
+import { FiRefreshCw } from "react-icons/fi";
 
 type SupplierItem = {
   supplier_id: number;
@@ -42,7 +43,11 @@ export default function SupplierPage() {
   const { isMenuOpen, isMobile } = useNavigation();
 
   // Fetch suppliers using React Query
-  const { data: supplierData = [], isLoading } = useQuery<SupplierItem[]>({
+  const {
+    data: supplierData = [],
+    isLoading,
+    isFetching,
+  } = useQuery<SupplierItem[]>({
     queryKey: ["suppliers"],
     queryFn: async () => {
       const items = await listSuppliers();
@@ -60,6 +65,11 @@ export default function SupplierPage() {
       }));
     },
   });
+
+  const handleRefresh = () => {
+    console.log("Refreshing inventory table...");
+    queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+  };
 
   // Delete mutation
   const deleteMutation = useMutation({
@@ -202,6 +212,15 @@ export default function SupplierPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 xs:gap-2 sm:gap-3 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                    >
+                      <FiRefreshCw className="text-xs xs:text-sm" />
+                      <span className="sm:inline">Refresh</span>
+                    </button>
+
                     {["Owner", "General Manager", "Store Manager"].includes(
                       role || ""
                     ) && (
@@ -309,7 +328,7 @@ export default function SupplierPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {isLoading ? (
+                      {isLoading || isFetching ? (
                         <tr>
                           <td
                             colSpan={columns.length}
