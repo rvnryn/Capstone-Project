@@ -70,7 +70,7 @@ export class OfflineStorage<T extends { id: string | number }> {
       created_at: new Date().toISOString(),
       _offline: !navigator.onLine,
       _pending_sync: !navigator.onLine,
-    } as T;
+    } as unknown as T;
 
     if (navigator.onLine) {
       try {
