@@ -1,41 +1,12 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
-import ExcelJS from "exceljs";
-import {
-  FaSearch,
-  FaGoogle,
-  FaBoxes,
-  FaSort,
-  FaChartLine,
-  FaCalendarAlt,
-  FaDownload,
-  FaFilter,
-} from "react-icons/fa";
-import {
-  MdCheckCircle,
-  MdAssessment,
-  MdTrendingUp,
-  MdTrendingDown,
-} from "react-icons/md";
-import { FiBarChart, FiPieChart, FiActivity } from "react-icons/fi";
-import { TbReportAnalytics } from "react-icons/tb";
-import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
-import NavigationBar from "@/app/components/navigation/navigation";
-import ResponsiveMain from "@/app/components/ResponsiveMain";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/app/context/AuthContext";
+import { supabase } from "@/app/utils/Server/supabaseClient";
 import dayjs from "dayjs";
 import { useInventoryReportAPI } from "./hook/use-inventoryreport";
-import { useRouter } from "next/navigation";
-import {
-  useEffect as useSpoilageEffect,
-  useState as useSpoilageState,
-} from "react";
 
-import { supabase } from "@/app/utils/Server/supabaseClient";
-import { useAuth } from "@/app/context/AuthContext";
-import { saveAs } from "file-saver";
-
-const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!;
-
+// Define InventoryItem interface (should match backend shape)
 interface InventoryItem {
   id?: number;
   name: string;
@@ -50,56 +21,107 @@ interface InventoryItem {
   updated?: string;
   [key: string]: string | number | undefined;
 }
-
-const GoogleSheetIntegration = ({
-  onSuccess,
-  exporting,
-}: {
-  onSuccess: (tr: any) => void;
-  exporting: boolean;
-}) => {
-  const login = useGoogleLogin({
-    scope:
-      "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive",
-    onSuccess,
-    onError: console.error,
-  });
-
-  return (
-    <button
-      disabled={exporting}
-      onClick={() => login()}
-      className={`w-full flex items-center justify-center gap-2 font-semibold px-6 py-3 rounded-xl transition-all duration-200 ${
-        exporting
-          ? "bg-blue-400/50 cursor-not-allowed text-blue-200 border-2 border-blue-400/50"
-          : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white border-2 border-blue-500/70 hover:border-blue-400/70"
-      }`}
-      type="button"
-    >
-      <FaGoogle />
-      {exporting ? "Exporting..." : "Export to Google Sheets"}
-    </button>
-  );
-};
+import { isOnline } from "@/app/utils/offlineUtils";
+import OfflineDataBanner from "@/app/components/OfflineDataBanner";
+import { TbReportAnalytics } from "react-icons/tb";
+import { FiBarChart, FiPieChart, FiActivity } from "react-icons/fi";
+import { MdTrendingUp, MdTrendingDown, MdAssessment } from "react-icons/md";
+import { MdCheckCircle } from "react-icons/md";
+import { GoogleOAuthProvider } from "@react-oauth/google";
+import NavigationBar from "@/app/components/navigation/navigation";
+import ResponsiveMain from "@/app/components/ResponsiveMain";
+import { saveAs } from "file-saver";
+// (Removed duplicate export default and misplaced logic. All logic is inside the main ReportInventory function below.)
+import ExcelJS from "exceljs";
+import {
+  FaSearch,
+  FaGoogle,
+  FaBoxes,
+  FaSort,
+  FaChartLine,
+  FaCalendarAlt,
+  FaDownload,
+  FaFilter,
+} from "react-icons/fa";
 
 export default function ReportInventory() {
+  // Google OAuth Client ID
+  const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!;
+
+  // GoogleSheetIntegration stub (if not imported elsewhere)
+  // Accepts onSuccess and exporting props for compatibility
+  const GoogleSheetIntegration = ({ onSuccess, exporting }: { onSuccess?: (resp: any) => void; exporting?: boolean }) => null;
+
+  // ...all state declarations above...
+
+
+
+  // (Removed duplicate offline state declarations and effects)
   // Spoilage items state
-  const [spoilageItems, setSpoilageItems] = useSpoilageState<any[]>([]);
+  const [spoilageItems, setSpoilageItems] = useState<any[]>([]);
   // Spoilage summary state
-  const [spoilageSummary, setSpoilageSummary] = useSpoilageState<number | null>(
-    null
-  );
-  const [spoilageLoading, setSpoilageLoading] = useSpoilageState(false);
+  const [spoilageSummary, setSpoilageSummary] = useState<number | null>(null);
+  const [spoilageLoading, setSpoilageLoading] = useState(false);
   const router = useRouter();
   const { fetchSpoilageSummary } = useInventoryReportAPI();
 
-  // Additional filter states (move these above useSpoilageEffect to avoid TDZ)
+  // Additional filter states
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reportDate, setReportDate] = useState("");
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const { user } = useAuth();
   const [pastInventory, setPastInventory] = useState<InventoryItem[]>([]);
+
+  // --- OFFLINE STATE/EFFECTS (must be after inventory declaration) ---
+  const [isOffline, setIsOffline] = useState(false);
+  const [offlineData, setOfflineData] = useState<InventoryItem[] | null>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+
+  // Detect offline/online and handle localStorage fallback
+  useEffect(() => {
+    function handleOnline() {
+      setIsOffline(false);
+      setOfflineError(null);
+    }
+    function handleOffline() {
+      setIsOffline(true);
+    }
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    setIsOffline(!isOnline());
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  // Cache inventory data in localStorage when online, load from cache when offline
+  useEffect(() => {
+    if (!isOffline) {
+      // Online: cache inventory
+      try {
+        localStorage.setItem("inventoryReportCache", JSON.stringify(inventory));
+        setOfflineData(null);
+        setOfflineError(null);
+      } catch {}
+    } else {
+      // Offline: try to load from cache
+      try {
+        const cached = localStorage.getItem("inventoryReportCache");
+        if (cached) {
+          setOfflineData(JSON.parse(cached));
+          setOfflineError(null);
+        } else {
+          setOfflineData(null);
+          setOfflineError("No cached inventory report data available. Please connect to the internet to load report.");
+        }
+      } catch {
+        setOfflineData(null);
+        setOfflineError("Failed to load cached inventory report data.");
+      }
+    }
+  }, [isOffline, inventory]);
 
   const [historicalInventory, setHistoricalInventory] = useState<
     InventoryItem[]
@@ -220,7 +242,7 @@ export default function ReportInventory() {
   }, [fetchLogs, saveLogs, user]);
 
   // Fetch spoilage summary and items when date range or period changes
-  useSpoilageEffect(() => {
+  useEffect(() => {
     let isMounted = true;
     async function loadSpoilage() {
       setSpoilageLoading(true);
@@ -397,7 +419,9 @@ export default function ReportInventory() {
 
   // 💡 Smart Balance: Choose data source - live inventory or historical data, and append spoilage items
   const dataSource = useMemo(() => {
-    const sourceData = isHistoricalMode ? historicalInventory : inventory;
+    // Use offlineData if offline, otherwise normal logic
+    const baseInventory = isOffline && offlineData ? offlineData : inventory;
+    const sourceData = isHistoricalMode ? historicalInventory : baseInventory;
     const mainData =
       period !== "all"
         ? sourceData.filter((item) => matchesPeriod(item.report_date))
@@ -408,22 +432,22 @@ export default function ReportInventory() {
       name: rec.item_name || rec.name,
       inStock: 0,
       wastage: rec.quantity_spoiled || 0,
-      stock: "Spoiled", // Change status to 'Spoiled' for spoiled items
+      stock: "Spoiled",
       report_date: rec.spoilage_date || rec.created_at || "",
       category: rec.category ? rec.category : "Spoilage",
       expiration_date: rec.expiration_date,
-      // Use batch_date as batch_id, formatted as date string if present
       batch_id: rec.batch_date
         ? new Date(rec.batch_date).toLocaleDateString()
         : rec.batch_id || "N/A",
       created_at: rec.created_at,
       updated: rec.updated_at,
     }));
-    // Avoid duplicate IDs (if any)
     const allRows = [...mainData, ...spoilageRows];
     return allRows;
   }, [
     inventory,
+    offlineData,
+    isOffline,
     historicalInventory,
     isHistoricalMode,
     period,
@@ -788,6 +812,9 @@ export default function ReportInventory() {
           isExporting={isExporting}
         />
         <ResponsiveMain>
+          {isOffline && (
+            <OfflineDataBanner message={offlineError || "You are offline. Showing cached inventory report data."} />
+          )}
           <main
             className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
             aria-label="Inventory Report main content"

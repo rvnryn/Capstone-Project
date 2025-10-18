@@ -51,12 +51,34 @@ export default function SpoilageInventoryPage() {
     direction: "asc",
   });
 
+  // Patch: Use cached data when offline, and show offline message if no cache
+  const [offlineSpoilage, setOfflineSpoilage] = useState<ExtendedSpoilageItem[] | null>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const spoilageQuery = useQuery<ExtendedSpoilageItem[]>({
     queryKey: ["spoilageInventory"],
     queryFn: async () => {
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        try {
+          const cached = localStorage.getItem("spoilageInventoryCache");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            setOfflineSpoilage(parsed);
+            setOfflineError(null);
+            return parsed;
+          } else {
+            setOfflineSpoilage(null);
+            setOfflineError("No cached spoilage data available. Please connect to the internet to load spoilage inventory.");
+            return [];
+          }
+        } catch (e) {
+          setOfflineSpoilage(null);
+          setOfflineError("Failed to load cached spoilage data.");
+          return [];
+        }
+      }
+      // Online: fetch and cache
       const data = await listSpoilage();
-      // Map and coerce types to match ExtendedSpoilageItem
-      return data.map((item: any) => ({
+      const mapped = data.map((item: any) => ({
         ...item,
         spoilage_id: Number(item.spoilage_id),
         item_id: Number(item.item_id),
@@ -64,6 +86,12 @@ export default function SpoilageInventoryPage() {
         batch_date: item.batch_date || item.batch || null,
         expiration_date: item.expiration_date || null,
       }));
+      if (typeof window !== "undefined") {
+        localStorage.setItem("spoilageInventoryCache", JSON.stringify(mapped));
+      }
+      setOfflineSpoilage(null);
+      setOfflineError(null);
+      return mapped;
     },
     staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
@@ -325,12 +353,21 @@ export default function SpoilageInventoryPage() {
               >
                 <div className="overflow-x-auto">
                   {isLoading || isFetching ? (
-                    <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
-                      <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                      <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                        Loading spoilage data...
+                    offlineError ? (
+                      <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
+                        <MdWarning className="text-yellow-400 text-3xl mx-auto" />
+                        <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                          {offlineError}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
+                        <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+                        <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                          Loading spoilage data...
+                        </div>
+                      </div>
+                    )
                   ) : (
                     <table className="table-auto w-full text-xs xs:text-sm sm:text-base lg:text-lg xl:text-xl text-left border-collapse min-w-[700px]">
                       <caption className="sr-only">

@@ -42,9 +42,29 @@ export default function EditMenuPage() {
     deleteIngredientFromMenu,
   } = useMenuAPI();
 
+  // Fetch menu by id with localStorage fallback for offline support
   const { data: menu, isLoading } = useQuery({
     queryKey: ["menu", menu_id],
-    queryFn: () => fetchMenuById(menu_id),
+    queryFn: async () => {
+      let menuData = null;
+      let fromCache = false;
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        // Offline: try to get from localStorage
+        const cached = localStorage.getItem(`menuCache_${menu_id}`);
+        if (cached) {
+          menuData = JSON.parse(cached);
+          fromCache = true;
+        }
+      }
+      if (!fromCache) {
+        menuData = await fetchMenuById(menu_id);
+        // Save to localStorage for offline use
+        if (typeof window !== "undefined" && menuData) {
+          localStorage.setItem(`menuCache_${menu_id}` , JSON.stringify(menuData));
+        }
+      }
+      return menuData;
+    },
     enabled: !!menu_id,
   });
 

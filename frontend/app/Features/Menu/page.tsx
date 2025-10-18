@@ -97,6 +97,9 @@ const Menu: React.FC = () => {
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
   // Fetch menu data with React Query
+  // Patch: Use cached data when offline, and show offline message if no cache
+  const [offlineMenu, setOfflineMenu] = useState<MenuItemType[] | null>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const {
     data: menuData = [],
     isLoading,
@@ -104,7 +107,35 @@ const Menu: React.FC = () => {
     isError,
   } = useQuery({
     queryKey: ["menu"],
-    queryFn: fetchMenu,
+    queryFn: async () => {
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        try {
+          const cached = localStorage.getItem("menuCache");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            setOfflineMenu(parsed);
+            setOfflineError(null);
+            return parsed;
+          } else {
+            setOfflineMenu(null);
+            setOfflineError("No cached menu data available. Please connect to the internet to load menu.");
+            return [];
+          }
+        } catch (e) {
+          setOfflineMenu(null);
+          setOfflineError("Failed to load cached menu data.");
+          return [];
+        }
+      }
+      // Online: fetch and cache
+      const items = await fetchMenu();
+      if (typeof window !== "undefined") {
+        localStorage.setItem("menuCache", JSON.stringify(items));
+      }
+      setOfflineMenu(null);
+      setOfflineError(null);
+      return items;
+    },
     refetchOnWindowFocus: true,
   });
 
@@ -130,7 +161,7 @@ const Menu: React.FC = () => {
 
   const filtered = useMemo(() => {
     return menuData.filter(
-      (item) =>
+      (item: MenuItemType) =>
         (!selectedCategory || item.category === selectedCategory) &&
         (!searchQuery ||
           [
@@ -153,7 +184,7 @@ const Menu: React.FC = () => {
     let lowStock = 0;
     let normalStock = 0;
 
-    menuData.forEach((item) => {
+    menuData.forEach((item: MenuItemType) => {
       if (item.stock_status === "Out of Stock") outOfStock++;
       else if (item.stock_status === "Critical") criticalStock++;
       else if (item.stock_status === "Low") lowStock++;
@@ -467,18 +498,28 @@ const Menu: React.FC = () => {
                     </thead>
                     <tbody>
                       {isLoading || isFetching ? (
-                        <tr>
-                          <td
-                            colSpan={columns.length}
-                            className="text-center py-8"
-                          >
-                            <div className="text-yellow-300 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
-                              {(typeof navigator !== "undefined" && navigator.onLine)
-                                ? "Refreshing menu data..."
-                                : "Loading from offline cache..."}
-                            </div>
-                          </td>
-                        </tr>
+                        offlineError ? (
+                          <tr>
+                            <td colSpan={columns.length} className="text-center py-8">
+                              <div className="flex flex-col items-center gap-2">
+                                <MdWarning className="text-yellow-400 text-3xl mx-auto" />
+                                <div className="text-yellow-400 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
+                                  {offlineError}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr>
+                            <td colSpan={columns.length} className="text-center py-8">
+                              <div className="text-yellow-300 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
+                                {(typeof navigator !== "undefined" && navigator.onLine)
+                                  ? "Refreshing menu data..."
+                                  : "Loading from offline cache..."}
+                              </div>
+                            </td>
+                          </tr>
+                        )
                       ) : isError ? (
                         <tr>
                           <td

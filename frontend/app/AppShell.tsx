@@ -110,8 +110,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <DataPreloader />
           <PagePreloader />
           <OfflineStatusBar />
-          <EnhancedOfflineStatusBar />
           {children}
+          <EnhancedOfflineStatusBar />
           <PWAInstallBanner />
           <PWAInstallPrompt />
           <NetworkStatusIndicator />

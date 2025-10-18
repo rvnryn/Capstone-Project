@@ -145,7 +145,7 @@ export default function InventoryPage() {
 
   const router = useRouter();
 
-  // Fetch master inventory using React Query
+  // Fetch master inventory using React Query with localStorage fallback for offline support
   const {
     data: inventoryData = [],
     isLoading,
@@ -153,8 +153,25 @@ export default function InventoryPage() {
   } = useQuery<(InventoryItem & { unit?: string })[]>({
     queryKey: ["masterInventory", settings],
     queryFn: async (): Promise<(InventoryItem & { unit?: string })[]> => {
+      // Try to fetch from API if online, else fallback to localStorage
+      let items: any[] = [];
+      let fromCache = false;
       try {
-        const items = await listItems();
+        if (typeof window !== "undefined" && !navigator.onLine) {
+          // Offline: try to get from localStorage
+          const cached = localStorage.getItem("masterInventoryCache");
+          if (cached) {
+            items = JSON.parse(cached);
+            fromCache = true;
+          }
+        }
+        if (!fromCache) {
+          items = await listItems();
+          // Save to localStorage for offline use
+          if (typeof window !== "undefined") {
+            localStorage.setItem("masterInventoryCache", JSON.stringify(items));
+          }
+        }
         return (items ?? []).map(
           (item: any): InventoryItem & { unit?: string } => {
             const itemName = (item.item_name || "")
@@ -176,13 +193,13 @@ export default function InventoryPage() {
             // Get unit of measurement from settings
             const unit = setting?.default_unit || "";
             // Debug: log the mapping for visual comparison
-            console.log("Inventory:", {
-              itemName: item.item_name,
-              stock: stockQty,
-              matchedSetting: setting?.name,
-              threshold: setting?.low_stock_threshold,
-              unit,
-            });
+            // console.log("Inventory:", {
+            //   itemName: item.item_name,
+            //   stock: stockQty,
+            //   matchedSetting: setting?.name,
+            //   threshold: setting?.low_stock_threshold,
+            //   unit,
+            // });
 
             let status: "Out Of Stock" | "Critical" | "Low" | "Normal" =
               "Normal";
@@ -218,6 +235,60 @@ export default function InventoryPage() {
         );
       } catch (err) {
         console.error("Failed to fetch inventory items:", err);
+        // As a last resort, try to get from localStorage if not already tried
+        if (!fromCache && typeof window !== "undefined") {
+          const cached = localStorage.getItem("masterInventoryCache");
+          if (cached) {
+            try {
+              items = JSON.parse(cached);
+              return (items ?? []).map(
+                (item: any): InventoryItem & { unit?: string } => {
+                  const itemName = (item.item_name || "")
+                    .toString()
+                    .trim()
+                    .toLowerCase();
+                  const setting = settings.find(
+                    (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+                  );
+                  const threshold = Number(setting?.low_stock_threshold);
+                  const fallbackThreshold = 100;
+                  const useThreshold =
+                    !isNaN(threshold) && threshold > 0
+                      ? threshold
+                      : fallbackThreshold;
+                  const stockQty = Number(item.stock_quantity);
+                  const unit = setting?.default_unit || "";
+                  let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
+                  if (stockQty === 0) {
+                    status = "Out Of Stock";
+                  } else if (stockQty <= useThreshold * 0.5) {
+                    status = "Critical";
+                  } else if (stockQty <= useThreshold) {
+                    status = "Low";
+                  } else {
+                    status = "Normal";
+                  }
+                  return {
+                    ...item,
+                    id: item.item_id,
+                    name: setting?.name || item.item_name,
+                    batch: item.created_at,
+                    category: item.category,
+                    stock: stockQty,
+                    status,
+                    added: item.created_at ? new Date(item.created_at) : new Date(),
+                    expires: item.expiration_date
+                      ? new Date(item.expiration_date)
+                      : null,
+                    unit,
+                  };
+                }
+              );
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
         return [] as (InventoryItem & { unit?: string })[];
       }
     },

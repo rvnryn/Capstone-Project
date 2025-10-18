@@ -187,6 +187,9 @@ export default function TodayInventoryPage() {
     return await response.json();
   };
 
+  // Patch: Use cached data when offline, and show offline message if no cache
+  const [offlineToday, setOfflineToday] = useState<InventoryItem[] | null>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const {
     data: inventoryDataRaw,
     isLoading,
@@ -194,8 +197,28 @@ export default function TodayInventoryPage() {
   } = useQuery<InventoryItem[]>({
     queryKey: ["todayInventory", settings],
     queryFn: async () => {
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        try {
+          const cached = localStorage.getItem("todayInventoryCache");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            setOfflineToday(parsed);
+            setOfflineError(null);
+            return parsed;
+          } else {
+            setOfflineToday(null);
+            setOfflineError("No cached inventory data available. Please connect to the internet to load today's inventory.");
+            return [];
+          }
+        } catch (e) {
+          setOfflineToday(null);
+          setOfflineError("Failed to load cached inventory data.");
+          return [];
+        }
+      }
+      // Online: fetch and cache
       const items = await listTodayItems();
-      return items.map((item: any) => {
+      const mapped = items.map((item: any) => {
         const itemName = (item.item_name || "").toString().trim().toLowerCase();
         const setting = (settings as InventorySetting[]).find(
           (s: InventorySetting) =>
@@ -237,6 +260,12 @@ export default function TodayInventoryPage() {
           expires: item.expiration_date ? new Date(item.expiration_date) : null,
         };
       });
+      if (typeof window !== "undefined") {
+        localStorage.setItem("todayInventoryCache", JSON.stringify(mapped));
+      }
+      setOfflineToday(null);
+      setOfflineError(null);
+      return mapped;
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
     refetchOnWindowFocus: false,
@@ -765,19 +794,29 @@ export default function TodayInventoryPage() {
                     </thead>
                     <tbody>
                       {isLoading || isFetching ? (
-                        <tr>
-                          <td
-                            colSpan={9}
-                            className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-8 xs:py-10 sm:py-12 md:py-14 lg:py-16 text-center"
-                          >
-                            <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                              <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                              <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                                Loading inventory data...
+                        offlineError ? (
+                          <tr>
+                            <td colSpan={9} className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-8 xs:py-10 sm:py-12 md:py-14 lg:py-16 text-center">
+                              <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
+                                <MdWarning className="text-yellow-400 text-3xl mx-auto" />
+                                <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                                  {offlineError}
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                        </tr>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr>
+                            <td colSpan={9} className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-8 xs:py-10 sm:py-12 md:py-14 lg:py-16 text-center">
+                              <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
+                                <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+                                <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                                  Loading inventory data...
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )
                       ) : sortedData.length > 0 ? (
                         sortedData.map((item: InventoryItem, index) => (
                           <tr

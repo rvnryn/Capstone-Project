@@ -165,11 +165,35 @@ export default function SurplusInventoryPage() {
     return await response.json();
   };
 
+  // Patch: Use cached data when offline, and show offline message if no cache
+  const [offlineInventory, setOfflineInventory] = useState<InventoryItem[] | null>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const inventoryQuery = useQuery<InventoryItem[]>({
     queryKey: ["surplusInventory"],
     queryFn: async () => {
+      // If offline, try to use cached data
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        try {
+          const cached = localStorage.getItem("surplusInventoryCache");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            setOfflineInventory(parsed);
+            setOfflineError(null);
+            return parsed;
+          } else {
+            setOfflineInventory(null);
+            setOfflineError("No cached inventory data available. Please connect to the internet to load inventory.");
+            return [];
+          }
+        } catch (e) {
+          setOfflineInventory(null);
+          setOfflineError("Failed to load cached inventory data.");
+          return [];
+        }
+      }
+      // Online: fetch and cache
       const items = await listSurplusItems();
-      return items.map((item: any) => ({
+      const mapped = items.map((item: any) => ({
         ...item,
         id: item.item_id,
         name: item.item_name,
@@ -181,6 +205,13 @@ export default function SurplusInventoryPage() {
         expires: item.expiration_date ? new Date(item.expiration_date) : null,
         unit: "", // placeholder, will be recomputed
       }));
+      // Save to cache
+      if (typeof window !== "undefined") {
+        localStorage.setItem("surplusInventoryCache", JSON.stringify(mapped));
+      }
+      setOfflineInventory(null);
+      setOfflineError(null);
+      return mapped;
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
     refetchOnWindowFocus: false,
@@ -691,12 +722,23 @@ export default function SurplusInventoryPage() {
               >
                 <div className="overflow-x-auto">
                   {isInventoryLoading || isFetching ? (
-                    <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
-                      <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                      <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                        Loading inventory data...
+                    offlineError ? (
+                      <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
+                        <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-none bg-yellow-400/10 flex items-center justify-center">
+                          <MdWarning className="text-yellow-400 text-3xl" />
+                        </div>
+                        <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                          {offlineError}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
+                        <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+                        <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                          Loading inventory data...
+                        </div>
+                      </div>
+                    )
                   ) : (
                     <>
                       {settingsQuery.isLoading && (

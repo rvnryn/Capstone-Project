@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { isOnline } from "@/app/utils/offlineUtils";
+import OfflineDataBanner from "@/app/components/OfflineDataBanner";
 import ExcelJS from "exceljs";
 import {
   FaSearch,
@@ -81,31 +83,22 @@ const GoogleSheetIntegration = ({
 export default function ReportSales() {
   // ...existing variable and hook declarations...
 
-  // ...existing variable and hook declarations...
-
-  // ...all state and hook declarations above...
-
   // UI state
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingSearch, setPendingSearch] = useState("");
-  // Top selling analytics state (historical only)
   const [topItemsCount, setTopItemsCount] = useState(5);
   const [showPopup, setShowPopup] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [period, setPeriod] = useState("today");
   const [categoryFilter, setCategoryFilter] = useState("");
-
-  // Additional filter states
   const [priceRangeFilter, setPriceRangeFilter] = useState("");
   const [performanceFilter, setPerformanceFilter] = useState("");
-
   const [sortConfig, setSortConfig] = useState({
     key: "",
     direction: "asc" as "asc" | "desc",
   });
 
-  // Fetch report data on mount and when period changes
   // Use the sales report hook
   const {
     data: reportData,
@@ -117,41 +110,72 @@ export default function ReportSales() {
     fetchMonthReport,
   } = useSimpleSalesReport();
 
+  // --- OFFLINE STATE AND EFFECTS (moved to just before return) ---
+  const [offlineData, setOfflineData] = useState<any>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
+
+  // Offline/online detection and fallback logic
+  useEffect(() => {
+    function handleOnline() {
+      setIsOffline(false);
+      setOfflineError(null);
+    }
+    function handleOffline() {
+      setIsOffline(true);
+    }
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    setIsOffline(!isOnline());
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
   // Fetch report data on mount and when period changes
   useEffect(() => {
-    if (period === "today") {
-      fetchTodayReport();
-    } else if (period === "week") {
-      fetchWeekReport();
-    } else if (period === "month") {
-      fetchMonthReport();
-    } else if (period === "all" || period === "all_time") {
-      // Log for debugging
-      console.log("[ReportSales] Fetching ALL TIME data");
-      // You may want to set a very early start date, or leave undefined to let backend handle
-      fetchReportData("2000-01-01", undefined).then((data) => {
-        console.log("[ReportSales] ALL TIME API response", data);
+    if (!isOffline) {
+      // Online: fetch and cache
+      let fetchPromise;
+      if (period === "today") fetchPromise = fetchTodayReport();
+      else if (period === "week") fetchPromise = fetchWeekReport();
+      else if (period === "month") fetchPromise = fetchMonthReport();
+      else fetchPromise = fetchReportData();
+      fetchPromise.then((data) => {
+        try {
+          localStorage.setItem("salesReportCache", JSON.stringify(data));
+        } catch {}
+        setOfflineData(null);
+        setOfflineError(null);
       });
     } else {
-      // Unknown period, fallback
-      fetchReportData();
+      // Offline: try to load from cache
+      try {
+        const cached = localStorage.getItem("salesReportCache");
+        if (cached) {
+          setOfflineData(JSON.parse(cached));
+          setOfflineError(null);
+        } else {
+          setOfflineData(null);
+          setOfflineError("No cached sales report data available. Please connect to the internet to load report.");
+        }
+      } catch {
+        setOfflineData(null);
+        setOfflineError("Failed to load cached sales report data.");
+      }
     }
-  }, [
-    period,
-    fetchTodayReport,
-    fetchWeekReport,
-    fetchMonthReport,
-    fetchReportData,
-  ]);
+  }, [period, isOffline, fetchTodayReport, fetchWeekReport, fetchMonthReport, fetchReportData]);
 
   // ...existing code...
 
-  // Use historical analytics for top selling
+  // Use historical analytics for top selling (offline aware)
   const {
     data: historicalData,
     loading: historicalLoading,
     error: historicalError,
   } = useHistoricalAnalysis();
+  const effectiveReportData = isOffline && offlineData ? offlineData : reportData;
 
   // (Removed chart effect for Top Selling - not needed for historical analytics table)
 
@@ -435,18 +459,16 @@ export default function ReportSales() {
 
   // Convert hook data to the format expected by the component
   const salesData = useMemo(() => {
-    if (!reportData) return [];
-    // Add report_date, rangeStart, and rangeEnd to each item for date filtering and table display
-    return reportData.topItems.map((item) => ({
+    if (!effectiveReportData) return [];
+    return effectiveReportData.topItems?.map((item: any) => ({
       name: item.name,
       quantity: item.quantity,
       unitPrice: (item.revenue / item.quantity).toFixed(2),
       totalRevenue: item.revenue,
       category: item.category || "",
       report_date: "",
-      // rangeStart and rangeEnd removed as they do not exist on item
-    }));
-  }, [reportData]);
+    })) || [];
+  }, [effectiveReportData]);
 
   // Filter helpers
   const filterByCategory = (item: any, category: string) => {
@@ -492,55 +514,54 @@ export default function ReportSales() {
         : true;
 
       // Category filter
-      const matchesCategory = filterByCategory(item, categoryFilter);
+      const matchesCategory = !categoryFilter || item.category === categoryFilter;
 
       // Period filter
       const matchesPeriod = filterByPeriod(item, period);
 
-      // Price range category filter
-      const matchesPriceRangeFilter = (() => {
-        if (!priceRangeFilter) return true;
-        const price = Number(item.unitPrice) || 0;
+      // Price range filter
+      let matchesPriceRangeFilter = true;
+      if (priceRangeFilter) {
+        const price = Number(item.unitPrice);
         switch (priceRangeFilter) {
           case "budget":
-            return price <= 100;
+            matchesPriceRangeFilter = price <= 100;
+            break;
           case "mid_range":
-            return price > 100 && price <= 300;
+            matchesPriceRangeFilter = price > 100 && price <= 300;
+            break;
           case "premium":
-            return price > 300;
+            matchesPriceRangeFilter = price > 300;
+            break;
           default:
-            return true;
+            matchesPriceRangeFilter = true;
         }
-      })();
+      }
 
       // Performance filter
-      const matchesPerformanceFilter = (() => {
-        if (!performanceFilter) return true;
+      let matchesPerformanceFilter = true;
+      if (performanceFilter) {
         const quantity = Number(item.quantity) || 0;
         const revenue = Number(item.totalRevenue) || 0;
-
-        // Calculate performance thresholds based on data
-        const avgQuantity =
-          salesData.reduce((sum, i) => sum + i.quantity, 0) / salesData.length;
-        const avgRevenue =
-          salesData.reduce((sum, i) => sum + i.totalRevenue, 0) /
-          salesData.length;
-
+  const avgQuantity = salesData.length > 0 ? salesData.reduce((sum: number, i: typeof salesData[0]) => sum + i.quantity, 0) / salesData.length : 0;
+  const avgRevenue = salesData.length > 0 ? salesData.reduce((sum: number, i: typeof salesData[0]) => sum + i.totalRevenue, 0) / salesData.length : 0;
         switch (performanceFilter) {
           case "top_seller":
-            return quantity >= avgQuantity * 1.5;
+            matchesPerformanceFilter = quantity >= avgQuantity * 1.5;
+            break;
           case "high_revenue":
-            return revenue >= avgRevenue * 1.5;
+            matchesPerformanceFilter = revenue >= avgRevenue * 1.5;
+            break;
           case "low_performer":
-            return quantity < avgQuantity * 0.5 || revenue < avgRevenue * 0.5;
+            matchesPerformanceFilter = quantity < avgQuantity * 0.5 || revenue < avgRevenue * 0.5;
+            break;
           case "average":
-            return (
-              quantity >= avgQuantity * 0.5 && quantity < avgQuantity * 1.5
-            );
+            matchesPerformanceFilter = quantity >= avgQuantity * 0.5 && quantity < avgQuantity * 1.5;
+            break;
           default:
-            return true;
+            matchesPerformanceFilter = true;
         }
-      })();
+      }
 
       return (
         matchesSearch &&
@@ -589,7 +610,7 @@ export default function ReportSales() {
   // Prepare main sales data for export
   const values = [
     ["Item Name", "Category", "Quantity Sold", "Unit Price", "Total Revenue"],
-    ...sortedSales.map((item) => [
+  ...sortedSales.map((item: any) => [
       item.name,
       item.category,
       item.quantity,
@@ -600,7 +621,7 @@ export default function ReportSales() {
 
   // Prepare forecast data for export
   let forecastTableRows = [
-    ...historicalPredictions.map((w) => [
+  ...historicalPredictions.map((w: any) => [
       w.week_start,
       w.actual_sales,
       w.predicted_sales,
@@ -608,9 +629,9 @@ export default function ReportSales() {
     ]),
     ...forecast
       .filter(
-        (f) => !historicalPredictions.some((h) => h.week_start === f.week_start)
+        (f: any) => !historicalPredictions.some((h: any) => h.week_start === f.week_start)
       )
-      .map((f) => [
+      .map((f: any) => [
         f.week_start,
         "",
         f.predicted_sales,
@@ -877,12 +898,12 @@ export default function ReportSales() {
                           <p
                             className="text-white text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold truncate"
                             title={`₱${sortedSales
-                              .reduce((sum, item) => sum + item.totalRevenue, 0)
+                              .reduce((sum: any, item: any) => sum + item.totalRevenue, 0)
                               .toLocaleString()}`}
                           >
                             ₱
                             {sortedSales
-                              .reduce((sum, item) => sum + item.totalRevenue, 0)
+                              .reduce((sum: number, item: typeof groupedSales[0]) => sum + item.totalRevenue, 0)
                               .toLocaleString()}
                           </p>
                         </div>
@@ -899,11 +920,11 @@ export default function ReportSales() {
                           <p
                             className="text-white text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold truncate"
                             title={`${sortedSales
-                              .reduce((sum, item) => sum + item.quantity, 0)
+                              .reduce((sum: any, item: any) => sum + item.quantity, 0)
                               .toLocaleString()} sold`}
                           >
                             {sortedSales
-                              .reduce((sum, item) => sum + item.quantity, 0)
+                              .reduce((sum: number, item: typeof groupedSales[0]) => sum + item.quantity, 0)
                               .toLocaleString()}
                           </p>
                         </div>
@@ -923,7 +944,7 @@ export default function ReportSales() {
                               sortedSales.length > 0
                                 ? (
                                     sortedSales.reduce(
-                                      (sum, item) =>
+                                      (sum: number, item: typeof groupedSales[0]) =>
                                         sum + Number(item.unitPrice),
                                       0
                                     ) / sortedSales.length
@@ -935,7 +956,7 @@ export default function ReportSales() {
                             {sortedSales.length > 0
                               ? (
                                   sortedSales.reduce(
-                                    (sum, item) => sum + Number(item.unitPrice),
+                                    (sum: any, item: any) => sum + Number(item.unitPrice),
                                     0
                                   ) / sortedSales.length
                                 ).toFixed(2)
@@ -958,13 +979,13 @@ export default function ReportSales() {
                               sortedSales.length > 0
                                 ? sortedSales
                                     .filter(
-                                      (item) =>
+                                      (item: any) =>
                                         item.quantity ===
                                         Math.max(
-                                          ...sortedSales.map((i) => i.quantity)
+                                          ...sortedSales.map((i: any) => i.quantity)
                                         )
                                     )
-                                    .map((item) => item.name)
+                                    .map((item: any) => item.name)
                                     .join(", ")
                                 : "N/A"
                             }
@@ -972,14 +993,14 @@ export default function ReportSales() {
                             {sortedSales.length > 0
                               ? sortedSales
                                   .filter(
-                                    (item) =>
+                                    (item: any) =>
                                       item.quantity ===
                                       Math.max(
-                                        ...sortedSales.map((i) => i.quantity)
+                                        ...sortedSales.map((i: any) => i.quantity)
                                       )
                                   )
                                   .map(
-                                    (item) =>
+                                    (item: any) =>
                                       item.name.substring(
                                         0,
                                         window.innerWidth < 320
@@ -1512,7 +1533,7 @@ export default function ReportSales() {
                           </p>
                         </div>
                       ) : (
-                        sortedSales.map((item, index) => (
+                        sortedSales.map((item: typeof sortedSales[0], index: number) => (
                           <div
                             key={`${item.name}-${index}`}
                             className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded p-1.5 border border-gray-700/30 fold-compact"
@@ -1552,7 +1573,7 @@ export default function ReportSales() {
                           </p>
                         </div>
                       ) : (
-                        sortedSales.map((item, index) => (
+                        sortedSales.map((item: typeof sortedSales[0], index: number) => (
                           <div
                             key={`${item.name}-${index}`}
                             className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded-lg p-2 border border-gray-700/30 xs-compact"
@@ -1641,7 +1662,7 @@ export default function ReportSales() {
                           </p>
                         </div>
                       ) : (
-                        sortedSales.map((item, index) => (
+                        sortedSales.map((item: typeof sortedSales[0], index: number) => (
                           <div
                             key={`${item.name}-${index}`}
                             className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-lg xs:rounded-xl p-2 xs:p-3 border border-gray-700/30 hover:border-yellow-500/30 transition-all duration-200 touch-manipulation responsive-card"
@@ -1756,7 +1777,7 @@ export default function ReportSales() {
                             </td>
                           </tr>
                         ) : (
-                          sortedSales.map((item, index) => (
+                          sortedSales.map((item: typeof sortedSales[0], index: number) => (
                             <tr
                               key={`${item.name}-${index}`}
                               className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
@@ -1851,7 +1872,7 @@ export default function ReportSales() {
                             </td>
                           </tr>
                         ) : (
-                          sortedSales.map((item, index) => (
+                          sortedSales.map((item: typeof sortedSales[0], index: number) => (
                             <tr
                               key={`${item.name}-${index}`}
                               className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
@@ -1944,7 +1965,7 @@ export default function ReportSales() {
                         </p>
                       </div>
                     ) : (
-                      sortedSales.map((item, index) => (
+                      sortedSales.map((item: typeof sortedSales[0], index: number) => (
                         <div
                           key={`${item.name}-${index}`}
                           className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-lg xs:rounded-xl p-3 xs:p-4 border border-gray-700/30 hover:border-yellow-500/30 transition-all duration-200 touch-manipulation"
@@ -2056,7 +2077,7 @@ export default function ReportSales() {
                           <span className="text-green-400 font-semibold">
                             ₱
                             {sortedSales
-                              .reduce((sum, item) => sum + item.totalRevenue, 0)
+                              .reduce((sum: number, item: typeof groupedSales[0]) => sum + item.totalRevenue, 0)
                               .toLocaleString()}
                           </span>{" "}
                           revenue
@@ -2064,7 +2085,7 @@ export default function ReportSales() {
                         <div className="text-gray-300 truncate">
                           <span className="text-blue-400 font-semibold">
                             {sortedSales
-                              .reduce((sum, item) => sum + item.quantity, 0)
+                              .reduce((sum: number, item: typeof groupedSales[0]) => sum + item.quantity, 0)
                               .toLocaleString()}
                           </span>{" "}
                           sold
@@ -2075,7 +2096,7 @@ export default function ReportSales() {
                             {sortedSales.length > 0
                               ? (
                                   sortedSales.reduce(
-                                    (sum, item) => sum + Number(item.unitPrice),
+                                    (sum: number, item: typeof groupedSales[0]) => sum + Number(item.unitPrice),
                                     0
                                   ) / sortedSales.length
                                 ).toFixed(2)

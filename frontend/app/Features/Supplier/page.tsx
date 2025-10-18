@@ -53,6 +53,9 @@ export default function SupplierPage() {
   const { isMenuOpen, isMobile } = useNavigation();
 
   // Fetch suppliers using React Query
+  // Patch: Use cached data when offline, and show offline message if no cache
+  const [offlineSuppliers, setOfflineSuppliers] = useState<SupplierItem[] | null>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const {
     data: supplierData = [],
     isLoading,
@@ -60,8 +63,28 @@ export default function SupplierPage() {
   } = useQuery<SupplierItem[]>({
     queryKey: ["suppliers"],
     queryFn: async () => {
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        try {
+          const cached = localStorage.getItem("suppliersCache");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            setOfflineSuppliers(parsed);
+            setOfflineError(null);
+            return parsed;
+          } else {
+            setOfflineSuppliers(null);
+            setOfflineError("No cached supplier data available. Please connect to the internet to load suppliers.");
+            return [];
+          }
+        } catch (e) {
+          setOfflineSuppliers(null);
+          setOfflineError("Failed to load cached supplier data.");
+          return [];
+        }
+      }
+      // Online: fetch and cache
       const items = await listSuppliers();
-      return items.map((item: any) => ({
+      const mapped = items.map((item: any) => ({
         ...item,
         supplier_id: item.supplier_id,
         supplier_name: item.supplier_name,
@@ -73,6 +96,12 @@ export default function SupplierPage() {
         created_at: item.created_at ? new Date(item.created_at) : new Date(),
         updated_at: item.updated_at ? new Date(item.updated_at) : new Date(),
       }));
+      if (typeof window !== "undefined") {
+        localStorage.setItem("suppliersCache", JSON.stringify(mapped));
+      }
+      setOfflineSuppliers(null);
+      setOfflineError(null);
+      return mapped;
     },
   });
 
@@ -339,19 +368,29 @@ export default function SupplierPage() {
                     </thead>
                     <tbody>
                       {isLoading || isFetching ? (
-                        <tr>
-                          <td
-                            colSpan={columns.length}
-                            className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-8 xs:py-10 sm:py-12 md:py-14 lg:py-16 text-center"
-                          >
-                            <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                              <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                              <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                                Loading supplier data...
+                        offlineError ? (
+                          <tr>
+                            <td colSpan={columns.length} className="text-center py-8">
+                              <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
+                                <MdWarning className="text-yellow-400 text-3xl mx-auto" />
+                                <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                                  {offlineError}
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                        </tr>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr>
+                            <td colSpan={columns.length} className="text-center py-8">
+                              <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
+                                <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+                                <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                                  Loading supplier data...
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )
                       ) : sortedData.length > 0 ? (
                         sortedData.map((item: any, index) => (
                           <tr
