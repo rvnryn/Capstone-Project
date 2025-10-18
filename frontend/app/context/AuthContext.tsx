@@ -150,6 +150,18 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         localStorage.setItem("cachedRole", data.role);
       }
     } catch (err) {
+      // Patch: If offline and cached user exists, do NOT force logout
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        const cachedUser = localStorage.getItem("cachedUser");
+        const cachedRole = localStorage.getItem("cachedRole");
+        if (cachedUser && cachedRole) {
+          setUser(JSON.parse(cachedUser));
+          setRole(cachedRole as UserRole);
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
+      }
       setUser(null);
       setRole(null);
       setLoading(false);

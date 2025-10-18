@@ -80,13 +80,7 @@ export const EnhancedOfflineStatusBar: React.FC = () => {
         className="fixed top-0 left-0 right-0 z-50 px-4 py-2"
       >
         <div
-          className={`mx-auto max-w-7xl rounded-lg shadow-lg px-4 py-2 flex items-center justify-between ${
-            isOnline
-              ? pendingCount > 0
-                ? "text-yellow-900"
-                : "bg-green-500 text-green-900"
-              : "bg-red-500 text-white"
-          }`}
+          className="mx-auto max-w-7xl rounded-lg shadow-lg px-4 py-2 flex items-center justify-between"
         >
           <div className="flex items-center gap-3">
             {/* Status Icon */}
