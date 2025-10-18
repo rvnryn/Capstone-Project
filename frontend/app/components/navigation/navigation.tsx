@@ -442,6 +442,17 @@ const NavigationBar = ({
     if (isCompactDevice()) {
       closeMenu();
     }
+    // Patch: Allow offline navigation if user is cached
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      const cachedUser = localStorage.getItem("cachedUser");
+      if (cachedUser) {
+        router.push(path);
+        return;
+      }
+      // If no cached user, show offline error or fallback
+      alert("Offline: Please login online at least once to access modules offline.");
+      return;
+    }
     router.push(path);
   };
 
