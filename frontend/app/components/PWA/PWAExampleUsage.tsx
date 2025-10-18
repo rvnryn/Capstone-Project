@@ -7,11 +7,7 @@
 
 import React from 'react';
 import { usePWAData, CacheStrategies } from '@/app/hooks/usePWAData';
-import { 
-  OfflineDataDisplay, 
-  SyncStatus, 
-  PWAStatusBar 
-} from '@/app/components/PWA/PWAStatus';
+import { PWAStatusBar } from '@/app/components/PWA/PWAStatus';
 
 // Example: Inventory Page with PWA Features
 export default function InventoryWithPWA() {
@@ -55,24 +51,10 @@ export default function InventoryWithPWA() {
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Inventory Management</h1>
       
-      {/* 🔄 2. Sync Status - Shows pending actions and sync progress */}
-      <SyncStatus showDetails={true} />
-      
-      {/* 📊 3. Offline Data Display - Shows cached data messages */}
-      {shouldShowOfflineMessage && (
-        <OfflineDataDisplay 
-          dataKey="inventory_list"
-          dataType="Inventory Data"
-          showDetails={true}
-        />
-      )}
+      {/* 🔄 2. Sync Status & Offline Data Display removed: components not found. */}
       
       {/* Alternative: Compact status bar */}
-      <PWAStatusBar 
-        dataKey="inventory_list"
-        dataType="inventory"
-        className="mb-4"
-      />
+      <PWAStatusBar className="mb-4" />
       
       {/* Your regular content */}
       <div className="space-y-4">
