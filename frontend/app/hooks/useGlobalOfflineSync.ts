@@ -121,11 +121,11 @@ export function useGlobalOfflineSync() {
       > = {};
 
       actions.forEach((action: any) => {
-        const module = action.entityName;
-        if (!moduleStats[module]) {
-          moduleStats[module] = { pending: 0, synced: 0, failed: 0 };
+        const entityName = action.entityName;
+        if (!moduleStats[entityName]) {
+          moduleStats[entityName] = { pending: 0, synced: 0, failed: 0 };
         }
-        moduleStats[module][action.status as "pending" | "synced" | "failed"]++;
+        moduleStats[entityName][action.status as "pending" | "synced" | "failed"]++;
       });
 
       return moduleStats;

@@ -98,11 +98,7 @@ export class PWAInstaller {
   canInstall(): boolean {
     // Consider either the internal deferred prompt or the window fallback.
     const hasPrompt = (!!this.deferredPrompt || !!(window as any).deferredInstallPrompt) && !this.installed;
-    console.log("canInstall check:", {
-      hasPrompt,
-      deferredPrompt: !!this.deferredPrompt,
-      installed: this.installed,
-    });
+    // Removed excessive logging - only log when state changes
     return hasPrompt;
   }
 

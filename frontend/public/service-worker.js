@@ -1,7 +1,7 @@
-const CACHE_NAME = "cardiac-delights-v3";
-const STATIC_CACHE = "cardiac-delights-static-v3";
-const DYNAMIC_CACHE = "cardiac-delights-dynamic-v3";
-const API_CACHE = "cardiac-delights-api-v3";
+const CACHE_NAME = "cardiac-delights-v8";
+const STATIC_CACHE = "cardiac-delights-static-v8";
+const DYNAMIC_CACHE = "cardiac-delights-dynamic-v8";
+const API_CACHE = "cardiac-delights-api-v8";
 
 // API endpoints and their cache strategies
 const API_CACHE_STRATEGIES = {
@@ -92,15 +92,19 @@ self.addEventListener("install", (event) => {
   console.log("[SW] Installing service worker...");
   event.waitUntil(
     Promise.all([
-      // Cache main URLs
-      caches.open(CACHE_NAME).then((cache) => {
-        console.log("[SW] Caching app shell");
-        return cache.addAll(urlsToCache);
+      // Skip caching pages during install in development mode
+      // They don't exist as static files - will be cached on-demand
+      caches.open(CACHE_NAME).then(() => {
+        console.log("[SW] Cache created (pages will be cached on-demand)");
+        return Promise.resolve();
       }),
-      // Cache static assets
+      // Cache static assets only (images, manifest)
       caches.open(STATIC_CACHE).then((cache) => {
         console.log("[SW] Caching static assets");
-        return cache.addAll(STATIC_ASSETS);
+        return cache.addAll(STATIC_ASSETS).catch(err => {
+          console.warn("[SW] Some static assets failed to cache:", err);
+          return Promise.resolve(); // Don't fail install if some assets fail
+        });
       }),
     ])
   );
@@ -133,6 +137,18 @@ self.addEventListener("activate", (event) => {
 // Enhanced fetch event - intelligent caching strategies for different data types
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+
+  // CRITICAL: Skip service worker for Next.js development files
+  // These are dynamically generated and should NEVER be cached in dev mode
+  if (url.pathname.includes("/_next/static/chunks/") ||
+      url.pathname.includes("/_next/static/development/") ||
+      url.pathname.includes("/_next/webpack-hmr") ||
+      url.pathname.includes("/__nextjs_original-stack-frames") ||
+      url.pathname.includes("/__turbopack_") ||
+      url.pathname.includes("[turbopack]")) {
+    // Let browser handle these directly - do NOT intercept
+    return;
+  }
 
   // Handle navigation requests (pages)
   if (event.request.method === "GET" && event.request.mode === "navigate") {
@@ -246,37 +262,36 @@ async function handleNavigationWithoutOfflinePage(request) {
     const networkResponse = await fetch(request);
     if (networkResponse.ok) {
       console.log("[SW] Navigation network success:", request.url);
-      // Cache the page for offline use
-      const cache = await caches.open(DYNAMIC_CACHE);
-      await cache.put(request, networkResponse.clone());
+
+      // CRITICAL FIX: Always fetch and cache root page as app shell on ANY navigation
+      // This ensures the app shell is available for offline routing
+      const cache = await caches.open(CACHE_NAME);
+
+      try {
+        // Fetch and cache the root page (app shell) for offline use
+        const rootUrl = new URL("/", request.url);
+        const rootResponse = await fetch(rootUrl);
+        if (rootResponse.ok) {
+          await cache.put("/", rootResponse.clone());
+          console.log("[SW] ✅ Cached root page as app shell (from", url.pathname, ")");
+        }
+      } catch (err) {
+        console.warn("[SW] Failed to cache root page:", err);
+      }
+
       return networkResponse;
     }
   } catch (error) {
     console.log("[SW] Navigation network failed, trying cache:", error);
   }
 
-  // Try to serve from cache if network fails
-  const cachedResponse = await caches.match(request);
-  if (cachedResponse) {
-    console.log("[SW] Serving navigation from cache:", request.url);
-    return cachedResponse;
-  }
-
-  // For Next.js app routes, try to serve the main app shell
-  if (
-    url.pathname.startsWith("/Features/") ||
-    url.pathname === "/dashboard" ||
-    url.pathname === "/inventory" ||
-    url.pathname === "/menu" ||
-    url.pathname === "/report" ||
-    url.pathname === "/supplier" ||
-    url.pathname === "/settings"
-  ) {
-    const appShell = await caches.match("/");
-    if (appShell) {
-      console.log("[SW] Serving app shell for route:", url.pathname);
-      return appShell;
-    }
+  // For Next.js App Router - ALWAYS serve the app shell (root page)
+  // This allows client-side routing to work offline
+  console.log("[SW] Offline - serving app shell for:", url.pathname);
+  const appShell = await caches.match("/");
+  if (appShell) {
+    console.log("[SW] App shell found, serving for:", url.pathname);
+    return appShell;
   }
 
   // NEVER return offline.html - return a minimal loading page that works
@@ -797,37 +812,16 @@ async function removeOfflineAction(actionId) {
 
 // Message handler for controlling offline test mode
 self.addEventListener("message", (event) => {
-  // Allow clients to ask the service worker to cache critical assets on demand
+  // DISABLED: CACHE_CRITICAL_ASSETS causes errors in Next.js dev mode
+  // Using App Shell model instead - only root page is cached
   if (event.data && event.data.type === "CACHE_CRITICAL_ASSETS") {
-    console.log("[SW] Received CACHE_CRITICAL_ASSETS message, caching critical assets...");
-    event.waitUntil(
-      (async () => {
-        try {
-          const cache = await caches.open(CACHE_NAME);
-          // cache both lists (urlsToCache + STATIC_ASSETS)
-          const toCache = Array.from(new Set([...(urlsToCache || []), ...(STATIC_ASSETS || [])]));
-          await cache.addAll(toCache);
-
-          // Also ensure STATIC_CACHE has static assets
-          const staticCache = await caches.open(STATIC_CACHE);
-          await staticCache.addAll(STATIC_ASSETS || []);
-
-          console.log("[SW] CACHE_CRITICAL_ASSETS complete, cached", toCache.length, "items");
-
-          // Notify all clients that caching is complete
-          const clientsList = await self.clients.matchAll();
-          clientsList.forEach((client) => {
-            client.postMessage({ type: "CACHE_COMPLETE", cached: toCache.length });
-          });
-        } catch (err) {
-          console.error("[SW] Error during CACHE_CRITICAL_ASSETS:", err);
-          const clientsList = await self.clients.matchAll();
-          clientsList.forEach((client) => {
-            client.postMessage({ type: "CACHE_COMPLETE", cached: 0, error: err.message });
-          });
-        }
-      })()
-    );
+    console.log("[SW] CACHE_CRITICAL_ASSETS disabled - using App Shell model");
+    // Notify clients immediately that we're not caching (App Shell handles it)
+    self.clients.matchAll().then((clientsList) => {
+      clientsList.forEach((client) => {
+        client.postMessage({ type: "CACHE_COMPLETE", cached: 0, appShell: true });
+      });
+    });
     return;
   }
   if (event.data && event.data.type === "SET_OFFLINE_TEST_MODE") {

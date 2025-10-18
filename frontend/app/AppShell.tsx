@@ -9,6 +9,7 @@ import EnhancedOfflineStatusBar from "@/app/components/EnhancedOfflineStatus";
 import PWAInstallBanner from "@/app/components/PWA/PWAInstallBanner";
 import PWAInstallPrompt from "@/app/components/PWAInstallPrompt";
 import { DataPreloader } from "@/app/components/DataPreloader";
+import { PagePreloader } from "@/app/components/PagePreloader";
 import { ToastContainer } from "react-toastify";
 import { useEffect } from "react";
 // @ts-ignore - missing type declarations for CSS side-effect import
@@ -107,6 +108,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <AuthProvider>
         <OfflineProvider>
           <DataPreloader />
+          <PagePreloader />
           <OfflineStatusBar />
           <EnhancedOfflineStatusBar />
           {children}
