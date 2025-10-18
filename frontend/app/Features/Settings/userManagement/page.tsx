@@ -42,57 +42,50 @@ export default function UserManagement() {
   const [reEnterPassword, setReEnterPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
+
   useEffect(() => {
-    // Debug cached data
+    // Robust offline/cached loading logic
+    const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
     const cachedUsers = localStorage.getItem("cached_users");
-    console.log(
-      "🗄️ UserManagement: Cached users in localStorage:",
-      cachedUsers
-    );
-    if (cachedUsers) {
-      try {
-        const parsed = JSON.parse(cachedUsers);
-        console.log("📦 UserManagement: Parsed cached users:", parsed);
-      } catch (e) {
-        console.error("❌ UserManagement: Error parsing cached users:", e);
-      }
-    }
-
-    console.log("🔍 UserManagement: Starting to fetch users...");
     setLoading(true);
-
+    if (isCompletelyOffline) {
+      if (cachedUsers) {
+        try {
+          const parsed = JSON.parse(cachedUsers);
+          setUsers(parsed);
+        } catch (e) {
+          setUsers([]);
+        }
+      } else {
+        setUsers([]);
+      }
+      setLoading(false);
+      return;
+    }
+    // Online: fetch from API
     listUsers()
       .then((data: User[]) => {
-        console.log("✅ UserManagement: Raw data received:", data);
-        console.log("📊 UserManagement: Data type:", typeof data);
-        console.log("📊 UserManagement: Is array:", Array.isArray(data));
-        console.log("📊 UserManagement: Length:", data?.length);
-
         if (data && Array.isArray(data) && data.length > 0) {
           const processedUsers = data.map((user) => ({
             ...user,
             last_login: user.last_login ?? "",
           }));
-          console.log("✅ UserManagement: Processed users:", processedUsers);
           setUsers(processedUsers);
+          // Cache users
+          localStorage.setItem("cached_users", JSON.stringify(processedUsers));
         } else {
-          console.log(
-            "⚠️ UserManagement: No users found or invalid data structure"
-          );
           setUsers([]);
         }
       })
       .catch((error) => {
-        console.error("❌ UserManagement: Error fetching users:", error);
         setUsers([]);
       })
       .finally(() => {
-        console.log("🏁 UserManagement: Finished loading users");
         setLoading(false);
       });
   }, [listUsers]);
 
-  // Refresh user list by re-calling listUsers and updating state
+  // Refresh handler for the refresh button
   const handleRefresh = async () => {
     setLoading(true);
     try {
@@ -104,11 +97,12 @@ export default function UserManagement() {
             last_login: user.last_login ?? "",
           }))
         );
+        // Cache users
+        localStorage.setItem("cached_users", JSON.stringify(data));
       } else {
         setUsers([]);
       }
     } catch (error) {
-      console.error("Error refreshing users:", error);
       setUsers([]);
     } finally {
       setLoading(false);

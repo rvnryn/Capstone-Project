@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import dayjs from "dayjs";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
 import { FaUserPlus, FaEye, FaEyeSlash } from "react-icons/fa";
@@ -11,56 +12,102 @@ import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { MdCancel, MdSave } from "react-icons/md";
 import { FiAlertTriangle, FiArrowRight, FiCheck, FiX } from "react-icons/fi";
 
-const ROLE_OPTIONS = [
-  "Owner",
-  "General Manager",
-  "Store Manager",
-  "Assistant Store Manager",
-];
-
 export default function AddUsers() {
-  const router = useRouter();
-  const [showPassword, setShowPassword] = useState(false);
-  const [initialSettings, setInitialSettings] = useState<any>(null);
-  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
-  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+    const ROLE_OPTIONS = [
+      "Owner",
+      "General Manager",
+      "Store Manager",
+      "Assistant Store Manager",
+    ];
+    const router = useRouter();
+    const [showPassword, setShowPassword] = useState(false);
+    const [initialSettings, setInitialSettings] = useState<any>(null);
+    const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+    const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
+    const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+    const [offlineError, setOfflineError] = useState<string | null>(null);
+    const [isOnline, setIsOnline] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty) {
-        e.preventDefault();
-        e.returnValue = "";
+    // Form state and cache key
+    const cacheKey = "add_user_form_cache";
+    const [formData, setFormData] = useState(() => {
+      if (typeof window !== "undefined") {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            return JSON.parse(cached);
+          } catch {
+            return {
+              name: "",
+              username: "",
+              email: "",
+              password: "",
+              re_password: "",
+              user_role: "",
+            };
+          }
+        }
       }
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isDirty]);
+      return {
+        name: "",
+        username: "",
+        email: "",
+        password: "",
+        re_password: "",
+        user_role: "",
+      };
+    });
 
-  const [formData, setFormData] = useState({
-    name: "",
-    username: "",
-    email: "",
-    password: "",
-    re_password: "",
-    user_role: "",
-  });
+    const [errors, setErrors] = useState({
+      name: "",
+      username: "",
+      gmail: "",
+      password: "",
+      re_password: "",
+      user_role: "",
+      duplicate: "",
+      supabase: "",
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [errors, setErrors] = useState({
-    name: "",
-    username: "",
-    gmail: "",
-    password: "",
-    re_password: "",
-    user_role: "",
-    duplicate: "",
-    supabase: "",
-  });
+    // Online/offline detection
+    useEffect(() => {
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+      setIsOnline(navigator.onLine);
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+      return () => {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      };
+    }, []);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+    // Cache form data on change
+    useEffect(() => {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cacheKey, JSON.stringify(formData));
+      }
+    }, [formData]);
 
+    // Simulate loading state for offline/cached
+    useEffect(() => {
+      setIsLoading(false);
+      if (!isOnline) {
+        // If offline and no cache, show error
+        const cached = localStorage.getItem(cacheKey);
+        if (!cached) {
+          setOfflineError("You are offline and no cached form data is available. Please connect to the internet to add a user.");
+        } else {
+          setOfflineError(null);
+        }
+      } else {
+        setOfflineError(null);
+      }
+    }, [isOnline]);
   // Validation logic
   const validate = useCallback((data: typeof formData) => {
     const newErrors = {
@@ -131,32 +178,34 @@ export default function AddUsers() {
     str.replace(/\b\w/g, (char) => char.toUpperCase());
 
   const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-      const { name, value } = e.target;
-      setIsDirty(true);
-      setFormData((prev) => {
-        let newValue = value;
-        if (name === "name") {
-          newValue = capitalizeWords(value);
-        } else if (name === "username") {
-          newValue = value.trim().toLowerCase();
-        }
-        return {
-          ...prev,
-          [name]: newValue,
-        };
-      });
-    },
-    []
-  );
+  (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setIsDirty(true);
+    setFormData((prev: typeof formData) => {
+      let newValue = value;
+      if (name === "name") {
+        newValue = capitalizeWords(value);
+      } else if (name === "username") {
+        newValue = value.trim().toLowerCase();
+      }
+      return {
+        ...prev,
+        [name]: newValue,
+      };
+    });
+  },
+  []
+);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isOnline) {
+      setOfflineError("You are offline. Please connect to the internet to add a user.");
+      return;
+    }
     setIsSubmitting(true);
-
     const validationErrors = validate(formData);
     setErrors({ ...validationErrors, duplicate: "", supabase: "" });
-
     if (
       validationErrors.name ||
       validationErrors.username ||
@@ -168,7 +217,6 @@ export default function AddUsers() {
       setIsSubmitting(false);
       return;
     }
-
     try {
       // 1. Create user in Supabase Auth
       const { data, error } = await supabase.auth.signUp({
@@ -180,7 +228,6 @@ export default function AddUsers() {
           },
         },
       });
-
       if (error) {
         setErrors((prev) => ({
           ...prev,
@@ -189,7 +236,6 @@ export default function AddUsers() {
         setIsSubmitting(false);
         return;
       }
-
       // 2. Store extra info in your users table
       const authId = data?.user?.id;
       if (!authId) {
@@ -200,13 +246,11 @@ export default function AddUsers() {
         setIsSubmitting(false);
         return;
       }
-
       // Check for duplicate username in your table
       const { data: existingUsers } = await supabase
         .from("users")
         .select("username")
         .eq("username", formData.username);
-
       if (existingUsers && existingUsers.length > 0) {
         setErrors((prev) => ({
           ...prev,
@@ -215,7 +259,6 @@ export default function AddUsers() {
         setIsSubmitting(false);
         return;
       }
-
       // Insert user profile (user_id is your app PK, auth_id is Supabase UUID)
       const { error: dbError } = await supabase.from("users").insert([
         {
@@ -227,7 +270,6 @@ export default function AddUsers() {
           status: "active",
         },
       ]);
-
       if (dbError) {
         setErrors((prev) => ({
           ...prev,
@@ -236,7 +278,6 @@ export default function AddUsers() {
         setIsSubmitting(false);
         return;
       }
-
       setFormData({
         name: "",
         username: "",
@@ -245,7 +286,6 @@ export default function AddUsers() {
         re_password: "",
         user_role: "",
       });
-
       setIsDirty(false);
       setShowSuccessMessage(true);
       setTimeout(() => {
@@ -312,6 +352,41 @@ export default function AddUsers() {
     setPendingRoute(null);
   };
 
+  if (isLoading) {
+    return (
+      <section className="text-white font-poppins w-full min-h-screen">
+        <NavigationBar onNavigate={handleSidebarNavigate} />
+        <ResponsiveMain>
+          <main className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-8 h-8 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+              <div className="text-yellow-400 font-medium text-base">Loading Add User form...</div>
+            </div>
+          </main>
+        </ResponsiveMain>
+      </section>
+    );
+  }
+  if (offlineError) {
+    return (
+      <section className="text-white font-poppins w-full min-h-screen">
+        <NavigationBar onNavigate={handleSidebarNavigate} />
+        <ResponsiveMain>
+          <main className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <button
+                className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </button>
+            </div>
+          </main>
+        </ResponsiveMain>
+      </section>
+    );
+  }
   return (
     <section>
       <NavigationBar

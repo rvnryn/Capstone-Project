@@ -18,6 +18,9 @@ import {
 } from "react-icons/fi";
 
 export default function EditSupplier() {
+  // --- Offline/Cache State ---
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isMenuOpen, isMobile } = useNavigation();
@@ -47,17 +50,56 @@ export default function EditSupplier() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
 
+  // Online/offline detection
   useEffect(() => {
-    const fetchSupplier = async () => {
-      if (!supplierId) {
-        router.push(routes.supplier);
-        return;
-      }
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
+  useEffect(() => {
+    const cacheKey = supplierId ? `cached_supplier_${supplierId}` : null;
+    setOfflineError(null);
+    setIsLoading(true);
+    if (!supplierId) {
+      router.push(routes.supplier);
+      return;
+    }
+    if (!isOnline) {
+      if (cacheKey) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            setFormData(parsed);
+            setInitialSettings(parsed);
+          } catch (e) {
+            setFormData({});
+            setInitialSettings(null);
+          }
+        } else {
+          setFormData({});
+          setInitialSettings(null);
+          setOfflineError("Offline and no cached supplier data available.");
+        }
+      } else {
+        setFormData({});
+        setInitialSettings(null);
+        setOfflineError("Offline and no cached supplier data available.");
+      }
+      setIsLoading(false);
+      return;
+    }
+    // Online: fetch from API
+    const fetchSupplier = async () => {
       try {
         const data = await getSupplier(supplierId);
-
-        // Map fields to match form expectations
         const mappedSupplier = {
           supplier_id: data.supplier_id,
           supplier_name: data.supplier_name,
@@ -67,9 +109,12 @@ export default function EditSupplier() {
           email: data.email ?? "",
           address: data.address ?? "",
         };
-
         setFormData(mappedSupplier);
         setInitialSettings(mappedSupplier);
+        // Cache supplier data
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(mappedSupplier));
+        }
       } catch (error) {
         console.error("Error fetching supplier:", error);
         router.push(routes.supplier);
@@ -77,9 +122,8 @@ export default function EditSupplier() {
         setIsLoading(false);
       }
     };
-
     fetchSupplier();
-  }, [supplierId, router, getSupplier]);
+  }, [supplierId, router, getSupplier, isOnline]);
 
   const capitalizeWords = (str: string) =>
     str.replace(/\b\w/g, (char) => char.toUpperCase());
@@ -264,6 +308,26 @@ export default function EditSupplier() {
     setPendingRoute(null);
   };
 
+  if (offlineError) {
+    return (
+      <section className="text-white font-poppins w-full min-h-screen">
+        <NavigationBar onNavigate={handleSidebarNavigate} />
+        <ResponsiveMain>
+          <main className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <button
+                className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </button>
+            </div>
+          </main>
+        </ResponsiveMain>
+      </section>
+    );
+  }
   if (isLoading) {
     return (
       <section className="text-white font-poppins w-full min-h-screen">

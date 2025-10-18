@@ -23,45 +23,65 @@ import {
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 
 export default function ViewUsers() {
+  // Robust offline/cached state
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isMenuOpen, isMobile } = useNavigation();
   const { getUser } = useUsersAPI();
-    const [isOnline, setIsOnline] = useState(true);
-    useEffect(() => {
-      setIsOnline(navigator.onLine);
-      const handleOnline = () => setIsOnline(true);
-      const handleOffline = () => setIsOnline(false);
-      window.addEventListener("online", handleOnline);
-      window.addEventListener("offline", handleOffline);
-      return () => {
-        window.removeEventListener("online", handleOnline);
-        window.removeEventListener("offline", handleOffline);
-      };
-    }, []);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const userId = searchParams.get("id");
 
   useEffect(() => {
-    const fetchUser = async () => {
-      if (!userId) {
-        router.push(routes.user_management_settings);
-        return;
+    // Robust offline/cached loading logic
+    const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
+    setOfflineError(null);
+    setIsLoading(true);
+    const cacheKey = userId ? `cached_user_${userId}` : null;
+    if (!userId) {
+      router.push(routes.user_management_settings);
+      return;
+    }
+    if (isCompletelyOffline) {
+      if (cacheKey) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            setUser(parsed);
+          } catch (e) {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+          setOfflineError("Offline and no cached user data available.");
+        }
+      } else {
+        setUser(null);
+        setOfflineError("Offline and no cached user data available.");
       }
-
+      setIsLoading(false);
+      return;
+    }
+    // Online: fetch from API
+    const fetchUser = async () => {
       try {
         const data = await getUser(userId);
         setUser(data);
+        // Cache user data
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
       } catch (error) {
-        console.error("Error fetching user:", error);
+        setUser(null);
+        setOfflineError("Error fetching user data.");
         router.push(routes.user_management_settings);
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchUser();
   }, [userId, router, getUser]);
 
@@ -234,7 +254,7 @@ export default function ViewUsers() {
                 {/* Action Buttons */}
                 <div className="flex flex-col xs:flex-row justify-end gap-2 xs:gap-3 sm:gap-4 pt-4 xs:pt-5 sm:pt-6 md:pt-8 border-t border-gray-700/50">
                   <button
-                    disabled={!isOnline} title={!isOnline ? 'You can use this when online.' : ''} 
+                    // Remove isOnline check, or use navigator.onLine if needed
                     onClick={() => {
                       setShowEditModal(true);
                     }}

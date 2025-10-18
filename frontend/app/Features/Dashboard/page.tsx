@@ -119,12 +119,21 @@ export default function Dashboard() {
   } = useDashboardQuery();
 
   // Define variables for inventory cache status and last update
+  // Robust offline/cached logic: if all queries are empty and offline, show error
   const inventoryFromCache =
     (lowStock && "isFromCache" in lowStock && (lowStock as any).isFromCache) ||
     (expiring && "isFromCache" in expiring && (expiring as any).isFromCache) ||
     (surplus && "isFromCache" in surplus && (surplus as any).isFromCache) ||
     (expired && "isFromCache" in expired && (expired as any).isFromCache) ||
     false;
+
+  const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
+  const noCache =
+    !lowStock.data?.length &&
+    !expiring.data?.length &&
+    !surplus.data?.length &&
+    !expired.data?.length &&
+    isCompletelyOffline;
   const lastDataUpdate =
     lowStock.dataUpdatedAt ||
     expiring.dataUpdatedAt ||

@@ -84,31 +84,15 @@ export default function SupplierPage() {
       }
       // Online: fetch and cache
       const items = await listSuppliers();
-      const mapped = items.map((item: any) => ({
-        ...item,
-        supplier_id: item.supplier_id,
-        supplier_name: item.supplier_name,
-        contact_person: item.contact_person || "-",
-        phone_number: item.phone_number || "-",
-        email: item.email || "-",
-        address: item.address || "-",
-        supplies: item.supplies || "-",
-        created_at: item.created_at ? new Date(item.created_at) : new Date(),
-        updated_at: item.updated_at ? new Date(item.updated_at) : new Date(),
-      }));
       if (typeof window !== "undefined") {
-        localStorage.setItem("suppliersCache", JSON.stringify(mapped));
+        localStorage.setItem("suppliersCache", JSON.stringify(items));
       }
       setOfflineSuppliers(null);
       setOfflineError(null);
-      return mapped;
+      return items;
     },
+    refetchOnWindowFocus: true,
   });
-
-  const handleRefresh = () => {
-    console.log("Refreshing inventory table...");
-    queryClient.invalidateQueries({ queryKey: ["suppliers"] });
-  };
 
   // Delete mutation
   const deleteMutation = useMutation({
@@ -145,7 +129,7 @@ export default function SupplierPage() {
 
   const filtered = useMemo(() => {
     return supplierData.filter(
-      (item) =>
+      (item: SupplierItem) =>
         !searchQuery ||
         Object.values(item)
           .join(" ")
@@ -153,6 +137,10 @@ export default function SupplierPage() {
           .includes(searchQuery.toLowerCase())
     );
   }, [supplierData, searchQuery]);
+  // Add missing handleRefresh function
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+  };
 
   const sortedData = useMemo(() => {
     const data = [...filtered];

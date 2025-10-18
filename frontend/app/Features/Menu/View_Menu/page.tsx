@@ -31,6 +31,8 @@ import {
 } from "react-icons/fa";
 
 export default function ViewMenu() {
+  // --- Offline/Cache State ---
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const { role } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -53,15 +55,43 @@ export default function ViewMenu() {
   const menuId = searchParams.get("id");
 
   useEffect(() => {
-    const fetchMenu = async () => {
-      if (!menuId) {
-        router.push(routes.menu);
-        return;
+    const cacheKey = menuId ? `cached_menu_${menuId}` : null;
+    setOfflineError(null);
+    setIsLoading(true);
+    if (!menuId) {
+      router.push(routes.menu);
+      return;
+    }
+    if (!isOnline) {
+      if (cacheKey) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            setMenu(parsed);
+          } catch (e) {
+            setMenu(null);
+          }
+        } else {
+          setMenu(null);
+          setOfflineError("Offline and no cached menu data available.");
+        }
+      } else {
+        setMenu(null);
+        setOfflineError("Offline and no cached menu data available.");
       }
+      setIsLoading(false);
+      return;
+    }
+    // Online: fetch from API
+    const fetchMenu = async () => {
       try {
         const data = await fetchMenuById(Number(menuId));
-        console.log("Fetched menu in view page:", data);
         setMenu(data);
+        // Cache menu data
+        if (cacheKey) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
       } catch (error) {
         console.error("Error fetching menu:", error);
         router.push(routes.menu);
@@ -69,9 +99,8 @@ export default function ViewMenu() {
         setIsLoading(false);
       }
     };
-
     fetchMenu();
-  }, [menuId, router, fetchMenuById]);
+  }, [menuId, router, fetchMenuById, isOnline]);
 
   function formatDateOnly(date?: string) {
     if (!date) return "-";
@@ -120,6 +149,26 @@ export default function ViewMenu() {
     }
   }
 
+  if (offlineError) {
+    return (
+      <section className="text-white font-poppins w-full min-h-screen">
+        <NavigationBar />
+        <ResponsiveMain>
+          <main className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <button
+                className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </button>
+            </div>
+          </main>
+        </ResponsiveMain>
+      </section>
+    );
+  }
   if (isLoading) {
     return (
       <section className="text-white font-poppins">

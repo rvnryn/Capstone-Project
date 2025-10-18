@@ -238,13 +238,10 @@ export default function TodayInventoryPage() {
         if (stockQty === 0) {
           status = "Out Of Stock";
         } else if (stockQty <= useThreshold * 0.5) {
-          // Critical: when stock is 50% or less of the threshold
           status = "Critical";
         } else if (stockQty <= useThreshold) {
-          // Low: when stock is at or below threshold but above critical
           status = "Low";
         } else {
-          // Normal: when stock is above threshold
           status = "Normal";
         }
 
@@ -273,6 +270,12 @@ export default function TodayInventoryPage() {
     refetchOnMount: false,
     // cacheTime should be set in queryClient defaultOptions, not here
   });
+
+  // Robust loading state: if offline and no cache, do not show spinner
+  const shouldShowLoading =
+    (isLoading || isFetching) &&
+    !offlineError &&
+    (typeof window === "undefined" || navigator.onLine || !!localStorage.getItem("todayInventoryCache"));
 
   // Always treat as InventoryItem[]
   const inventoryData: InventoryItem[] = Array.isArray(inventoryDataRaw)

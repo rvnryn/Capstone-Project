@@ -12,6 +12,8 @@ import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
 
 export default function BackupRestorePage() {
+  // Robust offline/cached state
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   // Modal state for password entry
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingRestoreFilename, setPendingRestoreFilename] = useState<
@@ -45,6 +47,28 @@ export default function BackupRestorePage() {
 
   // Fetch backup history from Supabase Storage
   useEffect(() => {
+    // Robust offline/cached loading logic
+    const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
+    setHistoryLoading(true);
+    setOfflineError(null);
+    const cacheKey = "cached_backup_history";
+    if (isCompletelyOffline) {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          setHistory(parsed);
+        } catch (e) {
+          setHistory([]);
+        }
+      } else {
+        setHistory([]);
+        setOfflineError("Offline and no cached backup history available.");
+      }
+      setHistoryLoading(false);
+      return;
+    }
+    // Online: fetch from API
     const fetchHistory = async () => {
       setHistoryLoading(true);
       try {
@@ -54,13 +78,15 @@ export default function BackupRestorePage() {
           ? files.filter((f) => f !== ".emptyFolderPlaceholder")
           : [];
         setHistory(filtered);
+        // Cache backup history
+        localStorage.setItem(cacheKey, JSON.stringify(filtered));
       } catch (err) {
         setHistory([]);
       }
       setHistoryLoading(false);
     };
     fetchHistory();
-  }, []);
+  }, [listBackups]);
 
   // Manual backup handler
   const handleBackup = async () => {
@@ -215,6 +241,18 @@ export default function BackupRestorePage() {
           aria-label="Backup and Restore main content"
           tabIndex={-1}
         >
+          {/* Robust offline/cached error and loading UI */}
+          {offlineError && (
+            <div className="bg-red-700 text-white p-4 rounded-lg mb-4 text-center">
+              {offlineError}
+            </div>
+          )}
+          {historyLoading && !offlineError && (
+            <div className="flex justify-center items-center min-h-[120px]">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              <span className="ml-4 text-white">Loading backup history...</span>
+            </div>
+          )}
           <div className="max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto w-full">
             <article className="bg-gradient-to-br from-gray-900/95 to-black/95 rounded-xl shadow-2xl border border-gray-800/50 p-6 w-full">
               <header className="flex flex-col space-y-4 mb-8">

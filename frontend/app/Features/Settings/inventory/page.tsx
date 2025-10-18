@@ -26,7 +26,10 @@ const CATEGORIES = [
 ];
 
 export default function InventorySettings() {
-  // ...existing code...
+  // --- Offline/Cache State ---
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+  const cacheKey = "inventory_settings_cache";
   const { fetchSettings, createSetting, updateSetting, deleteSetting } =
     useInventorySettingsAPI();
   const router = useRouter();
@@ -55,15 +58,62 @@ export default function InventorySettings() {
   const [ingredientToDelete, setIngredientToDelete] =
     useState<InventorySetting | null>(null);
 
+  // Online/offline detection
   useEffect(() => {
-    setLoading(true);
-    fetchSettings().then((data) => {
-      setIngredients(data);
-      setPendingIngredients(data);
-      setInitialSettings(data);
-      setLoading(false); // <-- Set loading to false after fetch
-    });
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, []);
+
+  // Fetch inventory settings with offline/cache logic
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setOfflineError(null);
+      if (!isOnline) {
+        // Try to load from cache
+        if (typeof window !== 'undefined') {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            try {
+              const data = JSON.parse(cached);
+              setIngredients(data);
+              setPendingIngredients(data);
+              setInitialSettings(data);
+              setLoading(false);
+              setOfflineError(null);
+              return;
+            } catch {}
+          }
+        }
+        setOfflineError("You are offline and no cached inventory data is available. Please connect to the internet to view or edit inventory settings.");
+        setLoading(false);
+        return;
+      }
+      try {
+        const data = await fetchSettings();
+        setIngredients(data);
+        setPendingIngredients(data);
+        setInitialSettings(data);
+        // Cache inventory data
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
+      } catch (error) {
+        setOfflineError("Failed to fetch inventory data. Please try again.");
+        console.error("Error fetching inventory:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [isOnline]);
   const handleUnitChange = (id: number, value: string) => {
     setPendingIngredients((prev) =>
       prev.map((i) => (i.id === id ? { ...i, default_unit: value } : i))
@@ -185,6 +235,43 @@ export default function InventorySettings() {
     setShowUnsavedModal(false);
     setPendingRoute(null);
   };
+
+  if (loading) {
+    return (
+      <section className="text-white font-poppins w-full min-h-screen">
+        <NavigationBar onNavigate={handleSidebarNavigate} />
+        <ResponsiveMain>
+          <main className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-8 h-8 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+              <div className="text-yellow-400 font-medium text-base">Loading inventory settings...</div>
+            </div>
+          </main>
+        </ResponsiveMain>
+      </section>
+    );
+  }
+
+  if (offlineError) {
+    return (
+      <section className="text-white font-poppins w-full min-h-screen">
+        <NavigationBar onNavigate={handleSidebarNavigate} />
+        <ResponsiveMain>
+          <main className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <button
+                className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </button>
+            </div>
+          </main>
+        </ResponsiveMain>
+      </section>
+    );
+  }
 
   return (
     <section className="text-white font-poppins">

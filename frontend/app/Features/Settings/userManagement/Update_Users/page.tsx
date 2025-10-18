@@ -23,12 +23,16 @@ const ROLE_OPTIONS = [
 const STATUS_OPTIONS = ["active", "inactive"];
 
 export default function EditUser() {
+  // --- Offline/Cache State ---
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isMenuOpen, isMobile } = useNavigation();
   const { getUser, updateUser, changeUserPassword } = useUsersAPI();
   const { user: currentUser } = useAuth();
   const userId = searchParams.get("id");
+  const cacheKey = userId ? `edit_user_cache_${userId}` : null;
 
   const [formData, setFormData] = useState<Partial<User>>({});
   const [errors, setErrors] = useState({
@@ -62,13 +66,47 @@ export default function EditUser() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [showPasswordSuccess, setShowPasswordSuccess] = useState(false);
 
+  // Online/offline detection
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  // Fetch user with offline/cache logic
   useEffect(() => {
     const fetchUser = async () => {
+      setIsLoading(true);
+      setOfflineError(null);
       if (!userId) {
         router.push(routes.user_management_settings);
         return;
       }
-
+      if (!isOnline) {
+        // Try to load from cache
+        if (cacheKey && typeof window !== 'undefined') {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            try {
+              const data = JSON.parse(cached);
+              setFormData(data);
+              setInitialSettings(data);
+              setIsLoading(false);
+              setOfflineError(null);
+              return;
+            } catch {}
+          }
+        }
+        setOfflineError("You are offline and no cached user data is available. Please connect to the internet to edit this user.");
+        setIsLoading(false);
+        return;
+      }
       try {
         const data = await getUser(userId);
         setFormData({
@@ -80,18 +118,21 @@ export default function EditUser() {
           user_role: data.user_role,
           status: data.status,
         });
-
         setInitialSettings(data);
+        // Cache user data
+        if (cacheKey && typeof window !== 'undefined') {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
       } catch (error) {
+        setOfflineError("Failed to fetch user data. Please try again.");
         console.error("Error fetching user:", error);
-        router.push(routes.user_management_settings);
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchUser();
-  }, [userId, router, getUser]);
+    // Only refetch if userId or isOnline changes
+  }, [userId, router, getUser, isOnline]);
 
   // Validation logic
   const validate = useCallback((data: Partial<User>) => {
@@ -275,38 +316,31 @@ export default function EditUser() {
       <section className="text-white font-poppins w-full min-h-screen">
         <NavigationBar onNavigate={handleSidebarNavigate} />
         <ResponsiveMain>
-          <main
-            className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
-            aria-label="Edit User main content"
-            tabIndex={-1}
-          >
-            <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
-              <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl xs:rounded-3xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10 2xl:p-12 w-full">
-                <div className="flex flex-row items-center justify-center gap-4 mb-6 w-full">
-                  <div className="relative flex-shrink-0">
-                    <div className="absolute inset-0 bg-indigo-400/20 rounded-full blur-lg"></div>
-                    <div className="relative bg-gradient-to-br from-yellow-400 to-yellow-500 p-3 rounded-full">
-                      <FaUsers className="text-black text-2xl md:text-3xl lg:text-4xl" />
-                    </div>
-                  </div>
-                  <div className="flex flex-col justify-center w-full">
-                    <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-gradient-to-r from-yellow-400 to-yellow-500 bg-clip-text font-poppins text-left w-full">
-                      Edit User Information
-                    </h2>
-                    <p className="text-gray-400 text-base mt-1 text-left w-full">
-                      Update user details and permissions
-                    </p>
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                    <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                    <div className="text-yellow-400 font-medium text-sm xs:text-base">
-                      Loading user details...
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <main className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-8 h-8 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+              <div className="text-yellow-400 font-medium text-base">Loading user details...</div>
+            </div>
+          </main>
+        </ResponsiveMain>
+      </section>
+    );
+  }
+
+  if (offlineError) {
+    return (
+      <section className="text-white font-poppins w-full min-h-screen">
+        <NavigationBar onNavigate={handleSidebarNavigate} />
+        <ResponsiveMain>
+          <main className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <button
+                className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </button>
             </div>
           </main>
         </ResponsiveMain>

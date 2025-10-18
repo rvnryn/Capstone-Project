@@ -12,6 +12,18 @@ import { MdCancel, MdSave } from "react-icons/md";
 import { FiAlertTriangle, FiSave } from "react-icons/fi";
 
 export default function NotificationSettings() {
+  // --- Offline/Cache State ---
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+  const cacheKey = "notification_settings_cache";
+  // --- Notification Settings State ---
+  const [settings, setSettings] = useState<{
+    low_stock_enabled: boolean;
+    low_stock_method: string;
+    expiration_enabled: boolean;
+    expiration_days: number;
+    expiration_method: string;
+  } | null>(null);
   const router = useRouter();
   const [userId, setUserId] = useState<number | null>(null);
   const [userError, setUserError] = useState<string | null>(null);
@@ -105,39 +117,66 @@ export default function NotificationSettings() {
       alert("Failed to save notification settings");
     }
   };
+  // Online/offline detection
   useEffect(() => {
-    async function fetchUserId() {
-      console.log("fetchUserId called");
-      setUserError(null);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  // Fetch userId and notification settings with offline/cache logic
+  useEffect(() => {
+    async function fetchUserIdAndSettings() {
+      setUserError?.(null);
+      setOfflineError(null);
+      if (!isOnline) {
+        // Try to load from cache
+        if (typeof window !== 'undefined') {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            try {
+              const data = JSON.parse(cached);
+              if (data.userId) setUserId?.(data.userId);
+              if (data.settings) setSettings(data.settings);
+              setOfflineError(null);
+              return;
+            } catch {}
+          }
+        }
+        setOfflineError("You are offline and no cached notification settings are available. Please connect to the internet to view or edit notification settings.");
+        return;
+      }
+      // --- original fetchUserId logic below ---
       const session = await supabase.auth.getSession();
-      console.log("Session result:", session);
       if (!session.data.session) {
-        setUserError("No session found. Please log in.");
-        router.push(routes.login); // Redirect to login page
+        setUserError?.("No session found. Please log in.");
+        router.push?.(routes.login);
         return;
       }
       const {
         data: { user },
         error: authError,
       } = await supabase.auth.getUser();
-      console.log("Supabase getUser result:", user, authError);
       if (authError) {
-        console.error("Supabase Auth error:", authError);
-        setUserError("Failed to fetch user from Supabase Auth.");
-        setUserId(null);
+        setUserError?.("Failed to fetch user from Supabase Auth.");
+        setUserId?.(null);
         return;
       }
       if (user?.id) {
-        // Query users table for numeric id
         const { data, error } = await supabase
           .from("users")
           .select("user_id")
           .eq("auth_id", user.id)
           .single();
         if (!error && data && data.user_id) {
-          setUserId(data.user_id);
+          setUserId?.(data.user_id);
         } else {
-          // Auto-create user if not found
           const insertRes = await supabase
             .from("users")
             .insert([
@@ -161,39 +200,38 @@ export default function NotificationSettings() {
             ])
             .select("user_id")
             .single();
-          // Enhanced logging for debugging
-          console.log("Supabase insertRes (full):", insertRes);
           if (!insertRes.error && insertRes.data && insertRes.data.user_id) {
-            setUserId(insertRes.data.user_id);
+            setUserId?.(insertRes.data.user_id);
           } else {
-            // Log all possible properties for diagnosis
-            console.error("User insert error: full response:", insertRes);
-            if (insertRes.error) {
-              setUserError(
-                `Failed to create user: ${
-                  insertRes.error.message || "Unknown error"
-                }`
-              );
-            } else {
-              setUserError(
-                `Failed to create user in users table. No error details returned.\nFull response: ${JSON.stringify(
-                  insertRes,
-                  null,
-                  2
-                )}\nPlease check your users table schema, required fields, and RLS policies.`
-              );
-            }
-            setUserId(null);
+            setUserError?.(
+              `Failed to create user: ${insertRes.error?.message || "Unknown error"}`
+            );
+            setUserId?.(null);
           }
         }
       } else {
-        setUserError("No authenticated user found. Please log in again.");
-        setUserId(null);
+        setUserError?.("No authenticated user found. Please log in again.");
+        setUserId?.(null);
       }
     }
-    fetchUserId();
-  }, []);
-  const { settings, fetchSettings, updateSettings, loading } =
+    fetchUserIdAndSettings();
+  }, [isOnline]);
+
+  // Cache notification settings on change (when online)
+  useEffect(() => {
+    if (isOnline && userId && settings) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            userId,
+            settings,
+          })
+        );
+      }
+    }
+  }, [isOnline, userId, settings]);
+  const { fetchSettings, updateSettings, loading } =
     useNotificationSettingsAPI(userId as number);
 
   useEffect(() => {
@@ -207,10 +245,10 @@ export default function NotificationSettings() {
   useEffect(() => {
     if (settings) {
       setLowStockEnabled(settings.low_stock_enabled);
-      setLowStockMethod(settings.low_stock_method);
+  setLowStockMethod(Array.isArray(settings.low_stock_method) ? settings.low_stock_method : [settings.low_stock_method]);
       setExpirationEnabled(settings.expiration_enabled);
       setExpirationDays(settings.expiration_days);
-      setExpirationMethod(settings.expiration_method);
+  setExpirationMethod(Array.isArray(settings.expiration_method) ? settings.expiration_method : [settings.expiration_method]);
     }
   }, [settings]);
 
@@ -243,6 +281,27 @@ export default function NotificationSettings() {
     }
     return true;
   };
+
+  if (offlineError) {
+    return (
+      <section className="text-white font-poppins w-full min-h-screen">
+        <NavigationBar onNavigate={handleSidebarNavigate} />
+        <ResponsiveMain>
+          <main className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <button
+                className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </button>
+            </div>
+          </main>
+        </ResponsiveMain>
+      </section>
+    );
+  }
 
   return (
     <section className="text-white font-poppins">

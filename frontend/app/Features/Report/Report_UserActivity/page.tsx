@@ -85,14 +85,39 @@ const Report_UserActivity = () => {
     "Assistant Store Manager",
   ];
 
-  const { logs, loading, error, fetchLogs } = useUserActivityLogAPI();
+  const { logs, loading: apiLoading, error, fetchLogs } = useUserActivityLogAPI();
+  const [loading, setLoading] = useState(true);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Robust offline/cached loading logic
+    const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
+    setLoading(true);
+    setOfflineError(null);
+    const cacheKey = "cached_user_activity_logs";
     const params: any = {};
     if (reportDate) params.report_date = reportDate;
     if (role) params.role = role;
+    if (isCompletelyOffline) {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          setUserActivityData(parsed);
+        } catch (e) {
+          setUserActivityData([]);
+        }
+      } else {
+        setUserActivityData([]);
+        setOfflineError("Offline and no cached user activity logs available.");
+      }
+      setLoading(false);
+      return;
+    }
+    // Online: fetch from API
     fetchLogs(params);
-
+    setLoading(apiLoading);
+    // Subscribe to changes as before
     const channel = supabase
       .channel("user_activity_log_changes")
       .on(
@@ -106,14 +131,19 @@ const Report_UserActivity = () => {
         }
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [reportDate, role, fetchLogs]);
+  }, [reportDate, role, fetchLogs, apiLoading]);
 
   useEffect(() => {
     setUserActivityData(logs);
+    // Cache logs if online
+    const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
+    if (!isCompletelyOffline && logs && Array.isArray(logs)) {
+      localStorage.setItem("cached_user_activity_logs", JSON.stringify(logs));
+    }
+    setLoading(false);
   }, [logs]);
 
   // Always use userActivityData as the data source
@@ -459,6 +489,18 @@ const Report_UserActivity = () => {
             aria-label="User Activity Report main content"
             tabIndex={-1}
           >
+            {/* Robust offline/cached error and loading UI */}
+            {offlineError && (
+              <div className="bg-red-700 text-white p-4 rounded-lg mb-4 text-center">
+                {offlineError}
+              </div>
+            )}
+            {loading && !offlineError && (
+              <div className="flex justify-center items-center min-h-[200px]">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+                <span className="ml-4 text-white">Loading user activity logs...</span>
+              </div>
+            )}
             <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
               <section className="bg-black rounded-lg xs:rounded-xl sm:rounded-2xl lg:rounded-3xl shadow-2xl p-1 xs:p-2 sm:p-4 md:p-6 lg:p-8 xl:p-12 w-full overflow-hidden">
                 {/* Header Section */}

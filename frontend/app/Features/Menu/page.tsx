@@ -139,6 +139,12 @@ const Menu: React.FC = () => {
     refetchOnWindowFocus: true,
   });
 
+  // Robust loading state: if offline and no cache, do not show spinner
+  const shouldShowLoading =
+    (isLoading || isFetching) &&
+    !offlineError &&
+    (typeof window === "undefined" || navigator.onLine || !!localStorage.getItem("menuCache"));
+
   const handleRefresh = () => {
     console.log("Refreshing inventory table...");
     queryClient.invalidateQueries({ queryKey: ["menu"] });
@@ -497,29 +503,27 @@ const Menu: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {isLoading || isFetching ? (
-                        offlineError ? (
-                          <tr>
-                            <td colSpan={columns.length} className="text-center py-8">
-                              <div className="flex flex-col items-center gap-2">
-                                <MdWarning className="text-yellow-400 text-3xl mx-auto" />
-                                <div className="text-yellow-400 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
-                                  {offlineError}
-                                </div>
+                      {shouldShowLoading ? (
+                        <tr>
+                          <td colSpan={columns.length} className="text-center py-8">
+                            <div className="text-yellow-300 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
+                              {(typeof navigator !== "undefined" && navigator.onLine)
+                                ? "Refreshing menu data..."
+                                : "Loading from offline cache..."}
+                            </div>
+                          </td>
+                        </tr>
+                      ) : offlineError ? (
+                        <tr>
+                          <td colSpan={columns.length} className="text-center py-8">
+                            <div className="flex flex-col items-center gap-2">
+                              <MdWarning className="text-yellow-400 text-3xl mx-auto" />
+                              <div className="text-yellow-400 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
+                                {offlineError}
                               </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          <tr>
-                            <td colSpan={columns.length} className="text-center py-8">
-                              <div className="text-yellow-300 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
-                                {(typeof navigator !== "undefined" && navigator.onLine)
-                                  ? "Refreshing menu data..."
-                                  : "Loading from offline cache..."}
-                              </div>
-                            </td>
-                          </tr>
-                        )
+                            </div>
+                          </td>
+                        </tr>
                       ) : isError ? (
                         <tr>
                           <td
