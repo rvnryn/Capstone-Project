@@ -289,10 +289,12 @@ const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                 e.stopPropagation();
                 handleDismiss();
               }}
-              className="px-3 py-2.5 border border-gray-600 text-gray-400 rounded-xl hover:border-red-500 hover:text-red-400 transition-colors text-sm"
+              className="px-3 py-2.5 border-2 border-red-500 bg-black/70 text-white rounded-xl hover:bg-red-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-yellow-400 z-50 !block !visible shadow-lg transition-all duration-200 text-sm"
+              style={{ minWidth: 40, minHeight: 40 }}
               title="Dismiss"
+              aria-label="Dismiss install banner"
             >
-              <FaTimes size={14} />
+              <FaTimes size={18} />
             </button>
           </div>
         </div>
