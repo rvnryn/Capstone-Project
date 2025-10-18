@@ -59,7 +59,8 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     if (typeof window !== "undefined") {
       const cachedUser = localStorage.getItem("cachedUser");
       const cachedRole = localStorage.getItem("cachedRole");
-      if (cachedUser && cachedRole) {
+      const token = localStorage.getItem("token");
+      if (cachedUser && cachedRole && token) {
         setUser(JSON.parse(cachedUser));
         setRole(cachedRole as UserRole);
       }
@@ -74,7 +75,8 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     if (typeof window !== "undefined" && !navigator.onLine) {
       const cachedUser = localStorage.getItem("cachedUser");
       const cachedRole = localStorage.getItem("cachedRole");
-      if (cachedUser && cachedRole) {
+      const token = localStorage.getItem("token");
+      if (cachedUser && cachedRole && token) {
         setUser(JSON.parse(cachedUser));
         setRole(cachedRole as UserRole);
         setLoading(false);
@@ -99,13 +101,29 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       !session.access_token ||
       (session.expires_at && session.expires_at * 1000 < Date.now())
     ) {
-      setUser(null);
-      setRole(null);
-      setLoading(false);
+      // Only clear if no cached session and no token
       if (typeof window !== "undefined") {
-        localStorage.removeItem("token");
-        localStorage.removeItem("cachedUser");
-        localStorage.removeItem("cachedRole");
+        const cachedUser = localStorage.getItem("cachedUser");
+        const cachedRole = localStorage.getItem("cachedRole");
+        const token = localStorage.getItem("token");
+        if (cachedUser && cachedRole && token) {
+          setUser(JSON.parse(cachedUser));
+          setRole(cachedRole as UserRole);
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        } else {
+          setUser(null);
+          setRole(null);
+          setLoading(false);
+          localStorage.removeItem("token");
+          localStorage.removeItem("cachedUser");
+          localStorage.removeItem("cachedRole");
+        }
+      } else {
+        setUser(null);
+        setRole(null);
+        setLoading(false);
       }
       setRefreshing(false);
       return;
@@ -148,13 +166,15 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
           JSON.stringify({ ...newUser, ...data.user })
         );
         localStorage.setItem("cachedRole", data.role);
+        localStorage.setItem("token", session.access_token);
       }
     } catch (err) {
       // Patch: If offline and cached user exists, do NOT force logout
       if (typeof window !== "undefined" && !navigator.onLine) {
         const cachedUser = localStorage.getItem("cachedUser");
         const cachedRole = localStorage.getItem("cachedRole");
-        if (cachedUser && cachedRole) {
+        const token = localStorage.getItem("token");
+        if (cachedUser && cachedRole && token) {
           setUser(JSON.parse(cachedUser));
           setRole(cachedRole as UserRole);
           setLoading(false);
@@ -187,6 +207,10 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
           session.access_token &&
           (!session.expires_at || session.expires_at * 1000 > Date.now())
         ) {
+          // Always update token in localStorage
+          if (typeof window !== "undefined") {
+            localStorage.setItem("token", session.access_token);
+          }
           refreshSession();
         } else {
           setUser(null);
@@ -194,6 +218,8 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
           setLoading(false);
           if (typeof window !== "undefined") {
             localStorage.removeItem("token");
+            localStorage.removeItem("cachedUser");
+            localStorage.removeItem("cachedRole");
           }
         }
       }

@@ -250,14 +250,13 @@ class OfflineSyncManager {
    */
   private async getAuthToken(): Promise<string | null> {
     try {
-      // Try to get from localStorage first
-      const token = localStorage.getItem("auth_token");
+      // Always use 'token' for consistency
+      const token = localStorage.getItem("token");
       if (token) {
         return token;
       }
-
-      // Try to get from IndexedDB
-      const cachedToken = await dbManager.getCachedData("auth_token");
+      // Try to get from IndexedDB (if you store it there)
+      const cachedToken = await dbManager.getCachedData("token");
       return cachedToken;
     } catch (error) {
       console.warn("[Sync] Could not retrieve auth token:", error);
