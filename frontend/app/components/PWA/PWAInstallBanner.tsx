@@ -17,6 +17,27 @@ const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
   const [showDetails, setShowDetails] = useState(false);
   const [showFallback, setShowFallback] = useState(false);
   // Remove forceShow, use shouldShowBanner logic instead
+  // Listen for service worker CACHE_COMPLETE event to auto-trigger banner
+  useEffect(() => {
+    function handleSWMessage(event: MessageEvent) {
+      if (event.data && event.data.type === "CACHE_COMPLETE") {
+        // Only show if not installed and not dismissed
+        const isAppInstalled =
+          typeof window !== "undefined" &&
+          (window.matchMedia("(display-mode: standalone)").matches ||
+            (window.navigator as any).standalone === true);
+        const dismissed = localStorage.getItem("pwa-install-dismissed") === "true";
+        if (!isAppInstalled && !dismissed) {
+          setShowFallback(false); // ensure fallback is hidden
+          setDeferredPrompt((window as any).deferredInstallPrompt || null);
+        }
+      }
+    }
+    navigator.serviceWorker?.addEventListener("message", handleSWMessage);
+    return () => {
+      navigator.serviceWorker?.removeEventListener("message", handleSWMessage);
+    };
+  }, []);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [swRegistered, setSwRegistered] = useState<boolean>(false);
   const modalRef = React.useRef<HTMLDivElement>(null);
@@ -200,7 +221,8 @@ const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
       <div
         role="region"
         aria-label="PWA install prompt"
-        className={`fixed top-4 left-4 right-4 md:left-auto md:right-4 md:max-w-md bg-gradient-to-r from-gray-900/95 to-black/95 backdrop-blur-xl border border-yellow-400/30 rounded-2xl shadow-2xl z-[9999] ${className}`}
+        className={`fixed top-4 left-4 right-4 md:left-auto md:right-4 md:max-w-md bg-gradient-to-r from-yellow-500/90 to-yellow-700/90 backdrop-blur-xl border-2 border-yellow-400 rounded-2xl shadow-2xl z-[9999] ${className}`}
+        style={{ boxShadow: "0 0 32px 0 rgba(250,204,21,0.25)" }}
       >
         <div className="p-4">
           {/* Debug pill - shows why install may not be available in dev */}
@@ -213,12 +235,12 @@ const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
           {/* Header */}
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-xl flex items-center justify-center shadow-lg">
-                <FaDownload className="text-black text-lg" />
+              <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-xl flex items-center justify-center shadow-lg border-2 border-yellow-300 animate-pulse">
+                <FaDownload className="text-black text-2xl drop-shadow-lg" />
               </div>
               <div>
-                <h3 className="text-white font-bold text-lg">Install App</h3>
-                <p className="text-gray-300 text-sm">Get the full experience</p>
+                <h3 className="text-yellow-100 font-bold text-lg">Install Cardiac Delights</h3>
+                <p className="text-yellow-200 text-sm">Get the full experience, even offline!</p>
               </div>
             </div>
             <button
@@ -236,23 +258,23 @@ const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
           </div>
           {/* Benefits */}
           <div className="mb-4">
-            <p className="text-gray-300 text-sm mb-2">Why install Cardiac Delights?</p>
+            <p className="text-yellow-200 text-sm mb-2 font-semibold">Why install Cardiac Delights?</p>
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center gap-2 text-green-400">
-                <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
-                Works offline
+              <div className="flex items-center gap-2 text-green-500 font-bold">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                <span className="drop-shadow">Works offline</span>
               </div>
-              <div className="flex items-center gap-2 text-blue-400">
-                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
-                Faster loading
+              <div className="flex items-center gap-2 text-blue-400 font-bold">
+                <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></span>
+                <span className="drop-shadow">Faster loading</span>
               </div>
-              <div className="flex items-center gap-2 text-purple-400">
-                <span className="w-1.5 h-1.5 bg-purple-400 rounded-full"></span>
-                Push notifications
+              <div className="flex items-center gap-2 text-purple-400 font-bold">
+                <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span>
+                <span className="drop-shadow">Push notifications</span>
               </div>
-              <div className="flex items-center gap-2 text-yellow-400">
-                <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></span>
-                App shortcuts
+              <div className="flex items-center gap-2 text-yellow-400 font-bold">
+                <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
+                <span className="drop-shadow">App shortcuts</span>
               </div>
             </div>
           </div>

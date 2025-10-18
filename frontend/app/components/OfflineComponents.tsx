@@ -81,23 +81,31 @@ export const OfflineDataBanner: React.FC<{
 
   return (
     <div
-      className={`bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 ${className}`}
+      className={`bg-gradient-to-r from-red-500/90 to-red-700/90 border-2 border-red-600 rounded-xl p-3 mb-4 shadow-lg flex items-center gap-3 ${className}`}
+      style={{ boxShadow: "0 2px 16px 0 rgba(220,38,38,0.15)" }}
     >
-      <div className="flex items-center space-x-2">
-        <MdWarning className="w-4 h-4 text-yellow-600 flex-shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm text-yellow-800">
-            {isFromCache
-              ? `Showing cached ${dataType} data. Some information may be outdated.`
-              : `Currently viewing ${dataType} in offline mode.`}
+      <MdWarning className="w-6 h-6 text-white flex-shrink-0 animate-pulse" />
+      <div className="flex-1">
+        <p className="text-base text-white font-semibold">
+          {isFromCache
+            ? `Offline: Showing cached ${dataType} data. Some information may be outdated.`
+            : `Offline Mode: Viewing ${dataType}.`}
+        </p>
+        {!isOnline && (
+          <p className="text-xs text-white/80 mt-1">
+            Connect to the internet to get the latest updates.
           </p>
-          {!isOnline && (
-            <p className="text-xs text-yellow-700 mt-1">
-              Connect to the internet to get the latest updates.
-            </p>
-          )}
-        </div>
+        )}
       </div>
+      <button
+        className="ml-2 px-3 py-1 bg-white text-red-600 font-bold rounded-lg shadow hover:bg-red-100 transition-all text-xs"
+        style={{ minWidth: 48 }}
+        tabIndex={0}
+        aria-label="Retry Connection"
+        onClick={() => window.location.reload()}
+      >
+        Retry
+      </button>
     </div>
   );
 };
