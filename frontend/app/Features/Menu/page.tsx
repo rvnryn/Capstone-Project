@@ -1,6 +1,7 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { routes } from "@/app/routes/routes";
 import NavigationBar from "@/app/components/navigation/navigation";
@@ -60,6 +61,15 @@ const formatTimestamp = (timestamp: string | undefined): string => {
 
 const Menu: React.FC = () => {
   const { role } = useAuth();
+  // Patch: Prevent redirect to login when offline and cached user exists
+  useEffect(() => {
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      const cachedUser = localStorage.getItem("cachedUser");
+      if (!cachedUser) {
+        window.location.href = "/login";
+      }
+    }
+  }, []);
   const [mounted, setMounted] = useState(false);
   React.useEffect(() => {
     setMounted(true);

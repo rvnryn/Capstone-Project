@@ -54,6 +54,15 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function SurplusInventoryPage() {
   const { user, role } = useAuth();
+  // Patch: Prevent redirect to login when offline and cached user exists
+  useEffect(() => {
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      const cachedUser = localStorage.getItem("cachedUser");
+      if (!cachedUser) {
+        window.location.href = "/login";
+      }
+    }
+  }, []);
   const router = useRouter();
   const queryClient = useQueryClient();
     const [isOnline, setIsOnline] = useState(true);

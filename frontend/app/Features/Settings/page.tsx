@@ -3,6 +3,7 @@
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useAuth } from "@/app/context/AuthContext";
 import { routes } from "@/app/routes/routes";
 import {
@@ -33,6 +34,15 @@ const Settings = () => {
   }, []);
   
   const { role } = useAuth();
+  // Patch: Prevent redirect to login when offline and cached user exists
+  useEffect(() => {
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      const cachedUser = localStorage.getItem("cachedUser");
+      if (!cachedUser) {
+        window.location.href = "/login";
+      }
+    }
+  }, []);
   const router = useRouter();
   const Nav_user = () => router.push(routes.user_management_settings);
   const Nav_notification = () => router.push(routes.notification_settings);

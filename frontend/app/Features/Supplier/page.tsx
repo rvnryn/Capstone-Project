@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useAuth } from "@/app/context/AuthContext";
 import { routes } from "@/app/routes/routes";
 import { FaEdit, FaTrash, FaSearch, FaTruck } from "react-icons/fa";
@@ -28,6 +29,15 @@ type SupplierItem = {
 
 export default function SupplierPage() {
   const { role } = useAuth();
+  // Patch: Prevent redirect to login when offline and cached user exists
+  useEffect(() => {
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      const cachedUser = localStorage.getItem("cachedUser");
+      if (!cachedUser) {
+        window.location.href = "/login";
+      }
+    }
+  }, []);
   const queryClient = useQueryClient();
   const { listSuppliers, deleteSupplier } = useSupplierAPI();
 
