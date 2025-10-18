@@ -27,6 +27,45 @@ const PWAInstallPrompt: React.FC = () => {
     return () => window.removeEventListener("resize", checkStandalone);
   }, []);
 
+    // Offline/cached error handling
+    const [isOffline, setIsOffline] = useState(false);
+    React.useEffect(() => {
+      const updateOnlineStatus = () => setIsOffline(typeof window !== "undefined" && !window.navigator.onLine);
+      updateOnlineStatus();
+      window.addEventListener("online", updateOnlineStatus);
+      window.addEventListener("offline", updateOnlineStatus);
+      return () => {
+        window.removeEventListener("online", updateOnlineStatus);
+        window.removeEventListener("offline", updateOnlineStatus);
+      };
+    }, []);
+
+    // Show offline error if offline and no install prompt
+    if (isOffline && (!showPrompt || !canInstall)) {
+      return (
+        <div className="fixed top-4 left-4 right-4 md:left-auto md:right-4 md:max-w-md bg-gradient-to-r from-gray-900/95 to-black/95 backdrop-blur-xl border border-red-400/30 rounded-2xl shadow-2xl z-[9999] p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-12 h-12 bg-gradient-to-br from-red-400 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
+              <FaTimes className="text-black text-lg" />
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-lg">Offline Mode</h3>
+              <p className="text-gray-300 text-sm">Cannot show install prompt while offline.</p>
+            </div>
+          </div>
+          <div className="text-gray-400 text-sm mb-2">Reconnect to the internet to install Cardiac Delights as an app.</div>
+          <button
+            onClick={dismissPrompt}
+            className="px-4 py-2 border border-gray-600 text-gray-400 rounded-xl hover:border-red-500 hover:text-red-400 transition-colors text-sm"
+            aria-label="Dismiss offline error"
+            title="Dismiss"
+          >
+            <FaTimes size={14} /> Dismiss
+          </button>
+        </div>
+      );
+    }
+
   if (!showPrompt || isInstalled || isStandalone || !canInstall) return null;
 
   const handleInstallClick = async () => {

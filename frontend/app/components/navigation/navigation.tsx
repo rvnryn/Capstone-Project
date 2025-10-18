@@ -200,7 +200,14 @@ const NavigationBar = ({
   const pathname = usePathname();
   const [loggingOut, setLoggingOut] = useState(false);
   const { user, role } = useAuth();
-  console.log("User:", user, "Role:", role);
+  useEffect(() => {
+    console.log("[NavigationBar] useAuth user/role:", { user, role });
+    console.log("[NavigationBar] localStorage:", {
+      cachedUser: typeof window !== "undefined" ? localStorage.getItem("cachedUser") : null,
+      cachedRole: typeof window !== "undefined" ? localStorage.getItem("cachedRole") : null,
+      token: typeof window !== "undefined" ? localStorage.getItem("token") : null,
+    });
+  }, [user, role]);
 
   // Enhanced responsive calculations with more granular breakpoints
   const getSidebarWidth = () => {

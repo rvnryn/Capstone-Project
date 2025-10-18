@@ -60,6 +60,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       const cachedUser = localStorage.getItem("cachedUser");
       const cachedRole = localStorage.getItem("cachedRole");
       const token = localStorage.getItem("token");
+      console.log("[AuthProvider] Initial localStorage:", { cachedUser, cachedRole, token });
       if (cachedUser && cachedRole && token) {
         setUser(JSON.parse(cachedUser));
         setRole(cachedRole as UserRole);
@@ -76,6 +77,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       const cachedUser = localStorage.getItem("cachedUser");
       const cachedRole = localStorage.getItem("cachedRole");
       const token = localStorage.getItem("token");
+      console.log("[AuthProvider] Offline localStorage:", { cachedUser, cachedRole, token });
       if (cachedUser && cachedRole && token) {
         setUser(JSON.parse(cachedUser));
         setRole(cachedRole as UserRole);
@@ -106,6 +108,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         const cachedUser = localStorage.getItem("cachedUser");
         const cachedRole = localStorage.getItem("cachedRole");
         const token = localStorage.getItem("token");
+        console.log("[AuthProvider] Session invalid, localStorage:", { cachedUser, cachedRole, token });
         if (cachedUser && cachedRole && token) {
           setUser(JSON.parse(cachedUser));
           setRole(cachedRole as UserRole);
@@ -148,7 +151,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         },
       });
 
+      console.log("[AuthProvider] /api/auth/session response status:", response.status);
       if (!response.ok) {
+        console.log("[AuthProvider] /api/auth/session response error:", await response.text());
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -168,12 +173,14 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         localStorage.setItem("cachedRole", data.role);
         localStorage.setItem("token", session.access_token);
       }
+      console.log("[AuthProvider] Session restored:", { user: newUser, role: data.role });
     } catch (err) {
       // Patch: If offline and cached user exists, do NOT force logout
       if (typeof window !== "undefined" && !navigator.onLine) {
         const cachedUser = localStorage.getItem("cachedUser");
         const cachedRole = localStorage.getItem("cachedRole");
         const token = localStorage.getItem("token");
+        console.log("[AuthProvider] /api/auth/session error, offline localStorage:", { cachedUser, cachedRole, token });
         if (cachedUser && cachedRole && token) {
           setUser(JSON.parse(cachedUser));
           setRole(cachedRole as UserRole);

@@ -83,7 +83,7 @@ export const EnhancedOfflineStatusBar: React.FC = () => {
           className={`mx-auto max-w-7xl rounded-lg shadow-lg px-4 py-2 flex items-center justify-between ${
             isOnline
               ? pendingCount > 0
-                ? "bg-yellow-500 text-yellow-900"
+                ? " text-yellow-900"
                 : "bg-green-500 text-green-900"
               : "bg-red-500 text-white"
           }`}
@@ -133,7 +133,7 @@ export const EnhancedOfflineStatusBar: React.FC = () => {
             {/* Details Toggle */}
             <button
               onClick={() => setShowDetails(!showDetails)}
-              className="px-3 py-1 rounded bg-white bg-opacity-20 hover:bg-opacity-30 text-sm font-medium transition-colors"
+              className="px-3 py-1 rounded bg-white text-black bg-opacity-20 hover:bg-opacity-30 text-sm font-medium transition-colors"
             >
               {showDetails ? "Hide" : "Details"}
             </button>
