@@ -6,7 +6,7 @@ from app.supabase import get_db
 from pydantic import BaseModel
 from typing import List, Optional
 
-router = APIRouter(tags=["custom-holidays"])
+router = APIRouter(prefix="/custom-holidays", tags=["custom-holidays"])
 
 
 class CustomHolidayCreate(BaseModel):
