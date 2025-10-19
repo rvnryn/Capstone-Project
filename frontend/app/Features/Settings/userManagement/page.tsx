@@ -55,6 +55,7 @@ export default function UserManagement() {
       window.removeEventListener("offline", updateOnlineStatus);
     };
   }, []);
+  // Only fetch users on mount or when offline status changes
   useEffect(() => {
     setLoading(true);
     if (isOffline) {
@@ -72,28 +73,22 @@ export default function UserManagement() {
       setLoading(false);
       return;
     }
-    // Online: fetch from API
-    listUsers()
-      .then((data: User[]) => {
-        if (data && Array.isArray(data) && data.length > 0) {
-          const processedUsers = data.map((user) => ({
-            ...user,
-            last_login: user.last_login ?? "",
-          }));
-          setUsers(processedUsers);
-          // Cache users
-          localStorage.setItem("cached_users", JSON.stringify(processedUsers));
-        } else {
-          setUsers([]);
-        }
-      })
-      .catch((error) => {
+    // Online: fetch from API only on mount or offline status change
+    (async () => {
+      const data = await listUsers();
+      if (data && Array.isArray(data) && data.length > 0) {
+        const processedUsers = data.map((user) => ({
+          ...user,
+          last_login: user.last_login ?? "",
+        }));
+        setUsers(processedUsers);
+        localStorage.setItem("cached_users", JSON.stringify(processedUsers));
+      } else {
         setUsers([]);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [listUsers, isOffline]);
+      }
+      setLoading(false);
+    })();
+  }, [isOffline]);
 
   // Refresh handler for the refresh button
   const handleRefresh = async () => {
