@@ -23,7 +23,7 @@ export type CreateUserPayload = Omit<
 >;
 export type UpdateUserPayload = Partial<CreateUserPayload>;
 
-export function useUserAPI() {
+export function useUsersAPI() {
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const API_BASE = `${API_BASE_URL}/api/users`;
