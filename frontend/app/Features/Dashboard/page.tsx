@@ -726,47 +726,44 @@ export default function Dashboard() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <section
-                      aria-label="Top Selling Items"
-                      className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-5 border border-gray-400"
-                      style={{
-                        minHeight: "220px",
-                      }}
+                    aria-label="Top Selling Items"
+                    className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl 
+                      p-4 sm:p-6 flex flex-col"
                     >
-                      <header className="mb-2 sm:mb-3 lg:mb-4">
-                        {/* reduced margin-bottoms */}
-                        <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-                          {/* reduced mb */}
-                          <div className="p-1.5 sm:p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
-                            <FaChartBar className="text-yellow-400 text-lg sm:text-xl" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h2 className="text-lg sm:text-xl font-bold text-white">
-                              Top Selling Items
-                            </h2>
-                            <p className="text-gray-400 text-xs sm:text-sm">
-                              Based on historical analytics
-                            </p>
-                          </div>
-                          <button
-                            onClick={() =>
-                              (window.location.href =
-                                "/Features/Report/Report_Sales")
-                            }
-                            className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black 
-                      font-semibold text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-lg shadow 
-                      transition-all duration-200 w-full sm:w-auto justify-center"
-                            title="Go to Sales Report"
-                          >
-                            <FaChartBar className="text-sm" />
-                            View Full Report
-                          </button>
-                        </div>
-                        <div className="w-full">
-                          {renderTopItemsCountSelector()}
-                        </div>
-                      </header>
-                      <div className="mt-4">{renderTopSelling(showList)}</div>
-                      {/* reduced mt */}
+                    <header className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-start sm:items-center gap-3 w-full">
+                      <div className="p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
+                        <FaChartBar className="text-yellow-400 text-lg sm:text-xl" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                        Top Selling Items
+                        </h2>
+                        <p className="text-gray-400 text-xs sm:text-sm mt-0.5">
+                        Based on historical analytics
+                        </p>
+                      </div>
+                      </div>
+                      <button
+                      onClick={() =>
+                        (window.location.href = "/Features/Report/Report_Sales")
+                      }
+                      className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black 
+                        font-semibold text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-lg shadow 
+                        transition-all duration-200 w-full sm:w-auto justify-center"
+                      title="Go to Sales Report"
+                      >
+                      <FaChartBar className="text-sm" />
+                      <span className="hidden sm:inline">View Full Report</span>
+                      <span className="inline sm:hidden">Report</span>
+                      </button>
+                    </header>
+                    <div className="w-full sm:w-auto mb-2">
+                      {renderTopItemsCountSelector()}
+                    </div>
+                    <div className="mt-3 sm:mt-4 w-full overflow-x-auto">
+                      <div className="min-w-[220px] sm:min-w-0">{renderTopSelling(showList)}</div>
+                    </div>
                     </section>
 
                     {/* Left: ML Sales Forecast Chart */}
@@ -912,7 +909,7 @@ export default function Dashboard() {
                                       </span>
                                     )}
                                   </div>
-                                   <div className="text-right flex-shrink-0 ml-2">
+                                  <div className="text-right flex-shrink-0 ml-2">
                                     <p className="text-orange-400 text-xs">
                                       {item.spoilage_date
                                         ? new Date(
@@ -1230,7 +1227,9 @@ export default function Dashboard() {
                           </tr>
                         </thead>
                         <tbody>
-                          {(!expired || !Array.isArray(expired.data) || expired.data.length === 0) ? (
+                          {!expired ||
+                          !Array.isArray(expired.data) ||
+                          expired.data.length === 0 ? (
                             <tr>
                               <td
                                 colSpan={6}
@@ -1261,7 +1260,7 @@ export default function Dashboard() {
                               ) => (
                                 <tr
                                   key={
-                                    item.id || 
+                                    item.id ||
                                     `${item.item_name}-${item.batch_date}-${idx}`
                                   }
                                   className="border-b border-red-900/40 hover:bg-red-900/10 transition-colors duration-200"

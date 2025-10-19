@@ -179,12 +179,6 @@ const HolidayCalendar: React.FC<Props> = ({
           <div className="flex items-center gap-1 bg-blue-800/30 px-1.5 py-0.5 xs:px-2 xs:py-1 rounded-lg">
             <span>🇵🇭</span>
             <span className="text-blue-300 font-medium">PH Holiday</span>
-            {phHolidaysLoading && (
-              <span className="text-yellow-400 ml-1">(Loading)</span>
-            )}
-            {phHolidaysError && (
-              <span className="text-red-400 ml-1">(Offline)</span>
-            )}
           </div>
           <div className="flex items-center gap-1 bg-pink-800/30 px-1.5 py-0.5 xs:px-2 xs:py-1 rounded-lg">
             <span>✨</span>
