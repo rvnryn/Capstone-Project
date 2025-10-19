@@ -9,19 +9,14 @@ from postgrest import SyncPostgrestClient
 # Load environment variables
 
 load_dotenv()
-print(f"[DEBUG] SUPABASE_URL loaded: {os.getenv('SUPABASE_URL')}")
-print(f"[DEBUG] SUPABASE_KEY loaded: {os.getenv('SUPABASE_KEY')}")
 
 
 # Initialize Supabase client
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-print(f"[DEBUG] SUPABASE_URL after patch: {SUPABASE_URL}")
 if SUPABASE_URL and not SUPABASE_URL.startswith("http"):
     SUPABASE_URL = "https://" + SUPABASE_URL
-print(f"[DEBUG] SUPABASE_URL final: {SUPABASE_URL}")
 SUPABASE_API_KEY = os.getenv("SUPABASE_KEY")
-print(f"[DEBUG] SUPABASE_API_KEY final: {SUPABASE_API_KEY}")
 
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
@@ -37,20 +32,7 @@ postgrest_client = SyncPostgrestClient(
 )
 postgrest_client.session = httpx.Client(http2=False)
 
-# Patch the underlying PostgREST client to force HTTP/1.1 (fixes WinError 10035 on Windows)
-if hasattr(supabase, "postgrest"):
-    try:
-        # Save the original URL
-        postgrest_url = getattr(supabase.postgrest, 'url', None)
-        supabase.postgrest.session = httpx.Client(http2=False)
-        # If possible, set the url attribute back
-        if postgrest_url is not None:
-            try:
-                supabase.postgrest.url = postgrest_url
-            except Exception as e:
-                print(f"[DEBUG] Could not set postgrest.url: {e}")
-    except Exception as e:
-        print(f"Warning: Could not patch postgrest client for HTTP/1.1: {e}")
+ # ...existing code...
 
 # SQLAlchemy engine/session for direct Postgres access
 POSTGRES_URL = os.getenv("POSTGRES_URL")

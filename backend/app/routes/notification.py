@@ -9,13 +9,7 @@ from app.supabase import supabase, get_db
 import os
 
 # Debug: Print SUPABASE_URL and supabase client internals
-print(f"[DEBUG][notification.py] SUPABASE_URL from env: {os.getenv('SUPABASE_URL')!r}")
-try:
-    print(f"[DEBUG][notification.py] supabase._supabase_url: {getattr(supabase, '_supabase_url', None)!r}")
-    if hasattr(supabase, 'postgrest'):
-        print(f"[DEBUG][notification.py] supabase.postgrest.url: {getattr(supabase.postgrest, 'url', None)!r}")
-except Exception as e:
-    print(f"[DEBUG][notification.py] Error inspecting supabase client: {e}")
+ # ...existing code...
 from app.supabase import postgrest_client
 from app.routes.userActivity import UserActivityLog
 from app.utils.rbac import require_role
