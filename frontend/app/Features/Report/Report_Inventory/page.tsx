@@ -27,12 +27,13 @@ import { TbReportAnalytics } from "react-icons/tb";
 import { FiBarChart, FiPieChart, FiActivity } from "react-icons/fi";
 import { MdTrendingUp, MdTrendingDown, MdAssessment } from "react-icons/md";
 import { MdCheckCircle } from "react-icons/md";
-import { GoogleOAuthProvider } from "@react-oauth/google";
+import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { saveAs } from "file-saver";
 // (Removed duplicate export default and misplaced logic. All logic is inside the main ReportInventory function below.)
 import ExcelJS from "exceljs";
+
 import {
   FaSearch,
   FaGoogle,
@@ -50,9 +51,63 @@ export default function ReportInventory() {
 
   // GoogleSheetIntegration stub (if not imported elsewhere)
   // Accepts onSuccess and exporting props for compatibility
-  const GoogleSheetIntegration = ({ onSuccess, exporting }: { onSuccess?: (resp: any) => void; exporting?: boolean }) => null;
+const GoogleSheetIntegration = ({
+  onSuccess,
+  exporting,
+}: {
+  onSuccess: (tr: any) => void;
+  exporting: boolean;
+}) => {
+  const login = useGoogleLogin({
+    scope:
+      "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive",
+    onSuccess,
+    onError: (err) => {
+      console.error(err);
+      alert(
+        "Google authentication failed. Please ensure you grant all requested permissions."
+      );
+    },
+  });
+
+  return (
+    <button
+      disabled={exporting}
+      onClick={() => login()}
+      className={`w-full flex items-center justify-center gap-2 font-semibold px-6 py-3 rounded-xl transition-all duration-200 ${
+        exporting
+          ? "bg-blue-400/50 cursor-not-allowed text-blue-200 border-2 border-blue-400/50"
+          : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white border-2 border-blue-500/70 hover:border-blue-400/70"
+      }`}
+      type="button"
+    >
+      <FaGoogle />
+      {exporting ? "Exporting..." : "Export to Google Sheets"}
+    </button>
+  );
+};
 
   // ...all state declarations above...
+  // Helper to reload all inventory and spoilage data
+  const reloadAllData = async () => {
+    await load();
+    let start = startDate;
+    let end = endDate;
+    if (!start && !end && period !== "all") {
+      const now = dayjs();
+      if (period === "weekly") {
+        start = now.subtract(7, "day").format("YYYY-MM-DD");
+        end = now.format("YYYY-MM-DD");
+      } else if (period === "monthly") {
+        start = now.startOf("month").format("YYYY-MM-DD");
+        end = now.format("YYYY-MM-DD");
+      } else if (period === "yearly") {
+        start = now.startOf("year").format("YYYY-MM-DD");
+        end = now.format("YYYY-MM-DD");
+      }
+    }
+    await fetchSpoilageSummary(start, end);
+  };
 
 
 
@@ -759,44 +814,99 @@ export default function ReportInventory() {
       day: "numeric",
     });
 
-  const appendToSheet = async (token: string, sheetId: string) => {
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ values: excelValues }),
+  const appendToGoogleSheet = async (
+    accessToken: string,
+    sheetId: string,
+    sheetRange: string,
+    data: any[][],
+    forecastData: any[][]
+  ) => {
+    try {
+      // Combine main data and forecast data with a blank row and header
+      const combined = [...data, [], ["Sales Forecast"], ...forecastData];
+      console.log("[Google Export] Appending data to sheet:", combined);
+      const res = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${sheetRange}:append?valueInputOption=USER_ENTERED`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ values: combined }),
+        }
+      );
+      const result = await res.json();
+      console.log("[Google Export] Append result:", result);
+      if (
+        result &&
+        result.error &&
+        result.error.status === "PERMISSION_DENIED"
+      ) {
+        alert(
+          "Google Sheets export failed: Insufficient permissions. Please log out, re-authenticate, and grant all requested permissions."
+        );
       }
+      setExportSuccess(true);
+    } catch (error) {
+      console.error("Append failed:", error);
+      alert(
+        "Google Sheets export failed. Please check your permissions and try again."
+      );
+    }
+  };
+
+  // Define the default sheet range for Google Sheets export
+  const SHEET_RANGE = "Sheet1!A1";
+
+  // Create a new Google Sheet and export the inventory report data
+  const createGoogleSheet = async (accessToken: string) => {
+    console.log("[Google Export] createGoogleSheet called", accessToken);
+    try {
+      const response = await fetch(
+        "https://sheets.googleapis.com/v4/spreadsheets",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            properties: { title: `Inventory Report - ${formatDate()}` },
+            sheets: [{ properties: { title: "Sheet1" } }],
+          }),
+        }
+      );
+      const sheet = await response.json();
+      console.log("[Google Export] Sheet created:", sheet);
+      const sheetId = sheet.spreadsheetId;
+      // Use excelValues for inventory report export, no forecastTable
+      await appendToGoogleSheet(
+        accessToken,
+        sheetId,
+        SHEET_RANGE,
+        excelValues,
+        []
+      );
+    } catch (error) {
+      console.error("Failed to create sheet:", error);
+    }
+  };
+
+  
+  
+
+  const handleGoogleLoginSuccess = (tokenResponse: any) => {
+    console.log(
+      "[Google Export] handleGoogleLoginSuccess called",
+      tokenResponse
     );
-  };
-
-  const createSheet = async (token: string) => {
-    const res = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        properties: { title: `Inventory Report ${formatDate()}` },
-        sheets: [{ properties: { title: "Sheet1" } }],
-      }),
-    });
-    const json = await res.json();
-    return json.spreadsheetId;
-  };
-
-  const handleGoogle = async (resp: any) => {
     setIsExporting(true);
-    const token = resp.access_token;
-    const sheetId = await createSheet(token);
-    await appendToSheet(token, sheetId);
-    setIsExporting(false);
-    setExportSuccess(true);
     setShowPopup(false);
+    const accessToken = tokenResponse.access_token;
+    createGoogleSheet(accessToken).finally(() => {
+      setIsExporting(false);
+    });
   };
 
 
@@ -929,7 +1039,10 @@ export default function ReportInventory() {
                       <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
                         {/* Export Button */}
                         <button
-                          onClick={() => setShowPopup(true)}
+                          onClick={async () => {
+                            await reloadAllData();
+                            setShowPopup(true);
+                          }}
                           className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-black px-3 py-2 sm:px-4 sm:py-2 md:px-6 md:py-3 rounded-lg sm:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm md:text-base whitespace-nowrap flex-1 sm:flex-none min-h-[44px] touch-manipulation"
                         >
                           <FaDownload className="text-xs sm:text-sm" />
@@ -2246,37 +2359,36 @@ export default function ReportInventory() {
                     </div>
                   </div>
 
-                  <div className="space-y-3 sm:space-y-4 pt-2">
-                    <button
-                      onClick={() => {
+                  <div className="space-y-2 xs:space-y-3 sm:space-y-4 pt-1 xs:pt-2">
+                      <button
+                        onClick={() => {
                         exportExcel();
                         setExportSuccess(true);
                       }}
-                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-semibold px-4 sm:px-6 py-3 rounded-lg sm:rounded-xl transition-all duration-200 hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base min-h-[44px] touch-manipulation"
-                      type="button"
-                    >
-                      <span className="text-base sm:text-lg">📊</span> Export to
-                      Excel (.xlsx)
-                    </button>
+                        className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-semibold px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 rounded-md xs:rounded-lg sm:rounded-xl transition-all duration-200 hover:shadow-lg flex items-center justify-center gap-1.5 xs:gap-2 text-xs xs:text-sm sm:text-base min-h-[40px] xs:min-h-[44px] touch-manipulation"
+                        type="button"
+                      >
+                        <span className="text-sm xs:text-base sm:text-lg">
+                          📊
+                        </span>
+                        <span className="truncate">
+                          Export to Excel (.xlsx)
+                        </span>
+                      </button>
 
-                    <GoogleSheetIntegration
-                      onSuccess={async (resp: any) => {
-                        setIsExporting(true);
-                        await handleGoogle(resp);
-                        setIsExporting(false);
-                        setExportSuccess(true);
-                      }}
-                      exporting={isExporting}
-                    />
+                      <GoogleSheetIntegration
+                        onSuccess={handleGoogleLoginSuccess}
+                        exporting={isExporting}
+                      />
 
-                    <button
-                      onClick={() => setShowPopup(false)}
-                      className="w-full border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold px-4 sm:px-6 py-3 rounded-lg sm:rounded-xl transition-all duration-200 text-sm sm:text-base min-h-[44px] touch-manipulation"
-                      type="button"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                      <button
+                        onClick={() => setShowPopup(false)}
+                        className="w-full border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 rounded-md xs:rounded-lg sm:rounded-xl transition-all duration-200 text-xs xs:text-sm sm:text-base min-h-[40px] xs:min-h-[44px] touch-manipulation"
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                 </div>
               </div>
             )}

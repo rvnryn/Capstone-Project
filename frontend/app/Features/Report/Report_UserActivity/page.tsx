@@ -16,6 +16,7 @@ import {
   FaUserCheck,
   FaUsers,
   FaFilter,
+  FaGoogle,
 } from "react-icons/fa";
 import { MdCheckCircle, MdAssessment } from "react-icons/md";
 import { TbReportAnalytics } from "react-icons/tb";
@@ -32,26 +33,37 @@ interface GoogleSheetIntegrationProps {
 }
 
 const GoogleSheetIntegration = ({
-  onLoginSuccess,
-}: GoogleSheetIntegrationProps) => {
+  onSuccess,
+  exporting,
+}: {
+  onSuccess: (tr: any) => void;
+  exporting: boolean;
+}) => {
   const login = useGoogleLogin({
     scope:
       "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive",
-    onSuccess: (tokenResponse) => {
-      onLoginSuccess(tokenResponse);
-    },
-    onError: (error) => {
-      console.error("Google Login Failed:", error);
+    onSuccess,
+    onError: (err) => {
+      console.error(err);
+      alert(
+        "Google authentication failed. Please ensure you grant all requested permissions."
+      );
     },
   });
 
   return (
     <button
+      disabled={exporting}
       onClick={() => login()}
-      className="w-full bg-blue-700 hover:bg-blue-600 text-white font-semibold px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 rounded-md xs:rounded-lg sm:rounded-xl transition-all duration-200 text-xs xs:text-sm sm:text-base min-h-[40px] xs:min-h-[44px] touch-manipulation"
+      className={`w-full flex items-center justify-center gap-2 font-semibold px-6 py-3 rounded-xl transition-all duration-200 ${
+        exporting
+          ? "bg-blue-400/50 cursor-not-allowed text-blue-200 border-2 border-blue-400/50"
+          : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white border-2 border-blue-500/70 hover:border-blue-400/70"
+      }`}
       type="button"
     >
-      Export to Google Sheets
+      <FaGoogle />
+      {exporting ? "Exporting..." : "Export to Google Sheets"}
     </button>
   );
 };
@@ -1336,20 +1348,28 @@ const Report_UserActivity = () => {
                   </div>
 
                   {/* Export Options */}
-                  <div className="space-y-2 xs:space-y-3">
+                  
+                  <div className="space-y-3 sm:space-y-4 pt-2">
                     <button
-                      onClick={() => handleExportChoice("excel")}
-                      className="w-full bg-green-700 hover:bg-green-600 text-white font-semibold px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 rounded-md xs:rounded-lg sm:rounded-xl transition-all duration-200 text-xs xs:text-sm sm:text-base min-h-[40px] xs:min-h-[44px] touch-manipulation"
+                      onClick={() => {
+                        exportToExcel();
+                        setExportSuccess(true);
+                      }}
+                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-semibold px-4 sm:px-6 py-3 rounded-lg sm:rounded-xl transition-all duration-200 hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base min-h-[44px] touch-manipulation"
                       type="button"
                     >
-                      Export to Excel
+                      <span className="text-base sm:text-lg">📊</span> Export to
+                      Excel (.xlsx)
                     </button>
+
                     <GoogleSheetIntegration
-                      onLoginSuccess={handleGoogleLoginSuccess}
-                    />
+                        onSuccess={handleGoogleLoginSuccess}
+                        exporting={isExporting}
+                      />
+
                     <button
                       onClick={() => setShowPopup(false)}
-                      className="w-full border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 rounded-md xs:rounded-lg sm:rounded-xl transition-all duration-200 text-xs xs:text-sm sm:text-base min-h-[40px] xs:min-h-[44px] touch-manipulation"
+                      className="w-full border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold px-4 sm:px-6 py-3 rounded-lg sm:rounded-xl transition-all duration-200 text-sm sm:text-base min-h-[44px] touch-manipulation"
                       type="button"
                     >
                       Cancel
