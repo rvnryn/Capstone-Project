@@ -38,23 +38,31 @@ class Notification(BaseModel):
 
 
 # --- Notification Settings Endpoints ---
+
 @limiter.limit("10/minute")
 @router.get("/notification-settings")
-def get_notification_settings(request: Request, user_id: int):
+async def get_notification_settings(request: Request, user_id: int, db=Depends(get_db)):
     try:
-        resp = (
-            postgrest_client.table("notification_settings")
-            .select("*")
-            .eq("user_id", user_id)
-            .single()
-            .execute()
+        from app.models.notification_settings import NotificationSettings as NotificationSettingsModel
+        from sqlalchemy import text
+        print(f"[DEBUG /notification-settings GET] user_id: {user_id}")
+        result = await db.execute(
+            text("SELECT * FROM notification_settings WHERE user_id = :user_id"), {"user_id": user_id}
         )
-        if resp.data:
-            return resp.data
+        row = result.fetchone()
+        print(f"[DEBUG /notification-settings GET] fetched row: {row}")
+        if row:
+            # Convert SQLAlchemy row to dict
+            return dict(row._mapping) if hasattr(row, "_mapping") else dict(row)
         # Return defaults if not set
+        print(f"[DEBUG /notification-settings GET] returning defaults for user_id: {user_id}")
         return NotificationSettings(user_id=user_id).dict()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        print("[ERROR /notification-settings GET]", str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Failed to fetch notification settings.")
+
 
 
 @limiter.limit("10/minute")
@@ -66,16 +74,40 @@ async def update_notification_settings(
     db=Depends(get_db),
 ):
     try:
-        # Upsert (insert or update)
-        result = (
-            postgrest_client.table("notification_settings")
-            .upsert(settings.dict(), on_conflict=["user_id"])
-            .execute()
+        from app.models.notification_settings import NotificationSettings as NotificationSettingsModel
+        # Try to fetch existing settings
+        from sqlalchemy import text
+        result = await db.execute(
+            text("SELECT * FROM notification_settings WHERE user_id = :user_id"), {"user_id": settings.user_id}
         )
-        if hasattr(result, "error") and result.error:
-            print("Notification settings upsert error:", result.error)
-            raise HTTPException(status_code=500, detail=str(result.error))
-
+        row = result.fetchone()
+        if row:
+            # Update existing
+            await db.execute(
+                text("UPDATE notification_settings SET low_stock_enabled = :low_stock_enabled, low_stock_method = :low_stock_method, expiration_enabled = :expiration_enabled, expiration_days = :expiration_days, expiration_method = :expiration_method WHERE user_id = :user_id"),
+                {
+                    "user_id": settings.user_id,
+                    "low_stock_enabled": settings.low_stock_enabled,
+                    "low_stock_method": json.dumps(settings.low_stock_method),
+                    "expiration_enabled": settings.expiration_enabled,
+                    "expiration_days": settings.expiration_days,
+                    "expiration_method": json.dumps(settings.expiration_method),
+                }
+            )
+        else:
+            # Insert new
+            await db.execute(
+                text("INSERT INTO notification_settings (user_id, low_stock_enabled, low_stock_method, expiration_enabled, expiration_days, expiration_method) VALUES (:user_id, :low_stock_enabled, :low_stock_method, :expiration_enabled, :expiration_days, :expiration_method)"),
+                {
+                    "user_id": settings.user_id,
+                    "low_stock_enabled": settings.low_stock_enabled,
+                    "low_stock_method": json.dumps(settings.low_stock_method),
+                    "expiration_enabled": settings.expiration_enabled,
+                    "expiration_days": settings.expiration_days,
+                    "expiration_method": json.dumps(settings.expiration_method),
+                }
+            )
+        await db.commit()
         try:
             user_row = getattr(user, "user_row", user)
             new_activity = UserActivityLog(
@@ -96,8 +128,10 @@ async def update_notification_settings(
 
         return {"status": "success"}
     except Exception as e:
-        print("Notification settings upsert exception:", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        print("[ERROR /notification-settings POST]", str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Failed to update notification settings.")
 
 
 def create_notification(user_id, type, message, details=None):

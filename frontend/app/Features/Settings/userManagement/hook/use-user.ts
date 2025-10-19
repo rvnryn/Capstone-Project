@@ -1,5 +1,5 @@
-import { useOfflineQueue } from "@/app/hooks/usePWA";
 import { useCallback } from "react";
+import { useOfflineAPI, useOffline } from "@/app/context/OfflineContext";
 import { toast } from "react-toastify";
 import { getToken } from "@/app/lib/auth";
 
@@ -23,127 +23,35 @@ export type CreateUserPayload = Omit<
 >;
 export type UpdateUserPayload = Partial<CreateUserPayload>;
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_BASE = `${API_BASE_URL}/api/users`;
+export function useUserAPI() {
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_BASE = `${API_BASE_URL}/api/users`;
 
-export function useUsersAPI() {
-  // Get offline queue functions
-  const { addOfflineAction, isOnline } = useOfflineQueue();
-
-  // Helper function to handle offline write operations
-  const handleOfflineWriteOperation = useCallback(
-    async (
-      operation: () => Promise<any>,
-      offlineAction: {
-        action: string;
-        endpoint: string;
-        method: string;
-        payload: any;
-      }
-    ) => {
-      if (isOnline) {
-        // Online: Execute the operation immediately
-        return await operation();
-      } else {
-        // Offline: Queue the action and show user feedback
-        addOfflineAction(offlineAction.action, {
-          endpoint: offlineAction.endpoint,
-          method: offlineAction.method,
-          data: offlineAction.payload,
-        });
-
-        // Store the action in localStorage for immediate UI feedback
-        const tempId = Date.now();
-        const localKey = `offline_${offlineAction.action}_${tempId}`;
-
-        if (offlineAction.method === "POST") {
-          // For create operations, store with temporary ID
-          const newUser = {
-            ...offlineAction.payload,
-            user_id: tempId,
-            status: "pending_sync",
-            created_at: new Date().toISOString(),
-          };
-          localStorage.setItem(localKey, JSON.stringify(newUser));
-          toast.success(`User created offline! Will sync when online.`);
-          return newUser;
-        } else if (offlineAction.method === "PUT") {
-          // For update operations, update cached data
-          const existingUsers = JSON.parse(
-            localStorage.getItem("cached_users") || "[]"
-          );
-          const updatedUsers = existingUsers.map((user: User) =>
-            user.user_id === offlineAction.payload.user_id
-              ? { ...user, ...offlineAction.payload, status: "pending_sync" }
-              : user
-          );
-          localStorage.setItem("cached_users", JSON.stringify(updatedUsers));
-          toast.success(`User updated offline! Will sync when online.`);
-          return { ...offlineAction.payload, status: "pending_sync" };
-        } else if (offlineAction.method === "DELETE") {
-          // For delete operations, mark as deleted locally
-          const existingUsers = JSON.parse(
-            localStorage.getItem("cached_users") || "[]"
-          );
-          const updatedUsers = existingUsers.map((user: User) =>
-            user.user_id === offlineAction.payload.user_id
-              ? { ...user, status: "pending_delete" }
-              : user
-          );
-          localStorage.setItem("cached_users", JSON.stringify(updatedUsers));
-          toast.success(`User marked for deletion! Will sync when online.`);
-          return { success: true, offline: true };
-        }
-
-        toast.success(`Action queued for sync when online!`);
-        return { success: true, offline: true, queued: true };
-      }
-    },
-    [isOnline, addOfflineAction]
-  );
+  const { offlineReadyFetch } = useOfflineAPI();
+  const { queueOfflineAction } = useOffline();
 
   const listUsers = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      const response = await offlineReadyFetch(
+        `${API_BASE}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+          },
         },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch users: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Cache successful response
-      localStorage.setItem("cached_users", JSON.stringify(data));
-
-      return data;
-    } catch (error: any) {
-      console.log(
-        "Failed to fetch users - trying cached data or sample data:",
-        error
+        "user-list",
+        24
       );
-
-      // Try to load from cache first
-      const cached = localStorage.getItem("cached_users");
-      if (cached) {
-        try {
-          const cachedData = JSON.parse(cached);
-          console.log("Using cached users data");
-          return cachedData;
-        } catch (cacheError) {
-          console.error("Failed to parse cached users:", cacheError);
-        }
-      }
-
+      if (!response.ok)
+        throw new Error(`Failed to fetch users: ${response.status}`);
+      return await response.json();
+    } catch (error: any) {
+      console.log("Failed to fetch users - using sample data:", error);
       // Return sample data if no cache available (for testing offline functionality)
-      console.log("No cached users available, using sample data for testing");
-
-      const sampleUsers = [
+      return [
         {
           user_id: 1,
           auth_id: "sample-auth-1",
@@ -181,148 +89,143 @@ export function useUsersAPI() {
           updated_at: "2024-10-11T08:00:00Z",
         },
       ];
-
-      return sampleUsers;
     }
-  }, []);
+  }, [API_BASE, offlineReadyFetch, getToken]);
 
-  const getUser = useCallback(async (id: number | string) => {
-    try {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: "GET",
+  const getUser = useCallback(
+    async (id: number | string) => {
+      try {
+        const response = await offlineReadyFetch(
+          `${API_BASE}/${id}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+            },
+          },
+          `user-${id}`,
+          24
+        );
+        if (!response.ok) throw new Error(`Failed to fetch user ${id}`);
+        return await response.json();
+      } catch (error: any) {
+        console.error(`Failed to fetch user ${id}:`, error);
+        throw error;
+      }
+    },
+    [API_BASE, offlineReadyFetch, getToken]
+  );
+  const createUser = async (data: CreateUserPayload) => {
+    if (navigator.onLine) {
+      const response = await fetch(`${API_BASE}`, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
         },
+        body: JSON.stringify(data),
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch user ${id}`);
-      }
-
+      if (!response.ok) throw new Error("Failed to create user");
       return response.json();
-    } catch (error: any) {
-      console.error(`Failed to fetch user ${id}:`, error);
-      throw error;
+    } else {
+      queueOfflineAction({
+        type: "create-user",
+        endpoint: `${API_BASE}`,
+        method: "POST",
+        payload: data,
+      });
+      toast.success(`User created offline! Will sync when online.`);
+      return { ...data, status: "pending_sync" };
     }
-  }, []);
-  const createUser = async (data: CreateUserPayload) => {
-    return handleOfflineWriteOperation(
-      async () => {
-        const response = await fetch(`${API_BASE}`, {
+  };
+
+  const updateUser = useCallback(
+    async (id: number | string, user: UpdateUserPayload) => {
+      if (navigator.onLine) {
+        const response = await fetch(`${API_BASE}/${id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+          },
+          body: JSON.stringify(user),
+        });
+        if (!response.ok) throw new Error("Failed to update user");
+        return response.json();
+      } else {
+        queueOfflineAction({
+          type: "update-user",
+          endpoint: `${API_BASE}/${id}`,
+          method: "PUT",
+          payload: user,
+        });
+        toast.success(`User updated offline! Will sync when online.`);
+        return { ...user, status: "pending_sync" };
+      }
+    },
+    [API_BASE, queueOfflineAction, getToken]
+  );
+
+  const deleteUser = useCallback(
+    async (id: number | string) => {
+      if (navigator.onLine) {
+        const response = await fetch(`${API_BASE}/${id}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+          },
+        });
+        if (!response.ok) throw new Error("Failed to delete user");
+        return response.json();
+      } else {
+        queueOfflineAction({
+          type: "delete-user",
+          endpoint: `${API_BASE}/${id}`,
+          method: "DELETE",
+          payload: { id },
+        });
+        toast.success(`User marked for deletion! Will sync when online.`);
+        return { success: true, offline: true };
+      }
+    },
+    [API_BASE, queueOfflineAction, getToken]
+  );
+
+  // Change another user's password (owner/admin only) using auth_id, with admin password confirmation
+  const changeUserPassword = useCallback(
+    async (auth_id: string, new_password: string, admin_password: string) => {
+      if (navigator.onLine) {
+        const response = await fetch("/api/admin/change-password", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
           },
-          body: JSON.stringify(data),
+          body: JSON.stringify({ auth_id, new_password, admin_password }),
         });
-
         if (!response.ok) {
-          throw new Error("Failed to create user");
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.detail ||
+              errorData.error ||
+              "Failed to change user password"
+          );
         }
-
         return response.json();
-      },
-      {
-        action: "create-user",
-        endpoint: `${API_BASE}`,
-        method: "POST",
-        payload: data,
-      }
-    );
-  };
-
-  const updateUser = useCallback(
-    async (id: number | string, user: UpdateUserPayload) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const response = await fetch(`${API_BASE}/${id}`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-            },
-            body: JSON.stringify(user),
-          });
-
-          if (!response.ok) {
-            throw new Error("Failed to update user");
-          }
-
-          return response.json();
-        },
-        {
-          action: "update-user",
-          endpoint: `${API_BASE}/${id}`,
-          method: "PUT",
-          payload: user,
-        }
-      );
-    },
-    [handleOfflineWriteOperation]
-  );
-
-  const deleteUser = useCallback(
-    async (id: number | string) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const response = await fetch(`${API_BASE}/${id}`, {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
-              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error("Failed to delete user");
-          }
-
-          return response.json();
-        },
-        {
-          action: "delete-user",
-          endpoint: `${API_BASE}/${id}`,
-          method: "DELETE",
-          payload: { id },
-        }
-      );
-    },
-    [handleOfflineWriteOperation]
-  );
-
-
-  // Change another user's password (owner/admin only) using auth_id, with admin password confirmation
-  const changeUserPassword = useCallback(
-    async (auth_id: string, new_password: string, admin_password: string) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const response = await fetch("/api/admin/change-password", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-            },
-            body: JSON.stringify({ auth_id, new_password, admin_password }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.detail || errorData.error || "Failed to change user password");
-          }
-
-          return response.json();
-        },
-        {
-          action: "change-user-password",
+      } else {
+        queueOfflineAction({
+          type: "change-user-password",
           endpoint: "/api/admin/change-password",
           method: "POST",
           payload: { auth_id, new_password, admin_password },
-        }
-      );
+        });
+        toast.success(`Password change queued offline! Will sync when online.`);
+        return { success: true, offline: true, queued: true };
+      }
     },
-    [handleOfflineWriteOperation]
+    [queueOfflineAction, getToken]
   );
 
   return {

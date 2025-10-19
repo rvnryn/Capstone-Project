@@ -1,5 +1,5 @@
-import { useOfflineQueue } from "@/app/hooks/usePWA";
 import { useCallback } from "react";
+import { useOfflineAPI, useOffline } from "@/app/context/OfflineContext";
 import { toast } from "react-toastify";
 
 export interface MenuItem {
@@ -27,185 +27,154 @@ export interface MenuIngredient {
 
 export function useMenuAPI() {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  const { addOfflineAction, getOfflineActions } = useOfflineQueue();
-  const isOnline = typeof window !== "undefined" ? navigator.onLine : true;
-
-  // Helper for online/offline write operations
-  const handleOfflineWriteOperation = useCallback(
-    async (
-      onlineOperation: () => Promise<any>,
-      offlineAction: {
-        action: string;
-        endpoint: string;
-        method: string;
-        payload: any;
-      }
-    ) => {
-      if (isOnline) {
-        try {
-          return await onlineOperation();
-        } catch (error) {
-          addOfflineAction(offlineAction.action, {
-            endpoint: offlineAction.endpoint,
-            method: offlineAction.method,
-            payload: offlineAction.payload,
-          });
-          toast.info("Request queued for when connection is restored");
-          throw error;
-        }
-      } else {
-        addOfflineAction(offlineAction.action, {
-          endpoint: offlineAction.endpoint,
-          method: offlineAction.method,
-          payload: offlineAction.payload,
-        });
-        toast.info("Action saved offline - will sync when online");
-        return { message: "Action queued for sync when online" };
-      }
-    },
-    [isOnline, addOfflineAction]
-  );
+  const { offlineReadyFetch } = useOfflineAPI();
+  const { queueOfflineAction, getOfflineActions } = useOffline();
 
   const getToken = useCallback(() => {
-    return typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("token");
+    }
+    return null;
   }, []);
 
   // Fetch all menu items
   const fetchMenu = useCallback(async (): Promise<MenuItem[]> => {
     try {
-      console.log("[fetchMenu] Called. API_BASE_URL:", API_BASE_URL);
-      const url = `${API_BASE_URL}/api/menu`;
-      console.log("[fetchMenu] Fetching:", url);
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+      const response = await offlineReadyFetch(
+        `${API_BASE_URL}/api/menu`,
+        { method: "GET", headers: { "Content-Type": "application/json" } },
+        "menu-list",
+        24
+      );
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      console.log("[fetchMenu] Response:", data);
-      return data;
+      return await response.json();
     } catch (error: any) {
-      // Silently handle network errors (offline mode)
       console.warn("[fetchMenu] Failed to fetch menu (offline or network error)", error);
       return [];
     }
-  }, [API_BASE_URL]);
+  }, [API_BASE_URL, offlineReadyFetch]);
 
   // Add menu with image and ingredients
   const addMenuWithImageAndIngredients = useCallback(
     async (form: FormData) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const token = getToken();
-          const headers: Record<string, string> = {};
-          if (token) headers["Authorization"] = `Bearer ${token}`;
-          const response = await fetch(
-            `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
-            { method: "POST", headers, body: form }
-          );
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          return await response.json();
-        },
-        {
-          action: "add-menu-with-image",
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (navigator.onLine) {
+        const response = await fetch(
+          `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
+          { method: "POST", headers, body: form }
+        );
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } else {
+        queueOfflineAction({
+          type: "add-menu-with-image",
           endpoint: `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
           method: "POST",
           payload: form,
-        }
-      );
+        });
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
+      }
     },
-    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+    [API_BASE_URL, getToken, queueOfflineAction]
   );
 
   // Update menu (JSON, no image)
   const updateMenu = useCallback(
     async (menu_id: number, data: Partial<MenuItem> & { ingredients?: MenuIngredient[] }) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const token = getToken();
-          const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-            body: JSON.stringify(data),
-          });
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          return await response.json();
-        },
-        {
-          action: "update-menu-item",
+      const token = getToken();
+      if (navigator.onLine) {
+        const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+          body: JSON.stringify(data),
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } else {
+        queueOfflineAction({
+          type: "update-menu-item",
           endpoint: `${API_BASE_URL}/api/menu/${menu_id}`,
           method: "PATCH",
           payload: data,
-        }
-      );
+        });
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
+      }
     },
-    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+    [API_BASE_URL, getToken, queueOfflineAction]
   );
 
   // Update menu with image and ingredients
   const updateMenuWithImageAndIngredients = useCallback(
     async (menu_id: number, form: FormData) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const token = getToken();
-          const headers: Record<string, string> = {};
-          if (token) headers["Authorization"] = `Bearer ${token}`;
-          const response = await fetch(
-            `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
-            { method: "PATCH", headers, body: form }
-          );
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          return await response.json();
-        },
-        {
-          action: "update-menu-with-image",
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (navigator.onLine) {
+        const response = await fetch(
+          `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
+          { method: "PATCH", headers, body: form }
+        );
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } else {
+        queueOfflineAction({
+          type: "update-menu-with-image",
           endpoint: `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
           method: "PATCH",
           payload: form,
-        }
-      );
+        });
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
+      }
     },
-    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+    [API_BASE_URL, getToken, queueOfflineAction]
   );
 
   // Delete menu
   const deleteMenu = useCallback(
     async (menu_id: number) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const token = getToken();
-          const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-          });
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          return await response.json();
-        },
-        {
-          action: "delete-menu-item",
+      const token = getToken();
+      if (navigator.onLine) {
+        const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } else {
+        queueOfflineAction({
+          type: "delete-menu-item",
           endpoint: `${API_BASE_URL}/api/menu/${menu_id}`,
           method: "DELETE",
           payload: { menu_id },
-        }
-      );
+        });
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
+      }
     },
-    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+    [API_BASE_URL, getToken, queueOfflineAction]
   );
 
   // Fetch menu by ID
   const fetchMenuById = useCallback(
     async (menu_id: number) => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        });
+        const response = await offlineReadyFetch(
+          `${API_BASE_URL}/api/menu/${menu_id}`,
+          { method: "GET", headers: { "Content-Type": "application/json" } },
+          `menu-item-${menu_id}`,
+          24
+        );
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } catch (error: any) {
@@ -213,67 +182,68 @@ export function useMenuAPI() {
         throw error;
       }
     },
-    [API_BASE_URL]
-  );
+    [API_BASE_URL, offlineReadyFetch]);
 
   // Delete ingredient from menu
   const deleteIngredientFromMenu = useCallback(
     async (menu_id: number, ingredient_id: string) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const token = getToken();
-          const response = await fetch(
-            `${API_BASE_URL}/api/menu/${menu_id}/ingredient/${ingredient_id}`,
-            {
-              method: "DELETE",
-              headers: {
-                "Content-Type": "application/json",
-                ...(token && { Authorization: `Bearer ${token}` }),
-              },
-            }
-          );
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          return await response.json();
-        },
-        {
-          action: "delete-menu-ingredient",
+      const token = getToken();
+      if (navigator.onLine) {
+        const response = await fetch(
+          `${API_BASE_URL}/api/menu/${menu_id}/ingredient/${ingredient_id}`,
+          {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          }
+        );
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } else {
+        queueOfflineAction({
+          type: "delete-menu-ingredient",
           endpoint: `${API_BASE_URL}/api/menu/${menu_id}/ingredient/${ingredient_id}`,
           method: "DELETE",
           payload: { menu_id, ingredient_id },
-        }
-      );
+        });
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
+      }
     },
-    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+    [API_BASE_URL, getToken, queueOfflineAction]
   );
 
   // Recalculate stock status
   const recalculateStockStatus = useCallback(
     async () => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const token = getToken();
-          const response = await fetch(
-            `${API_BASE_URL}/api/menu/recalc`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                ...(token && { Authorization: `Bearer ${token}` }),
-              },
-            }
-          );
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          return await response.json();
-        },
-        {
-          action: "recalculate-menu-stock",
+      const token = getToken();
+      if (navigator.onLine) {
+        const response = await fetch(
+          `${API_BASE_URL}/api/menu/recalc`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          }
+        );
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } else {
+        queueOfflineAction({
+          type: "recalculate-menu-stock",
           endpoint: `${API_BASE_URL}/api/menu/recalc`,
           method: "POST",
           payload: {},
-        }
-      );
+        });
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
+      }
     },
-    [API_BASE_URL, getToken, handleOfflineWriteOperation]
+    [API_BASE_URL, getToken, queueOfflineAction]
   );
 
   return {

@@ -1,7 +1,39 @@
 "use client";
-import { useOfflineQueue } from "@/app/hooks/usePWA";
 import { useCallback } from "react";
+import { useOfflineAPI, useOffline } from "@/app/context/OfflineContext";
 import { toast } from "react-toastify";
+
+// Utility to handle offline write operations
+function handleOfflineWriteOperation<T>(
+  onlineOperation: () => Promise<T>,
+  offlineAction: {
+    action: string;
+    endpoint: string;
+    method: string;
+    payload: any;
+  }
+): Promise<T | { message: string }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  if (navigator.onLine) {
+    return onlineOperation();
+  } else {
+    // Use queueOfflineAction from context if available
+    if (typeof window !== "undefined") {
+      const offlineContext = (window as any).offlineContext;
+      if (offlineContext && offlineContext.queueOfflineAction) {
+        offlineContext.queueOfflineAction({
+          type: offlineAction.action,
+          endpoint: offlineAction.endpoint,
+          method: offlineAction.method,
+          payload: offlineAction.payload,
+        });
+      }
+    }
+    toast.info("Action saved offline - will sync when online");
+    return Promise.resolve({ message: "Action queued for sync when online" });
+  }
+}
+
 
 export interface InventoryItem {
   item_id: string | number;
@@ -47,103 +79,59 @@ export interface SpoilageItem {
 export type UpdateInventoryPayload = Partial<AddInventoryPayload>;
 
 export function useInventoryAPI() {
-  const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  const { addOfflineAction, getOfflineActions } = useOfflineQueue();
-  const isOnline = typeof window !== "undefined" ? navigator.onLine : true;
-
-  // Helper function for online/offline write operations
-  const handleOfflineWriteOperation = useCallback(
-    async (
-      onlineOperation: () => Promise<any>,
-      offlineAction: {
-        action: string;
-        endpoint: string;
-        method: string;
-        payload: any;
-      }
-    ) => {
-      if (isOnline) {
-        try {
-          return await onlineOperation();
-        } catch (error) {
-          addOfflineAction(offlineAction.action, {
-            endpoint: offlineAction.endpoint,
-            method: offlineAction.method,
-            payload: offlineAction.payload,
-          });
-          toast.info("Request queued for when connection is restored");
-          throw error;
-        }
-      } else {
-        addOfflineAction(offlineAction.action, {
-          endpoint: offlineAction.endpoint,
-          method: offlineAction.method,
-          payload: offlineAction.payload,
-        });
-        toast.info("Action saved offline - will sync when online");
-        return { message: "Action queued for sync when online" };
-      }
-    },
-    [isOnline, addOfflineAction]
-  );
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const { offlineReadyFetch } = useOfflineAPI();
+  const { queueOfflineAction, getOfflineActions } = useOffline();
   // INVENTORY
   const getItem = useCallback(async (id: string) => {
     try {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }),
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const response = await offlineReadyFetch(
+        `${API_BASE_URL}/api/inventory/${id}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
         },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
+        `inventory-item-${id}`,
+        24
+      );
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       return await response.json();
     } catch (error: any) {
       console.error(`Failed to fetch inventory item ${id}:`, error);
       throw error;
     }
-  }, []);
+  }, [API_BASE_URL, offlineReadyFetch]);
 
   const addItem = useCallback(
     async (item: AddInventoryPayload) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const token =
-            typeof window !== "undefined"
-              ? localStorage.getItem("token")
-              : null;
-          const response = await fetch(`${API_BASE_URL}/api/inventory`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-            body: JSON.stringify(item),
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          return await response.json();
-        },
-        {
-          action: "add-inventory-item",
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      if (navigator.onLine) {
+        const response = await fetch(`${API_BASE_URL}/api/inventory`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+          body: JSON.stringify(item),
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } else {
+        queueOfflineAction({
+          type: "add-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory`,
           method: "POST",
           payload: item,
-        }
-      );
+        });
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
+      }
     },
-    [handleOfflineWriteOperation]
-  );
+    [API_BASE_URL, queueOfflineAction]);
 
   const updateItem = useCallback(
     async (id: string | number, item: UpdateInventoryPayload) => {
@@ -154,94 +142,79 @@ export function useInventoryAPI() {
             ? item.expiration_date
             : null,
       };
-
-      return handleOfflineWriteOperation(
-        async () => {
-          const token =
-            typeof window !== "undefined"
-              ? localStorage.getItem("token")
-              : null;
-          const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-            body: JSON.stringify(cleanedItem),
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          return await response.json();
-        },
-        {
-          action: "update-inventory-item",
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      if (navigator.onLine) {
+        const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+          body: JSON.stringify(cleanedItem),
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } else {
+        queueOfflineAction({
+          type: "update-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory/${id}`,
           method: "PUT",
           payload: cleanedItem,
-        }
-      );
+        });
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
+      }
     },
-    [handleOfflineWriteOperation]
-  );
+    [API_BASE_URL, queueOfflineAction]);
 
   const deleteItem = useCallback(
     async (id: string | number) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const token =
-            typeof window !== "undefined"
-              ? localStorage.getItem("token")
-              : null;
-          const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          return await response.json();
-        },
-        {
-          action: "delete-inventory-item",
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      if (navigator.onLine) {
+        const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } else {
+        queueOfflineAction({
+          type: "delete-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory/${id}`,
           method: "DELETE",
           payload: { id },
-        }
-      );
+        });
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
+      }
     },
-    [handleOfflineWriteOperation]
-  );
+    [API_BASE_URL, queueOfflineAction]);
 
   const listItems = useCallback(async () => {
     try {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(`${API_BASE_URL}/api/inventory`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }),
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const response = await offlineReadyFetch(
+        `${API_BASE_URL}/api/inventory`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
         },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
+        "inventory-list",
+        24
+      );
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       return await response.json();
     } catch (error: any) {
       console.error("Failed to fetch all inventory items:", error);
       throw error;
     }
-  }, []);
+  }, [API_BASE_URL, offlineReadyFetch]);
 
   // INVENTORY TODAY
   const getTodayItem = useCallback(async (id: string) => {
@@ -272,37 +245,30 @@ export function useInventoryAPI() {
 
   const addTodayItem = useCallback(
     async (item: AddInventoryPayload) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const token =
-            typeof window !== "undefined"
-              ? localStorage.getItem("token")
-              : null;
-          const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-            body: JSON.stringify(item),
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          return await response.json();
-        },
-        {
-          action: "add-today-inventory-item",
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      if (navigator.onLine) {
+        const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+          body: JSON.stringify(item),
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } else {
+        queueOfflineAction({
+          type: "add-today-inventory-item",
           endpoint: `${API_BASE_URL}/api/inventory-today`,
           method: "POST",
           payload: item,
-        }
-      );
+        });
+        toast.info("Action saved offline - will sync when online");
+        return { message: "Action queued for sync when online" };
+      }
     },
-    [handleOfflineWriteOperation]
-  );
+    [API_BASE_URL, queueOfflineAction]);
 
   const updateTodayItem = useCallback(
     async (id: string | number, item: UpdateInventoryPayload) => {

@@ -714,11 +714,12 @@ export default function InventorySettings() {
           </div>
         </main>
         {saveMessage && (
-          <div
-            className="mt-8 text-green-400 text-center font-semibold animate-fade-in"
-            role="status"
-          >
-            {saveMessage}
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+            <div className="flex items-center gap-2 xs:gap-3">
+              <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
+                {saveMessage}
+              </span>
+            </div>
           </div>
         )}
 

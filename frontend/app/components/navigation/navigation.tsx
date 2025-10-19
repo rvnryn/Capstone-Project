@@ -130,6 +130,8 @@ interface NavigationBarProps {
   showHistoryModal?: boolean;
   onCloseAnyModal?: () => void;
   showAdminPasswordModal?: boolean;
+  localRestoreModalOpen?: boolean;
+  modalOpen?: boolean;
 }
 
 const NavigationBar = ({
@@ -153,7 +155,9 @@ const NavigationBar = ({
   onCloseAnyModal,
   backupResultMsg,
   showHistoryModal,
-  showAdminPasswordModal
+  showAdminPasswordModal,
+  localRestoreModalOpen,
+  modalOpen
 }: NavigationBarProps) => {
   // Enhanced navigation state using the improved hook
   const {
@@ -649,7 +653,9 @@ const NavigationBar = ({
     showEditModal ||
     backupResultMsg ||
     showHistoryModal ||
-    showAdminPasswordModal
+    showAdminPasswordModal ||
+    localRestoreModalOpen ||
+    modalOpen
   );
 
   const handleBurgerClick = anyModalOpen

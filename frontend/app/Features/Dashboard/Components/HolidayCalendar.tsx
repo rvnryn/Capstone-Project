@@ -193,7 +193,7 @@ const HolidayCalendar: React.FC<Props> = ({
         </div>
       </header>
 
-      <div className="flex-1 w-full responsive-calendar-content">
+      <div className="flex-1 w-full responsive-calendar-content text-white">
         <FullCalendar
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"

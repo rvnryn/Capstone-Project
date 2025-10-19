@@ -53,7 +53,7 @@ const Settings = () => {
         shadow: "hover:shadow-yellow-400/30",
       },
       badge: "Accounts",
-      allowedRoles: ["Owner", "General Manager"],
+      allowedRoles: ["Owner"],
     },
     {
       title: "Notification Settings",
@@ -68,7 +68,7 @@ const Settings = () => {
         shadow: "hover:shadow-blue-400/30",
       },
       badge: "Alerts",
-      allowedRoles: ["Owner", "General Manager", "Store Manager", "Assistant Store Manager"],
+      allowedRoles: ["Owner", "General Manager", "Store Manager"],
     },
     {
       title: "Inventory Settings",
@@ -83,7 +83,7 @@ const Settings = () => {
         shadow: "hover:shadow-green-400/30",
       },
       badge: "Stock",
-      allowedRoles: ["Owner", "General Manager", "Store Manager", "Assistant Store Manager"],
+      allowedRoles: ["Owner", "General Manager", "Store Manager"],
     },
     {
       title: "Backup & Restore",
@@ -98,7 +98,7 @@ const Settings = () => {
         shadow: "hover:shadow-orange-400/30",
       },
       badge: "Maintenance",
-      allowedRoles: ["Owner", "General Manager"],
+      allowedRoles: ["Owner"],
     },
   ];
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/app/context/AuthContext";
 import { supabase } from "@/app/utils/Server/supabaseClient";
 import { useNotificationSettingsAPI } from "./hook/use-NotificationSettingsAPI";
 import NavigationBar from "@/app/components/navigation/navigation";
@@ -12,20 +13,30 @@ import { MdCancel, MdSave } from "react-icons/md";
 import { FiAlertTriangle, FiSave } from "react-icons/fi";
 
 export default function NotificationSettings() {
+  const { user, role, loading: authLoading } = useAuth();
+  // Auth check: show loading spinner or redirect to login if not authenticated
+  const router = useRouter();
+  useEffect(() => {
+    // Only redirect if context is hydrated and user/role are missing
+    if (!authLoading && (!role || !user)) {
+      router.push(routes.login);
+    }
+  }, [authLoading, role, user, router]);
+  if (authLoading || !user) {
+    return (
+      <section className="text-white font-poppins w-full min-h-screen flex items-center justify-center">
+        <span style={{ color: "#facc15", fontSize: 24 }}>Loading...</span>
+      </section>
+    );
+  }
   // --- Offline/Cache State ---
   const [isOnline, setIsOnline] = useState(true);
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const cacheKey = "notification_settings_cache";
   // --- Notification Settings State ---
-  const [settings, setSettings] = useState<{
-    low_stock_enabled: boolean;
-    low_stock_method: string;
-    expiration_enabled: boolean;
-    expiration_days: number;
-    expiration_method: string;
-  } | null>(null);
-  const router = useRouter();
-  const [userId, setUserId] = useState<number | null>(null);
+  // Use settings from API hook
+  // Use userId from context
+  const userId = user?.user_id || user?.id || null;
   const [userError, setUserError] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -99,7 +110,7 @@ export default function NotificationSettings() {
       return;
     }
     const newSettings = {
-      user_id: userId,
+      user_id: Number(userId),
       low_stock_enabled: lowStockEnabled,
       low_stock_method: lowStockMethod,
       expiration_enabled: expirationEnabled,
@@ -110,8 +121,14 @@ export default function NotificationSettings() {
     const ok = await updateSettings(newSettings);
     setSaving(false);
     if (ok) {
+      // Clear cache after saving
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(cacheKey);
+      }
       setSaveMessage("Settings saved successfully!");
       setTimeout(() => setSaveMessage(""), 2000);
+      // Refetch settings from backend after save
+      fetchSettings();
       router.push(routes.settings);
     } else {
       alert("Failed to save notification settings");
@@ -121,7 +138,7 @@ export default function NotificationSettings() {
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     return () => {
@@ -130,97 +147,64 @@ export default function NotificationSettings() {
     };
   }, []);
 
-  // Fetch userId and notification settings with offline/cache logic
+  const {
+    settings,
+    fetchSettings,
+    updateSettings,
+    loading: settingsLoading,
+  } = useNotificationSettingsAPI(userId as number);
+
   useEffect(() => {
-    async function fetchUserIdAndSettings() {
-      setUserError?.(null);
-      setOfflineError(null);
-      if (!isOnline) {
-        // Try to load from cache
-        if (typeof window !== 'undefined') {
-          const cached = localStorage.getItem(cacheKey);
-          if (cached) {
-            try {
-              const data = JSON.parse(cached);
-              if (data.userId) setUserId?.(data.userId);
-              if (data.settings) setSettings(data.settings);
-              setOfflineError(null);
-              return;
-            } catch {}
-          }
+    console.log("[NotificationSettings] userId:", userId);
+  }, [userId]);
+
+  useEffect(() => {
+    console.log("[NotificationSettings] fetched settings:", settings);
+  }, [settings]);
+  
+  // Add local state for settings to allow setSettings usage
+  const [localSettings, setSettings] = useState(settings);
+
+  // Keep localSettings in sync with API settings
+  useEffect(() => {
+    setSettings(settings);
+  }, [settings]);
+
+  // Fetch notification settings with offline/cache logic
+  useEffect(() => {
+    setUserError(null);
+    setOfflineError(null);
+    if (!isOnline) {
+      // Try to load from cache
+      if (typeof window !== "undefined") {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const data = JSON.parse(cached);
+            if (data.settings) setSettings(data.settings);
+            setOfflineError(null);
+            return;
+          } catch {}
         }
-        setOfflineError("You are offline and no cached notification settings are available. Please connect to the internet to view or edit notification settings.");
-        return;
       }
-      // --- original fetchUserId logic below ---
-      const session = await supabase.auth.getSession();
-      if (!session.data.session) {
-        setUserError?.("No session found. Please log in.");
-        router.push?.(routes.login);
-        return;
-      }
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-      if (authError) {
-        setUserError?.("Failed to fetch user from Supabase Auth.");
-        setUserId?.(null);
-        return;
-      }
-      if (user?.id) {
-        const { data, error } = await supabase
-          .from("users")
-          .select("user_id")
-          .eq("auth_id", user.id)
-          .single();
-        if (!error && data && data.user_id) {
-          setUserId?.(data.user_id);
-        } else {
-          const insertRes = await supabase
-            .from("users")
-            .insert([
-              {
-                auth_id: user.id,
-                name:
-                  user.user_metadata?.full_name ||
-                  user.user_metadata?.display_name ||
-                  user.email ||
-                  "Unknown",
-                username:
-                  user.user_metadata?.user_name ||
-                  user.user_metadata?.username ||
-                  user.email ||
-                  "user" + Math.floor(Math.random() * 100000),
-                email: user.email || null,
-                user_role: "User",
-                status: "active",
-                created_at: new Date().toISOString(),
-              },
-            ])
-            .select("user_id")
-            .single();
-          if (!insertRes.error && insertRes.data && insertRes.data.user_id) {
-            setUserId?.(insertRes.data.user_id);
-          } else {
-            setUserError?.(
-              `Failed to create user: ${insertRes.error?.message || "Unknown error"}`
-            );
-            setUserId?.(null);
-          }
-        }
-      } else {
-        setUserError?.("No authenticated user found. Please log in again.");
-        setUserId?.(null);
-      }
+      setOfflineError(
+        "You are offline and no cached notification settings are available. Please connect to the internet to view or edit notification settings."
+      );
+      return;
     }
-    fetchUserIdAndSettings();
-  }, [isOnline]);
+    // If no userId, show error
+    if (!userId) {
+      setUserError("No user ID found. Please log in.");
+      return;
+    }
+    // Always fetch latest settings from backend when online
+    fetchSettings();
+  }, [isOnline, userId, fetchSettings]);
 
   // Cache notification settings on change (when online)
   useEffect(() => {
     if (isOnline && userId && settings) {
-      if (typeof window !== 'undefined') {
+      if (typeof window !== "undefined") {
         localStorage.setItem(
           cacheKey,
           JSON.stringify({
@@ -231,26 +215,24 @@ export default function NotificationSettings() {
       }
     }
   }, [isOnline, userId, settings]);
-  const { fetchSettings, updateSettings, loading } =
-    useNotificationSettingsAPI(userId as number);
-
+  // Sync UI state with backend settings from API hook
   useEffect(() => {
-    window.scrollTo(0, 0);
-    if (userId) {
-      fetchSettings();
+    if (localSettings) {
+      setLowStockEnabled(localSettings.low_stock_enabled);
+      setExpirationDays(Number(localSettings.expiration_days));
+      setLowStockMethod(
+        Array.isArray(localSettings.low_stock_method)
+          ? localSettings.low_stock_method
+          : [localSettings.low_stock_method]
+      );
+      setExpirationEnabled(localSettings.expiration_enabled);
+      setExpirationMethod(
+        Array.isArray(localSettings.expiration_method)
+          ? localSettings.expiration_method
+          : [localSettings.expiration_method]
+      );
     }
-  }, [userId, fetchSettings]);
-
-  // Sync UI state with backend settings
-  useEffect(() => {
-    if (settings) {
-      setLowStockEnabled(settings.low_stock_enabled);
-  setLowStockMethod(Array.isArray(settings.low_stock_method) ? settings.low_stock_method : [settings.low_stock_method]);
-      setExpirationEnabled(settings.expiration_enabled);
-      setExpirationDays(settings.expiration_days);
-  setExpirationMethod(Array.isArray(settings.expiration_method) ? settings.expiration_method : [settings.expiration_method]);
-    }
-  }, [settings]);
+  }, [localSettings]);
 
   // UI state for toggles and methods
   const [lowStockEnabled, setLowStockEnabled] = useState(true);
@@ -289,7 +271,9 @@ export default function NotificationSettings() {
         <ResponsiveMain>
           <main className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="flex flex-col items-center gap-4">
-              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <div className="text-red-400 font-bold text-lg">
+                {offlineError}
+              </div>
               <button
                 className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
                 onClick={() => window.location.reload()}
@@ -499,12 +483,14 @@ export default function NotificationSettings() {
             </article>
           </div>
         </main>
+        {/* Success Message */}
         {saveMessage && (
-          <div
-            className="mt-8 text-green-400 text-center font-semibold animate-fade-in"
-            role="status"
-          >
-            {saveMessage}
+          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+            <div className="flex items-center gap-2 xs:gap-3">
+              <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
+                {saveMessage}
+              </span>
+            </div>
           </div>
         )}
 

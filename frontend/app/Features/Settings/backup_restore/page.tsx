@@ -19,7 +19,8 @@ export default function BackupRestorePage() {
   const [pendingRestoreFilename, setPendingRestoreFilename] = useState<
     string | null
   >(null);
-  const { backup, restore, restoreLocal, listBackups } = useBackupRestoreAPI();
+  const { backup, restore, restoreLocal, listBackups, deleteBackup } =
+    useBackupRestoreAPI();
   const [history, setHistory] = useState<string[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -42,13 +43,27 @@ export default function BackupRestorePage() {
   const [scheduleMsg, setScheduleMsg] = useState("");
   const initialSettingsRef = useRef<any>(null);
 
+  // Initialize UI state from backend schedule
+  useEffect(() => {
+    if (schedule && !scheduleLoading) {
+      // If frequency is set, enable autoBackup
+      setAutoBackup(!!schedule.frequency);
+      setFrequency(schedule.frequency || "");
+      setDayOfWeek(schedule.day_of_week || "");
+      setDayOfMonth(schedule.day_of_month ? String(schedule.day_of_month) : "");
+      setTimeOfDay(schedule.time_of_day || "");
+      setScheduleLoaded(true);
+    }
+  }, [schedule, scheduleLoading]);
+
   // React Query client for cache invalidation
   const queryClient = useQueryClient();
 
   // Fetch backup history from Supabase Storage
   useEffect(() => {
     // Robust offline/cached loading logic
-    const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
+    const isCompletelyOffline =
+      typeof window !== "undefined" && !navigator.onLine;
     setHistoryLoading(true);
     setOfflineError(null);
     const cacheKey = "cached_backup_history";
@@ -73,20 +88,32 @@ export default function BackupRestorePage() {
       setHistoryLoading(true);
       try {
         const files = await listBackups();
-        // Filter out Supabase placeholder files
-        const filtered = Array.isArray(files)
-          ? files.filter((f) => f !== ".emptyFolderPlaceholder")
+        // files may be array of objects (from API), map to filenames
+        const fileNames = Array.isArray(files)
+          ? (files as Array<{ name: string } | string>)
+              .map((f) => {
+                if (typeof f === "string") return f;
+                if (
+                  f &&
+                  typeof f === "object" &&
+                  "name" in f &&
+                  typeof (f as { name: string }).name === "string"
+                )
+                  return (f as { name: string }).name;
+                return "";
+              })
+              .filter((name) => name && name !== ".emptyFolderPlaceholder")
           : [];
-        setHistory(filtered);
+        setHistory(fileNames);
         // Cache backup history
-        localStorage.setItem(cacheKey, JSON.stringify(filtered));
+        localStorage.setItem(cacheKey, JSON.stringify(fileNames));
       } catch (err) {
         setHistory([]);
       }
       setHistoryLoading(false);
     };
     fetchHistory();
-  }, [listBackups]);
+  }, []);
 
   // Manual backup handler
   const handleBackup = async () => {
@@ -131,7 +158,6 @@ export default function BackupRestorePage() {
   const [removingBackup, setRemovingBackup] = useState<string | null>(null);
 
   // Remove backup handler
-  const { deleteBackup } = useBackupRestoreAPI();
   const handleRemoveBackup = async (filename: string) => {
     setRemovingBackup(filename);
     try {
@@ -368,8 +394,12 @@ export default function BackupRestorePage() {
                   )}
                 </div>
                 {restoreMsg && (
-                  <div className="text-green-400 text-sm mt-2 animate-fade-in">
-                    {restoreMsg}
+                  <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+                    <div className="flex items-center gap-2 xs:gap-3">
+                      <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
+                        {restoreMsg}
+                      </span>
+                    </div>
                   </div>
                 )}
               </section>

@@ -5,7 +5,7 @@ import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { FaUsers, FaEdit, FaTrashAlt, FaPlus } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
-import { useUsersAPI } from "./hook/use-user";
+import { useUserAPI } from "./hook/use-user";
 import type { User } from "./hook/use-user";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { FiRefreshCw } from "react-icons/fi";
@@ -23,7 +23,7 @@ const columns = [
 export default function UserManagement() {
   const router = useRouter();
   const { isMenuOpen, isMobile } = useNavigation();
-  const { listUsers, deleteUser, changeUserPassword } = useUsersAPI();
+  const { listUsers, deleteUser, changeUserPassword } = useUserAPI();
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);

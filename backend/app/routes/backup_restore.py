@@ -27,12 +27,14 @@ import io
 import gzip
 from app.supabase import POSTGRES_URL
 import traceback
+from starlette.concurrency import run_in_threadpool
 
 # Import SUPABASE_URL and SUPABASE_API_KEY directly from supabase.py (always patched with protocol)
 from app.supabase import SUPABASE_URL, SUPABASE_API_KEY
 SUPABASE_BUCKET = "cardiacdelights-backup"  # Ensure this bucket exists in Supabase Storage
+# SUPABASE_BUCKET = "test" 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
-
+print(supabase.storage.from_("cardiacdelights-backup").list())
 BACKUP_DIR = str(pathlib.Path.home() / "Documents" / "cardiacdelights_backups")
 router = APIRouter()
 
@@ -164,8 +166,6 @@ async def restore_local_backup(
 
 def scheduled_backup():
     try:
-        print(f"[Backup Debug] Encrypted file length: {len(encrypted)} bytes")
-        print(f"[Backup Debug] First 64 bytes: {encrypted[:64]}")
         # Use same logic as /api/backup endpoint
         engine = create_engine(POSTGRES_URL.replace("asyncpg", "psycopg2"))
         insp = sqlalchemy.inspect(engine)
@@ -186,6 +186,8 @@ def scheduled_backup():
             )
         buf.seek(0)
         encrypted = fernet.encrypt(buf.getvalue())
+        print(f"[Backup Debug] Encrypted file length: {len(encrypted)} bytes")
+        print(f"[Backup Debug] First 64 bytes: {encrypted[:64]}")
         backup_filename = f"backup_{timestamp}.json.enc"
         supabase.storage.from_(SUPABASE_BUCKET).upload(backup_filename, encrypted)
         print(f"Backup completed: {backup_filename} (Supabase Storage only)")
@@ -374,10 +376,17 @@ async def get_schedule(session=Depends(get_db)):
     return out
 
 
+
 @router.get("/list-backups")
 async def list_supabase_backups():
-    files = supabase.storage.from_(SUPABASE_BUCKET).list()
-    return {"files": [f["name"] for f in files]}
+    print("[List Backups Debug] Endpoint hit. Attempting to list backups...")
+    try:
+        files = await run_in_threadpool(lambda: supabase.storage.from_(SUPABASE_BUCKET).list())
+        print(f"[List Backups Debug] Supabase .list() returned: {files}")
+        return {"files": [f["name"] for f in files]}
+    except Exception as e:
+        print(f"[List Backups Debug] Exception: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list backups")
 
 
 # Restore logic: decrypt, decompress, and restore backup data
@@ -411,6 +420,7 @@ async def restore(upload_file, password, user, db):
             )
             print(f"[Restore Debug] Encrypted file length: {len(encrypted_data)} bytes")
             print(f"[Restore Debug] First 64 bytes: {encrypted_data[:64]}")
+            raise HTTPException(status_code=400, detail="Decryption failed. Check your password and backup file.")
 
         # Decompress
         buf = io.BytesIO(decrypted)
