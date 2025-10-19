@@ -7,14 +7,21 @@ from sqlalchemy.orm import sessionmaker
 from postgrest import SyncPostgrestClient
 
 # Load environment variables
+
 load_dotenv()
+print(f"[DEBUG] SUPABASE_URL loaded: {os.getenv('SUPABASE_URL')}")
+print(f"[DEBUG] SUPABASE_KEY loaded: {os.getenv('SUPABASE_KEY')}")
 
 
 # Initialize Supabase client
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
+print(f"[DEBUG] SUPABASE_URL after patch: {SUPABASE_URL}")
 if SUPABASE_URL and not SUPABASE_URL.startswith("http"):
     SUPABASE_URL = "https://" + SUPABASE_URL
+print(f"[DEBUG] SUPABASE_URL final: {SUPABASE_URL}")
 SUPABASE_API_KEY = os.getenv("SUPABASE_KEY")
+print(f"[DEBUG] SUPABASE_API_KEY final: {SUPABASE_API_KEY}")
 
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
