@@ -23,6 +23,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
 
 
 POSTGREST_URL = SUPABASE_URL + "/rest/v1"
+print(f"[DEBUG] POSTGREST_URL: {POSTGREST_URL}")
 postgrest_client = SyncPostgrestClient(
     POSTGREST_URL,
     headers={
