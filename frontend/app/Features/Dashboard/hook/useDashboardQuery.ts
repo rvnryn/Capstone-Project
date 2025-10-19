@@ -162,7 +162,7 @@ export function useDashboardQuery() {
     queryKey: ["dashboard", "custom-holidays"],
     queryFn: async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/custom-holidays`, {
+  const response = await fetch(`${API_BASE_URL}/api/custom-holidays/`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -194,7 +194,7 @@ export function useDashboardQuery() {
       name: string;
       description?: string;
     }) => {
-      const response = await fetch(`${API_BASE_URL}/api/custom-holidays`, {
+  const response = await fetch(`${API_BASE_URL}/api/custom-holidays/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
