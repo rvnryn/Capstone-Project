@@ -33,9 +33,10 @@ export function useDashboardQuery() {
         return cached ? JSON.parse(cached) : [];
       }
     },
-    // Only refetch on window focus or manual
-    refetchInterval: false,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+  refetchInterval: false,
+  staleTime: 5 * 60 * 1000,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
   });
 
   // Expiring
@@ -67,7 +68,9 @@ export function useDashboardQuery() {
       }
     },
     refetchInterval: false,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   // Surplus
@@ -99,8 +102,10 @@ export function useDashboardQuery() {
       }
     },
     refetchInterval: false,
-    staleTime: 10 * 60 * 1000, // 10 minutes
-  });
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  }); // <-- Add closing brace and comma for surplus query
 
   // Expired
   const expired = useQuery({
@@ -134,8 +139,6 @@ export function useDashboardQuery() {
               quantity_spoiled: item.quantity_spoiled ?? item.quantity ?? 0,
               expiration_date: item.expiration_date || "N/A",
               spoilage_date: item.spoilage_date || "N/A",
-              reason: item.reason || "Expired",
-              created_at: item.created_at ?? null,
               updated_at: item.updated_at ?? null,
             }))
           : [];
@@ -149,7 +152,9 @@ export function useDashboardQuery() {
       }
     },
     refetchInterval: false,
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   // Custom Holidays
@@ -161,13 +166,12 @@ export function useDashboardQuery() {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-          },
+          }
         });
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-
         const data = await response.json();
         localStorage.setItem("cached_custom_holidays", JSON.stringify(data));
         return data;
@@ -178,7 +182,9 @@ export function useDashboardQuery() {
       }
     },
     refetchInterval: false,
-    staleTime: 30 * 60 * 1000, // 30 minutes
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   // --- Mutations for custom holiday management ---
@@ -251,11 +257,9 @@ export function useDashboardQuery() {
           },
         }
       );
-
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
       return await response.json();
     },
     onSuccess: () => {
@@ -292,8 +296,10 @@ export function useDashboardQuery() {
         return cached ? JSON.parse(cached) : [];
       }
     },
-    refetchInterval: false,
-    staleTime: 5 * 60 * 1000,
+  refetchInterval: false,
+  staleTime: 5 * 60 * 1000,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
   });
 
   const spoilage = useQuery({
@@ -320,8 +326,10 @@ export function useDashboardQuery() {
         return cached ? JSON.parse(cached) : [];
       }
     },
-    refetchInterval: false,
-    staleTime: 10 * 60 * 1000,
+  refetchInterval: false,
+  staleTime: 10 * 60 * 1000,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
   });
 
   return {

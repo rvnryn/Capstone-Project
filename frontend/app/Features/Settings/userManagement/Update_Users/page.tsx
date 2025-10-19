@@ -70,7 +70,7 @@ export default function EditUser() {
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     return () => {
@@ -90,7 +90,7 @@ export default function EditUser() {
       }
       if (!isOnline) {
         // Try to load from cache
-        if (cacheKey && typeof window !== 'undefined') {
+        if (cacheKey && typeof window !== "undefined") {
           const cached = localStorage.getItem(cacheKey);
           if (cached) {
             try {
@@ -103,7 +103,9 @@ export default function EditUser() {
             } catch {}
           }
         }
-        setOfflineError("You are offline and no cached user data is available. Please connect to the internet to edit this user.");
+        setOfflineError(
+          "You are offline and no cached user data is available. Please connect to the internet to edit this user."
+        );
         setIsLoading(false);
         return;
       }
@@ -120,7 +122,7 @@ export default function EditUser() {
         });
         setInitialSettings(data);
         // Cache user data
-        if (cacheKey && typeof window !== 'undefined') {
+        if (cacheKey && typeof window !== "undefined") {
           localStorage.setItem(cacheKey, JSON.stringify(data));
         }
       } catch (error) {
@@ -311,6 +313,45 @@ export default function EditUser() {
     setPendingRoute(null);
   };
 
+  // EmailJS integration for password change notification
+  useEffect(() => {
+    if (showPasswordSuccess) {
+      console.log("EmailJS debug:", formData.email, formData.name);
+      if (formData.email) {
+        import("emailjs-com").then((emailjs) => {
+          emailjs
+            .send(
+              process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!,
+              process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID!,
+              {
+                email: formData.email,
+                to_name: formData.name || "",
+                message: "Your password has been changed successfully.",
+                date: new Date().toLocaleString(),
+              },
+              process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY
+            )
+            .then(
+              (result) => {
+                console.log(
+                  "EmailJS: Password change notification sent!",
+                  result.text
+                );
+              },
+              (error) => {
+                console.error(
+                  "EmailJS: Failed to send password change notification:",
+                  error.text
+                );
+              }
+            );
+        });
+      } else {
+        console.error("EmailJS: No email address found for notification.");
+      }
+    }
+  }, [showPasswordSuccess, formData.email, formData.name]);
+
   if (isLoading) {
     return (
       <section className="text-white font-poppins w-full min-h-screen">
@@ -319,7 +360,9 @@ export default function EditUser() {
           <main className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="flex flex-col items-center gap-4">
               <div className="w-8 h-8 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-              <div className="text-yellow-400 font-medium text-base">Loading user details...</div>
+              <div className="text-yellow-400 font-medium text-base">
+                Loading user details...
+              </div>
             </div>
           </main>
         </ResponsiveMain>
@@ -334,7 +377,9 @@ export default function EditUser() {
         <ResponsiveMain>
           <main className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="flex flex-col items-center gap-4">
-              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <div className="text-red-400 font-bold text-lg">
+                {offlineError}
+              </div>
               <button
                 className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
                 onClick={() => window.location.reload()}
@@ -356,6 +401,7 @@ export default function EditUser() {
         showCancelModal={showCancelModal}
         showSaveModal={showSaveModal}
         showPasswordModal={showPasswordModal}
+        showAdminPasswordModal={showAdminPasswordModal}
       />
       <ResponsiveMain>
         <main
@@ -777,8 +823,6 @@ export default function EditUser() {
           </div>
         )}
 
-        {/* Change Password Modal */}
-        {/* Step 1: New Password Modal */}
         {showPasswordModal && (
           <div
             role="dialog"
@@ -822,7 +866,9 @@ export default function EditUser() {
                   type="button"
                   onClick={async () => {
                     if (!newPassword || newPassword.length < 6) {
-                      setPasswordError("Password must be at least 6 characters.");
+                      setPasswordError(
+                        "Password must be at least 6 characters."
+                      );
                       return;
                     }
                     if (newPassword !== reEnterPassword) {
@@ -830,8 +876,14 @@ export default function EditUser() {
                       return;
                     }
                     // Prevent new password from being the same as the current password
-                    if (formData && formData.password && newPassword === formData.password) {
-                      setPasswordError("New password cannot be the same as the current password.");
+                    if (
+                      formData &&
+                      formData.password &&
+                      newPassword === formData.password
+                    ) {
+                      setPasswordError(
+                        "New password cannot be the same as the current password."
+                      );
                       return;
                     }
                     setPasswordError("");
@@ -858,7 +910,9 @@ export default function EditUser() {
                         setShowPasswordSuccess(true);
                         setTimeout(() => setShowPasswordSuccess(false), 3000);
                       } catch (err: any) {
-                        setPasswordError(err?.message || "Failed to change password.");
+                        setPasswordError(
+                          err?.message || "Failed to change password."
+                        );
                       }
                     } else {
                       setShowPasswordModal(false);
@@ -867,7 +921,11 @@ export default function EditUser() {
                   }}
                   className="px-8 py-3 rounded-lg border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black font-semibold transition-all cursor-pointer"
                 >
-                  {currentUser && currentUser.auth_id && String(currentUser.auth_id) === String(formData.auth_id) ? "Change Password" : "Next"}
+                  {currentUser &&
+                  currentUser.auth_id &&
+                  String(currentUser.auth_id) === String(formData.auth_id)
+                    ? "Change Password"
+                    : "Next"}
                 </button>
                 <button
                   type="button"
@@ -923,7 +981,9 @@ export default function EditUser() {
                   type="button"
                   onClick={async () => {
                     if (!adminPassword) {
-                      setAdminPasswordError("Please enter your admin password to confirm.");
+                      setAdminPasswordError(
+                        "Please enter your admin password to confirm."
+                      );
                       return;
                     }
                     try {
@@ -942,7 +1002,9 @@ export default function EditUser() {
                       setShowPasswordSuccess(true);
                       setTimeout(() => setShowPasswordSuccess(false), 3000);
                     } catch (err: any) {
-                      setAdminPasswordError(err?.message || "Failed to change password.");
+                      setAdminPasswordError(
+                        err?.message || "Failed to change password."
+                      );
                     }
                   }}
                   className="px-8 py-3 rounded-lg border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black font-semibold transition-all cursor-pointer"

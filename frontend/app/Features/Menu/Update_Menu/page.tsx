@@ -68,6 +68,19 @@ export default function EditMenuPage() {
     enabled: !!menu_id,
   });
 
+  // Track online/offline status
+  const [isOnline, setIsOnline] = useState(true);
+  useEffect(() => {
+    setIsOnline(typeof window !== "undefined" ? navigator.onLine : true);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
   const [formData, setFormData] = useState({
     dish_name: "",
     category: "",
@@ -286,66 +299,11 @@ export default function EditMenuPage() {
     if (isSettingsChanged()) {
       setShowUnsavedModal(true);
       setPendingRoute(path);
-      return false;
+      return;
     }
-    return true;
+    router.push(path);
   };
 
-  const handleConfirmUnsaved = () => {
-    setShowUnsavedModal(false);
-    if (pendingRoute) {
-      router.push(pendingRoute);
-      setPendingRoute(null);
-    }
-  };
-  const handleCancelUnsaved = () => {
-    setShowUnsavedModal(false);
-    setPendingRoute(null);
-  };
-
-  if (isLoading) {
-    return (
-      <section className="text-white font-poppins w-full min-h-screen">
-        <NavigationBar onNavigate={handleSidebarNavigate} />
-        <ResponsiveMain>
-          <main
-            className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
-            aria-label="Edit Menu main content"
-            tabIndex={-1}
-          >
-            <div className="max-w-xs xs:max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl 2xl:max-w-7xl mx-auto w-full">
-              <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl xs:rounded-3xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10 2xl:p-12 w-full">
-                <div className="flex flex-row items-center justify-center gap-4 mb-6 w-full">
-                  <div className="relative flex-shrink-0">
-                    <div className="absolute inset-0 bg-yellow-400/20 rounded-full blur-lg"></div>
-                    <div className="relative bg-gradient-to-br from-yellow-400 to-yellow-500 p-3 rounded-full">
-                      <MdEdit className="text-black text-2xl md:text-3xl lg:text-4xl" />
-                    </div>
-                  </div>
-                  <div className="flex flex-col justify-center w-full">
-                    <h2 className="text-2xl md:text-3xl font-bold text-transparent bg-gradient-to-r from-yellow-400 to-yellow-500 bg-clip-text font-poppins text-left w-full">
-                      Edit Menu Item
-                    </h2>
-                    <p className="text-gray-400 text-base mt-1 text-left w-full">
-                      Update dish details, price, and ingredients
-                    </p>
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                    <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                    <div className="text-yellow-400 font-medium text-sm xs:text-base">
-                      Loading menu details...
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </main>
-        </ResponsiveMain>
-      </section>
-    );
-  }
 
   return (
     <section className="text-white font-poppins w-full min-h-screen">
@@ -364,6 +322,13 @@ export default function EditMenuPage() {
         >
           <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl xs:rounded-3xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10 2xl:p-12 w-full">
+              {/* OFFLINE WARNING BANNER */}
+              {!isOnline && (
+                <div className="mb-6 p-4 bg-yellow-900/80 border border-yellow-500/40 rounded-xl text-yellow-300 text-center font-semibold">
+                  <MdCancel className="inline mr-2 text-yellow-400 text-lg align-text-bottom" />
+                  You are offline. <b>Editing, adding, or removing</b> menu items is <b>disabled</b> while offline. Please reconnect to make changes.
+                </div>
+              )}
               <div className="flex flex-row items-center justify-center gap-4 mb-6 w-full">
                 <div className="relative flex-shrink-0">
                   <div className="absolute inset-0 bg-yellow-400/20 rounded-full blur-lg"></div>
@@ -396,6 +361,8 @@ export default function EditMenuPage() {
                 onSubmit={handleSubmit}
                 className="space-y-3 xs:space-y-4 sm:space-y-6 md:space-y-8"
               >
+                {/* Disable all fields and buttons if offline */}
+                <fieldset disabled={!isOnline} style={!isOnline ? { opacity: 0.6, pointerEvents: 'none' } : {}}>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8">
                   <div className="space-y-4">
                     {/* Dish Name */}
@@ -426,6 +393,7 @@ export default function EditMenuPage() {
                               ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
                               : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
                           }`}
+                          disabled={!isOnline}
                         />
                         {focusedField === "dish_name" && (
                           <div className="absolute right-2 xs:right-3 top-1/2 transform -translate-y-1/2">
@@ -461,6 +429,7 @@ export default function EditMenuPage() {
                               ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
                               : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
                           }`}
+                          disabled={!isOnline}
                         >
                           <option value="" className="bg-gray-800">
                             Select Category...
@@ -515,6 +484,7 @@ export default function EditMenuPage() {
                           }`}
                           inputMode="numeric"
                           pattern="[0-9]*"
+                          disabled={!isOnline}
                         />
                         {focusedField === "price" && (
                           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -548,6 +518,7 @@ export default function EditMenuPage() {
                               : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
                           }`}
                           rows={3}
+                          disabled={!isOnline}
                         />
                         {focusedField === "description" && (
                           <div className="absolute right-3 top-3">
@@ -578,13 +549,14 @@ export default function EditMenuPage() {
                     ) : (
                       <span className="text-gray-500">No Image</span>
                     )}
-                    <label className="mt-4 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-0.5 rounded-lg font-semibold shadow cursor-pointer transition">
+                    <label className={`mt-4 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-0.5 rounded-lg font-semibold shadow cursor-pointer transition ${!isOnline ? 'opacity-50 pointer-events-none' : ''}`}>
                       Change Image
                       <input
                         type="file"
                         accept="image/*"
                         onChange={handleImageChange}
                         className="hidden"
+                        disabled={!isOnline}
                       />
                     </label>
                     <span className="text-xs text-gray-400 mt-1">
@@ -613,6 +585,7 @@ export default function EditMenuPage() {
                             handleIngredientChange(idx, "name", e.target.value)
                           }
                           className="flex-1 min-w-0 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
+                          disabled={!isOnline}
                         />
                         <input
                           type="text"
@@ -626,13 +599,14 @@ export default function EditMenuPage() {
                             )
                           }
                           className="flex-1 min-w-0 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
+                          disabled={!isOnline}
                         />
                         <button
                           type="button"
                           onClick={() => removeIngredient(idx)}
                           className="text-red-400 hover:text-red-200 font-semibold px-3 py-2 transition rounded-lg focus:outline-none text-xs xs:text-sm sm:text-base"
                           aria-label="Remove ingredient"
-                          disabled={ingredients.length < 1}
+                          disabled={!isOnline || ingredients.length < 1}
                         >
                           Remove
                         </button>
@@ -642,6 +616,7 @@ export default function EditMenuPage() {
                       type="button"
                       onClick={addIngredient}
                       className="mt-3 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-2 rounded-lg font-semibold shadow transition focus:outline-none"
+                      disabled={!isOnline}
                     >
                       + Add Ingredient
                     </button>
@@ -664,6 +639,7 @@ export default function EditMenuPage() {
                     onClick={handleCancel}
                     className="group flex items-center justify-center gap-1.5 xs:gap-2 px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto order-2 xs:order-1"
                     style={{ minWidth: 0 }}
+                    disabled={!isOnline}
                   >
                     <MdCancel className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 group-hover:rotate-180 transition-transform duration-300" />
                     <span className="hidden xs:inline">Cancel</span>
@@ -672,7 +648,7 @@ export default function EditMenuPage() {
                   <button
                     type="button"
                     onClick={handleSaveClick}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !isOnline}
                     className="group flex items-center justify-center gap-1.5 xs:gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl font-medium xs:font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto shadow-lg hover:shadow-yellow-400/25 order-1 xs:order-2"
                     style={{ minWidth: 0 }}
                   >
@@ -691,6 +667,7 @@ export default function EditMenuPage() {
                     )}
                   </button>
                 </div>
+                </fieldset>
               </form>
             </div>
           </div>
@@ -880,14 +857,17 @@ export default function EditMenuPage() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"
-                  onClick={handleCancelUnsaved}
+                  onClick={() => setShowUnsavedModal(false)}
                   className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base order-2 sm:order-1 cursor-pointer"
                 >
                   Stay
                 </button>
                 <button
                   type="button"
-                  onClick={handleConfirmUnsaved}
+                  onClick={() => {
+                    setShowUnsavedModal(false);
+                    if (pendingRoute) router.push(pendingRoute);
+                  }}
                   className="flex-2 flex items-center justify-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-300 hover:to-orange-400 text-white px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-sm sm:text-base shadow-lg hover:shadow-orange-400/25 order-1 sm:order-2 cursor-pointer"
                 >
                   <FiArrowRight className="w-5 h-5" />
@@ -912,6 +892,7 @@ export default function EditMenuPage() {
             </div>
           </div>
         )}
+
       </ResponsiveMain>
     </section>
   );

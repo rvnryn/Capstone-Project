@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useGlobalLoading } from "@/app/context/GlobalLoadingContext";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
 import Image from "next/image";
@@ -13,6 +14,7 @@ import { MdCancel, MdSave } from "react-icons/md";
 import { FiAlertTriangle, FiArrowRight, FiCheck, FiX } from "react-icons/fi";
 
 export default function AddSupplier() {
+  const { setLoading } = useGlobalLoading();
   const router = useRouter();
   const { addSupplier } = useSupplierAPI();
 
@@ -37,6 +39,7 @@ export default function AddSupplier() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   useEffect(() => {
+    setLoading(false); // Reset global loading overlay on mount
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirty) {
         e.preventDefault();
@@ -45,7 +48,7 @@ export default function AddSupplier() {
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isDirty]);
+  }, [isDirty, setLoading]);
 
   const capitalizeWords = (str: string) =>
     str.replace(/\b\w/g, (char) => char.toUpperCase());

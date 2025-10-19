@@ -300,7 +300,6 @@ async def change_user_password(
         print(f"[ERROR] Admin email is missing in user_row: {user_row}")
         raise HTTPException(status_code=400, detail="Admin email is missing from session. Please re-login or contact support.")
 
-
     # If the owner is changing their own password, skip admin password confirmation
     is_self = False
     # Find the user's own auth_id (from user_access or user_row)
@@ -422,19 +421,7 @@ async def change_user_password(
         await db.flush()
         await db.commit()
         print("user change password activity logged successfully.")
-
-        # Send email notification if email exists, using a fixed system email as sender
-        if target_email:
-            try:
-                from app.routes.emailnotification import send_password_change_email
-                system_email = os.getenv("SYSTEM_EMAIL")
-                system_password = os.getenv("SYSTEM_EMAIL_PASSWORD")
-                if system_email and system_password:
-                    send_password_change_email(target_email, target_name, sender_email=system_email, sender_password=system_password)
-                else:
-                    print("System email and password must be set in environment variables to send password change notification. Skipping email.")
-            except Exception as e:
-                print(f"Failed to send password change email: {e}")
+            # Email notification removed; will use EmailJS from frontend or other service.
     except Exception as e:
         print("Failed to record user change password activity or send email:", e)
 

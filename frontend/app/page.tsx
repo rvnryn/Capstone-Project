@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import { useGlobalLoading } from "@/app/context/GlobalLoadingContext";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { loginUser } from "./utils/API/LoginAPI";
@@ -168,7 +169,7 @@ const Login = () => {
   const [resetLoading, setResetLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [otpTimer, setOtpTimer] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const { loading, setLoading, setMessage } = useGlobalLoading();
   const [rateLimitTimer, setRateLimitTimer] = useState(0);
   const [otpTimerRef, setOtpTimerRef] = useState<NodeJS.Timeout | null>(null);
   const [resendTimerRef, setResendTimerRef] = useState<NodeJS.Timeout | null>(
@@ -201,40 +202,34 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true); // <-- Show loading
-    let loginEmail = email;
-
-    let backendResponse;
+    setMessage("Logging in...");
+    setLoading(true); // Show global loading
+    console.log("[DEBUG] handleSubmit called");
     try {
-      backendResponse = await loginUser(email, password);
-      loginEmail = backendResponse.email;
+      await loginUser(email, password);
+      console.log("[DEBUG] loginUser success");
     } catch (err) {
-      setLoading(false); // <-- Hide loading on error
+      setLoading(false);
       if (err instanceof Error) {
         setError(err.message);
+        console.log("[DEBUG] loginUser error:", err.message);
       } else {
         setError("An unexpected error occurred.");
+        console.log("[DEBUG] loginUser error: unexpected");
       }
       return;
     }
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: loginEmail,
-      password,
-    });
     setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-
     await refreshSession();
-    setIsModalOpen(true);
+    router.push(routes.dashboard);
+    console.log("[DEBUG] refreshSession complete, opening modal");
+    // setIsModalOpen(true);
   };
 
   const handleModalClose = () => {
-    setIsModalOpen(false);
-    router.push(routes.dashboard);
+  console.log("[DEBUG] handleModalClose called");
+  setIsModalOpen(false);
+  router.push(routes.dashboard);
   };
 
   const handleResetPassword = () => {
@@ -597,15 +592,7 @@ const Login = () => {
         </form>
       </section>
 
-      {/* Loading Overlay */}
-      {loading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <FaSpinner className="animate-spin text-yellow-400 text-5xl" />
-          <span className="ml-4 text-yellow-200 text-xl font-semibold">
-            Logging in...
-          </span>
-        </div>
-      )}
+      {/* Loading Overlay removed: now handled globally */}
 
       {isModalOpen && (
         <Modal message="Logged in successfully!" onClose={handleModalClose} />

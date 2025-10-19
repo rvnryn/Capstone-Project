@@ -1,10 +1,7 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
-import { useAuth } from "@/app/context/AuthContext";
-import { routes } from "@/app/routes/routes";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useMenuAPI } from "../hook/use-menu";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
@@ -29,8 +26,101 @@ import {
   FaCalendarAlt,
   FaHistory,
 } from "react-icons/fa";
+import { useGlobalLoading } from "@/app/context/GlobalLoadingContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+// import routes from "@/app/routes"; // Commented out due to missing module
+import Image from "next/image";
+
+
+
+// Inline date formatting utilities
+function formatDateTime(date: string | number | Date | undefined) {
+  if (!date) return "-";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "Invalid date";
+  return d.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatRelativeTime(date: string | number | Date | undefined) {
+  if (!date) return "-";
+  const now = new Date();
+  const past = new Date(date);
+  if (isNaN(past.getTime())) return "Invalid date";
+  const diffMs = now.getTime() - past.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+  return formatDateTime(date);
+}
+
+function ItemRow({
+  icon,
+  label,
+  value,
+  className = "text-white",
+  valueClassName,
+  fullWidth = false,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  value: string | React.ReactNode;
+  className?: string;
+  valueClassName?: string;
+  fullWidth?: boolean;
+}) {
+  return (
+    <div className={`group ${fullWidth ? "col-span-full" : ""}`}>
+      <div className="bg-gray-800/30 backdrop-blur-sm rounded-lg xs:rounded-xl p-3 xs:p-4 sm:p-5 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-300 h-full">
+        <div className="flex items-start gap-2 xs:gap-3">
+          {icon && (
+            <div className="flex-shrink-0 mt-0.5 xs:mt-1">
+              <div className="w-4 h-4 xs:w-5 xs:h-5 sm:w-auto sm:h-auto flex items-center justify-center">
+                {icon}
+              </div>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <h3 className="text-gray-400 text-xs xs:text-xs sm:text-sm font-medium mb-1 xs:mb-1.5 sm:mb-2 uppercase tracking-wider leading-tight">
+              {label}
+            </h3>
+            {typeof value === "string" || typeof value === "number" ? (
+              <p
+                className={`text-sm xs:text-base sm:text-lg font-medium xs:font-semibold break-words leading-tight ${
+                  valueClassName || className
+                }`}
+              >
+                {value}
+              </p>
+            ) : (
+              <div
+                className={`text-sm xs:text-base sm:text-lg font-medium xs:font-semibold break-words leading-tight ${
+                  valueClassName || className
+                }`}
+              >
+                {value}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ViewMenu() {
+  const { setLoading } = useGlobalLoading();
   // --- Offline/Cache State ---
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const { role } = useAuth();
@@ -58,8 +148,11 @@ export default function ViewMenu() {
     const cacheKey = menuId ? `cached_menu_${menuId}` : null;
     setOfflineError(null);
     setIsLoading(true);
+    setLoading(true);
     if (!menuId) {
-      router.push(routes.menu);
+      setIsLoading(false);
+      setLoading(false);
+      setOfflineError("No menu selected.");
       return;
     }
     if (!isOnline) {
@@ -69,85 +162,40 @@ export default function ViewMenu() {
           try {
             const parsed = JSON.parse(cached);
             setMenu(parsed);
+            setOfflineError(null);
           } catch (e) {
             setMenu(null);
+            setOfflineError("Failed to parse cached menu data.");
           }
         } else {
           setMenu(null);
-          setOfflineError("Offline and no cached menu data available.");
+          setOfflineError("No cached menu data available. Please connect to the internet to load menu.");
         }
       } else {
         setMenu(null);
-        setOfflineError("Offline and no cached menu data available.");
+        setOfflineError("No menu selected.");
       }
       setIsLoading(false);
+      setLoading(false);
       return;
     }
-    // Online: fetch from API
-    const fetchMenu = async () => {
-      try {
-        const data = await fetchMenuById(Number(menuId));
+    fetchMenuById(Number(menuId))
+      .then((data) => {
         setMenu(data);
-        // Cache menu data
+        setOfflineError(null);
         if (cacheKey) {
           localStorage.setItem(cacheKey, JSON.stringify(data));
         }
-      } catch (error) {
-        console.error("Error fetching menu:", error);
-        router.push(routes.menu);
-      } finally {
+      })
+      .catch(() => {
+        setMenu(null);
+        setOfflineError("Failed to load menu data.");
+      })
+      .finally(() => {
         setIsLoading(false);
-      }
-    };
-    fetchMenu();
-  }, [menuId, router, fetchMenuById, isOnline]);
-
-  function formatDateOnly(date?: string) {
-    if (!date) return "-";
-    return new Date(date).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  }
-
-  function formatDateTime(date?: string) {
-    if (!date) return "-";
-    try {
-      return new Date(date).toLocaleString("en-PH", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
+        setLoading(false);
       });
-    } catch (error) {
-      return "Invalid Date";
-    }
-  }
-
-  function formatRelativeTime(date?: string) {
-    if (!date) return "-";
-    try {
-      const now = new Date();
-      const past = new Date(date);
-      const diffMs = now.getTime() - past.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMins / 60);
-      const diffDays = Math.floor(diffHours / 24);
-
-      if (diffMins < 1) return "Just now";
-      if (diffMins < 60) return `${diffMins} min ago`;
-      if (diffHours < 24)
-        return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-      if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
-
-      return formatDateOnly(date);
-    } catch (error) {
-      return "Invalid Date";
-    }
-  }
+  }, [menuId, isOnline, fetchMenuById, setLoading]);
 
   if (offlineError) {
     return (
@@ -231,7 +279,7 @@ export default function ViewMenu() {
                     have been removed or the link is invalid.
                   </div>
                   <button
-                    onClick={() => router.push(routes.menu)}
+                    onClick={() => router.back()}
                     className="group flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 py-2 sm:px-6 sm:py-3 rounded-lg font-semibold transition-all duration-300 cursor-pointer text-xs sm:text-base shadow-lg hover:shadow-yellow-400/25 mx-auto"
                   >
                     <FiArrowLeft className="group-hover:-translate-x-1 transition-transform duration-300" />
@@ -571,15 +619,9 @@ export default function ViewMenu() {
               <div className="flex flex-col xs:flex-row flex-wrap justify-end gap-2 xs:gap-3 sm:gap-4 pt-2 sm:pt-4 md:pt-6 border-t border-gray-700/50">
                 {["Owner", "General Manager", "Store Manager"].includes(
                   role || ""
-                ) && (
-                  <button disabled={!isOnline} title={!isOnline ? 'You can use this when online.' : ''} onClick={() => router.push(routes.UpdateMenu(menu.menu_id))} className="group flex items-center justify-center gap-1.5 xs:gap-2 px-3 xs:px-4 sm:px-5 md:px-6 py-2 xs:py-2.5 sm:py-3 rounded-lg xs:rounded-xl border-2 border-yellow-400/50 text-yellow-400 hover:border-yellow-400 hover:bg-yellow-400/10 hover:text-yellow-300 font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto order-2 xs:order-1">
-                    <FiEdit3 className="w-4 h-4 sm:w-5 sm:h-5 group-hover:rotate-12 transition-transform duration-300" />
-                    <span className="hidden sm:inline">Edit Menu Item</span>
-                    <span className="sm:hidden">Edit</span>
-                  </button>
-                )}
+                ) && null}
                 <button
-                  onClick={() => router.push(routes.menu)}
+                  onClick={() => router.back()}
                   className="group flex items-center justify-center gap-1.5 xs:gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-3 xs:px-4 sm:px-5 md:px-6 py-2 xs:py-2.5 sm:py-3 rounded-lg xs:rounded-xl font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto shadow-lg hover:shadow-yellow-400/25 order-1 xs:order-2"
                 >
                   <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform duration-300" />
@@ -589,62 +631,11 @@ export default function ViewMenu() {
               </div>
             </div>
           </div>
+
         </main>
       </ResponsiveMain>
     </section>
   );
 }
 
-function ItemRow({
-  icon,
-  label,
-  value,
-  className = "text-white",
-  valueClassName,
-  fullWidth = false,
-}: {
-  icon?: React.ReactNode;
-  label: string;
-  value: string | React.ReactNode;
-  className?: string;
-  valueClassName?: string;
-  fullWidth?: boolean;
-}) {
-  return (
-    <div className={`group ${fullWidth ? "col-span-full" : ""}`}>
-      <div className="bg-gray-800/30 backdrop-blur-sm rounded-lg xs:rounded-xl p-3 xs:p-4 sm:p-5 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-300 h-full">
-        <div className="flex items-start gap-2 xs:gap-3">
-          {icon && (
-            <div className="flex-shrink-0 mt-0.5 xs:mt-1">
-              <div className="w-4 h-4 xs:w-5 xs:h-5 sm:w-auto sm:h-auto flex items-center justify-center">
-                {icon}
-              </div>
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <h3 className="text-gray-400 text-xs xs:text-xs sm:text-sm font-medium mb-1 xs:mb-1.5 sm:mb-2 uppercase tracking-wider leading-tight">
-              {label}
-            </h3>
-            {typeof value === "string" || typeof value === "number" ? (
-              <p
-                className={`text-sm xs:text-base sm:text-lg font-medium xs:font-semibold break-words leading-tight ${
-                  valueClassName || className
-                }`}
-              >
-                {value}
-              </p>
-            ) : (
-              <div
-                className={`text-sm xs:text-base sm:text-lg font-medium xs:font-semibold break-words leading-tight ${
-                  valueClassName || className
-                }`}
-              >
-                {value}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+

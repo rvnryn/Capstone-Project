@@ -6,6 +6,8 @@ import os
 # Supabase URL and API Key
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
+if SUPABASE_URL and not SUPABASE_URL.startswith("http"):
+    SUPABASE_URL = "https://" + SUPABASE_URL
 SUPABASE_API_KEY = os.getenv("SUPABASE_KEY")
 
 async def login_user(email: str, password: str):

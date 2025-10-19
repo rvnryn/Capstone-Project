@@ -43,12 +43,22 @@ export default function UserManagement() {
   const [passwordError, setPasswordError] = useState("");
 
 
+  // Offline/online detection
+  const [isOffline, setIsOffline] = useState(false);
   useEffect(() => {
-    // Robust offline/cached loading logic
-    const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
-    const cachedUsers = localStorage.getItem("cached_users");
+    const updateOnlineStatus = () => setIsOffline(typeof window !== "undefined" && !window.navigator.onLine);
+    updateOnlineStatus();
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+    };
+  }, []);
+  useEffect(() => {
     setLoading(true);
-    if (isCompletelyOffline) {
+    if (isOffline) {
+      const cachedUsers = localStorage.getItem("cached_users");
       if (cachedUsers) {
         try {
           const parsed = JSON.parse(cachedUsers);
@@ -83,7 +93,7 @@ export default function UserManagement() {
       .finally(() => {
         setLoading(false);
       });
-  }, [listUsers]);
+  }, [listUsers, isOffline]);
 
   // Refresh handler for the refresh button
   const handleRefresh = async () => {
@@ -152,6 +162,24 @@ export default function UserManagement() {
   const isFilteredOrSorted =
     sortConfig.key !== "" || (searchTerm && searchTerm.trim() !== "");
 
+  // Show offline error if offline and no cached users
+  if (isOffline && (!users || users.length === 0)) {
+    return (
+      <section className="text-white font-poppins">
+        <NavigationBar showDeleteModal={showDeleteModal} showPasswordModal={showPasswordModal} />
+        <ResponsiveMain>
+          <main className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="bg-gradient-to-br from-gray-900/95 to-black/95 border border-red-400/30 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+              <h2 className="text-red-400 text-2xl font-bold mb-2">Offline Mode</h2>
+              <p className="text-gray-300 mb-4">No cached user data available. Please reconnect to the internet to view users.</p>
+            </div>
+          </main>
+        </ResponsiveMain>
+      </section>
+    );
+  }
+  // Helper for disabling actions when offline
+  const disableActions = isOffline;
   return (
     <section className="text-white font-poppins">
       <NavigationBar
@@ -191,6 +219,7 @@ export default function UserManagement() {
                     <button
                       type="button"
                       onClick={handleRefresh}
+                      disabled={disableActions}
                       className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
                     >
                       <FiRefreshCw className="text-xs xs:text-sm" />
@@ -199,6 +228,7 @@ export default function UserManagement() {
 
                     <button
                       onClick={() => router.push(routes.addUsers)}
+                      disabled={disableActions}
                       className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
                     >
                       <FaPlus className="text-xs xs:text-sm" />
@@ -344,6 +374,7 @@ export default function UserManagement() {
                                       routes.UpdateUsers(String(user.user_id))
                                     );
                                   }}
+                                  disabled={disableActions}
                                   className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-400 hover:text-yellow-300 transition-all duration-200 cursor-pointer border border-yellow-400/20 hover:border-yellow-400/40"
                                   title="Edit"
                                   aria-label="Edit user"
@@ -361,6 +392,7 @@ export default function UserManagement() {
                                     );
                                     setShowDeleteModal(true);
                                   }}
+                                  disabled={disableActions}
                                   className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-all duration-200 cursor-pointer border border-red-500/20 hover:border-red-500/40"
                                   title="Delete"
                                   aria-label="Delete user"

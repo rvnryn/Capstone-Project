@@ -34,13 +34,17 @@ app.add_middleware(
     allow_origins=[
         "https://www.cardiacdelights.app",
         "https://cardiacdelights.app",
+        "https://api.cardiacdelights.app",
+        "http://api.cardiacdelights.app",
         "http://localhost:3000",
+        "https://localhost:3000"
     ],
     allow_origin_regex=r"https://.*\.cardiacdelights\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
+    max_age=3600,
 )
 
 limiter = Limiter(key_func=get_remote_address)

@@ -27,15 +27,10 @@ import io
 import gzip
 from app.supabase import POSTGRES_URL
 import traceback
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_API_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_BUCKET = (
-    "cardiacdelights-backup"  # Ensure this bucket exists in Supabase Storage
-)
+# Import SUPABASE_URL and SUPABASE_API_KEY directly from supabase.py (always patched with protocol)
+from app.supabase import SUPABASE_URL, SUPABASE_API_KEY
+SUPABASE_BUCKET = "cardiacdelights-backup"  # Ensure this bucket exists in Supabase Storage
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
 
 BACKUP_DIR = str(pathlib.Path.home() / "Documents" / "cardiacdelights_backups")

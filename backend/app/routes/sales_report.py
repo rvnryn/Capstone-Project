@@ -46,7 +46,7 @@ async def get_weekly_sales_forecast(
         where_clause = " AND ".join(filters)
         query = text(
             f"""
-            SELECT DATE_TRUNC('week', created_at::timestamp)::date as week, SUM(subtotal) as total_sales
+            SELECT DATE_TRUNC('week', created_at::timestamp)::date as week, SUM(total_price) as total_sales
             FROM order_items
             WHERE {where_clause}
             GROUP BY week
@@ -244,8 +244,8 @@ async def get_sales_summary(
             SELECT 
                 COUNT(DISTINCT order_id) as total_orders,
                 SUM(quantity) as total_items_sold,
-                SUM(subtotal) as total_revenue,
-                AVG(subtotal) as avg_order_value,
+                SUM(total_price) as total_revenue,
+                AVG(total_price) as avg_order_value,
                 COUNT(DISTINCT item_name) as unique_items_sold
             FROM order_items 
             WHERE DATE(created_at) BETWEEN DATE(:start_date) AND DATE(:end_date)
@@ -330,7 +330,7 @@ async def get_sales_by_item(
                 item_name,
                 category,
                 SUM(quantity) as total_quantity,
-                SUM(subtotal) as total_revenue,
+                SUM(total_price) as total_revenue,
                 AVG(unit_price) as avg_price,
                 COUNT(DISTINCT order_id) as orders_count
             FROM order_items 
@@ -407,7 +407,7 @@ async def get_sales_by_date(
                 {date_format} as period,
                 COUNT(DISTINCT order_id) as orders_count,
                 SUM(quantity) as total_items,
-                SUM(subtotal) as total_revenue
+                SUM(total_price) as total_revenue
             FROM order_items 
             WHERE DATE(created_at) BETWEEN :start_date AND :end_date
             GROUP BY {date_format}
@@ -467,12 +467,12 @@ async def get_top_performers(
             end_date = datetime.utcnow().strftime("%Y-%m-%d")
 
         metric_map = {
-            "revenue": "SUM(subtotal)",
+            "revenue": "SUM(total_price)",
             "quantity": "SUM(quantity)",
             "orders": "COUNT(DISTINCT order_id)",
         }
 
-        order_by = metric_map.get(metric, "SUM(subtotal)")
+        order_by = metric_map.get(metric, "SUM(total_price)")
 
         query = text(
             f"""
@@ -480,7 +480,7 @@ async def get_top_performers(
                 item_name,
                 category,
                 SUM(quantity) as total_quantity,
-                SUM(subtotal) as total_revenue,
+                SUM(total_price) as total_revenue,
                 COUNT(DISTINCT order_id) as orders_count,
                 AVG(unit_price) as avg_price
             FROM order_items 
@@ -539,7 +539,7 @@ async def get_hourly_sales(
                 EXTRACT(HOUR FROM created_at) as hour,
                 COUNT(DISTINCT order_id) as orders_count,
                 SUM(quantity) as total_items,
-                SUM(subtotal) as total_revenue
+                SUM(total_price) as total_revenue
             FROM order_items 
             WHERE DATE(created_at) = :date
             GROUP BY EXTRACT(HOUR FROM created_at)
@@ -586,8 +586,8 @@ async def get_sales_comparison(
             SELECT 
                 COUNT(DISTINCT order_id) as total_orders,
                 SUM(quantity) as total_items,
-                SUM(subtotal) as total_revenue,
-                AVG(subtotal) as avg_order_value
+                SUM(total_price) as total_revenue,
+                AVG(total_price) as avg_order_value
             FROM order_items 
             WHERE DATE(created_at) BETWEEN :start_date AND :end_date
         """

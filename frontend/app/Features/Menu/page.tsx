@@ -96,7 +96,6 @@ const Menu: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
-  // Fetch menu data with React Query
   // Patch: Use cached data when offline, and show offline message if no cache
   const [offlineMenu, setOfflineMenu] = useState<MenuItemType[] | null>(null);
   const [offlineError, setOfflineError] = useState<string | null>(null);
@@ -108,8 +107,18 @@ const Menu: React.FC = () => {
   } = useQuery({
     queryKey: ["menu"],
     queryFn: async () => {
-      if (typeof window !== "undefined" && !navigator.onLine) {
-        try {
+      // Try to fetch from network
+      try {
+        const items = await fetchMenu();
+        if (typeof window !== "undefined") {
+          localStorage.setItem("menuCache", JSON.stringify(items));
+        }
+        setOfflineMenu(null);
+        setOfflineError(null);
+        return items;
+      } catch (e) {
+        // On error, fallback to cache
+        if (typeof window !== "undefined") {
           const cached = localStorage.getItem("menuCache");
           if (cached) {
             const parsed = JSON.parse(cached);
@@ -121,20 +130,11 @@ const Menu: React.FC = () => {
             setOfflineError("No cached menu data available. Please connect to the internet to load menu.");
             return [];
           }
-        } catch (e) {
-          setOfflineMenu(null);
-          setOfflineError("Failed to load cached menu data.");
-          return [];
         }
+        setOfflineMenu(null);
+        setOfflineError("Failed to load cached menu data.");
+        return [];
       }
-      // Online: fetch and cache
-      const items = await fetchMenu();
-      if (typeof window !== "undefined") {
-        localStorage.setItem("menuCache", JSON.stringify(items));
-      }
-      setOfflineMenu(null);
-      setOfflineError(null);
-      return items;
     },
     refetchOnWindowFocus: true,
   });
@@ -144,6 +144,29 @@ const Menu: React.FC = () => {
     (isLoading || isFetching) &&
     !offlineError &&
     (typeof window === "undefined" || navigator.onLine || !!localStorage.getItem("menuCache"));
+
+  // Patch: Always reconstruct icons/actions from code when offline
+  let displayMenu: MenuItemType[] = [];
+  if (isOnline) {
+    displayMenu = menuData;
+  } else if (offlineMenu) {
+    displayMenu = offlineMenu.map((item) => ({
+      ...item,
+      // Add any computed properties here if needed
+    }));
+  } else {
+    displayMenu = menuData;
+  }
+
+  // If offline and no cached data, show a clear message
+  if (!isOnline && (!offlineMenu || offlineMenu.length === 0)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-yellow-400">
+        <h2>No cached menu data available.</h2>
+        <p>Connect to the internet to load menu data.</p>
+      </div>
+    );
+  }
 
   const handleRefresh = () => {
     console.log("Refreshing inventory table...");
@@ -304,24 +327,25 @@ const Menu: React.FC = () => {
                       type="button"
                       onClick={handleRefresh}
                       className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                      disabled={!isOnline}
                     >
                       <FiRefreshCw className="text-xs xs:text-sm" />
                       <span className="sm:inline">Refresh</span>
                     </button>
 
-                    {/* Add Item Button */}
+                    {/* Add Item Button - disabled offline */}
                     {["Owner", "General Manager", "Store Manager"].includes(
                       role || ""
                     ) && (
                       <button
                         onClick={() => router.push(routes.addMenu)}
                         className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                        disabled={!isOnline}
                       >
                         <FaPlus className="text-xs xs:text-sm" />
                         <span className="sm:inline">Add Menu</span>
                       </button>
                     )}
-                      <button disabled={!isOnline} title={!isOnline ? 'You can use this when online.' : ''}>Edit</button>
                   </nav>
                 </div>
                 <section

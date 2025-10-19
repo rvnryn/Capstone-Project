@@ -73,14 +73,20 @@ export function useMenuAPI() {
   // Fetch all menu items
   const fetchMenu = useCallback(async (): Promise<MenuItem[]> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/menu`, {
+      console.log("[fetchMenu] Called. API_BASE_URL:", API_BASE_URL);
+      const url = `${API_BASE_URL}/api/menu`;
+      console.log("[fetchMenu] Fetching:", url);
+      const response = await fetch(url, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      return await response.json();
+      const data = await response.json();
+      console.log("[fetchMenu] Response:", data);
+      return data;
     } catch (error: any) {
-      console.error("Failed to fetch menu:", error);
+      // Silently handle network errors (offline mode)
+      console.warn("[fetchMenu] Failed to fetch menu (offline or network error)", error);
       return [];
     }
   }, [API_BASE_URL]);

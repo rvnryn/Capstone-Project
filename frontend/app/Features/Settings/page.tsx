@@ -1,9 +1,7 @@
 "use client";
 
 import NavigationBar from "@/app/components/navigation/navigation";
-import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 import { useAuth } from "@/app/context/AuthContext";
 import { routes } from "@/app/routes/routes";
 import {
@@ -14,7 +12,7 @@ import {
   FaChevronRight,
   FaCog,
   FaBoxes,
-} from "react-icons/fa"; // Import fitting icons
+} from "react-icons/fa";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import React from "react";
 import { HiSparkles } from "react-icons/hi";
@@ -32,23 +30,15 @@ const Settings = () => {
       window.removeEventListener("offline", handleOffline);
     };
   }, []);
-  
+
   const { role } = useAuth();
-  // Patch: Prevent redirect to login when offline and cached user exists
-  useEffect(() => {
-    if (typeof window !== "undefined" && !navigator.onLine) {
-      const cachedUser = localStorage.getItem("cachedUser");
-      if (!cachedUser) {
-        window.location.href = "/login";
-      }
-    }
-  }, []);
   const router = useRouter();
   const Nav_user = () => router.push(routes.user_management_settings);
   const Nav_notification = () => router.push(routes.notification_settings);
   const Nav_inventory = () => router.push(routes.inventory_settings);
   const Nav_backup = () => router.push(routes.backup_restore_settings);
 
+  // Patch: Always reconstruct icons/actions from code when offline
   const settingsButtons = [
     {
       title: "User Management",
@@ -63,7 +53,7 @@ const Settings = () => {
         shadow: "hover:shadow-yellow-400/30",
       },
       badge: "Accounts",
-      role: "",
+      allowedRoles: ["Owner", "General Manager"],
     },
     {
       title: "Notification Settings",
@@ -78,6 +68,7 @@ const Settings = () => {
         shadow: "hover:shadow-blue-400/30",
       },
       badge: "Alerts",
+      allowedRoles: ["Owner", "General Manager", "Store Manager", "Assistant Store Manager"],
     },
     {
       title: "Inventory Settings",
@@ -92,6 +83,7 @@ const Settings = () => {
         shadow: "hover:shadow-green-400/30",
       },
       badge: "Stock",
+      allowedRoles: ["Owner", "General Manager", "Store Manager", "Assistant Store Manager"],
     },
     {
       title: "Backup & Restore",
@@ -106,9 +98,13 @@ const Settings = () => {
         shadow: "hover:shadow-orange-400/30",
       },
       badge: "Maintenance",
-      role: "",
+      allowedRoles: ["Owner", "General Manager"],
     },
   ];
+
+  // If offline and using cached settings, reconstruct icons/actions
+  // (Assuming you cache only serializable data, not React elements)
+  // If you ever use cachedSettings, reconstruct icons/actions here
 
   return (
     <section>
@@ -138,7 +134,7 @@ const Settings = () => {
                   </div>
                 </div>
                 <p className="text-gray-400 text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl max-w-xs xs:max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto leading-relaxed px-1 xs:px-2 sm:px-3 md:px-0 font-medium">
-                  Customize and control your restaurant’s system settings,
+                  Customize and control your restaurant's system settings,
                   notifications, user accounts, and data backups from one place.
                 </p>
               </div>
@@ -146,7 +142,7 @@ const Settings = () => {
               {/* Cards Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-5 lg:gap-6 xl:gap-8">
                 {settingsButtons
-                  .filter((button) => !button.role || button.role === role)
+                  .filter((button) => !button.allowedRoles || button.allowedRoles.includes(role || ""))
                   .map((button, index) => {
                     // Define colors based on report type
                     const getReportColors = (title: string) => {
@@ -270,10 +266,10 @@ const Settings = () => {
                       <div
                         key={button.title}
                         onClick={button.action}
-                        className={`group relative overflow-hidden bg-gradient-to-r ${button.color} ${button.hoverColor} 
+                        className={`group relative overflow-hidden bg-gradient-to-r ${button.color} ${button.hoverColor}
                                 rounded-lg xs:rounded-xl sm:rounded-2xl cursor-pointer transform hover:scale-[1.01] sm:hover:scale-[1.02] lg:hover:scale-[1.03]
                                 transition-all duration-300 ${colors.shadow} ${colors.border}
-                                min-h-[90px] xs:min-h-[100px] sm:min-h-[120px] md:min-h-[140px] lg:min-h-[160px] xl:min-h-[180px] 
+                                min-h-[90px] xs:min-h-[100px] sm:min-h-[120px] md:min-h-[140px] lg:min-h-[160px] xl:min-h-[180px]
                                 touch-manipulation active:scale-[0.98]`}
                         style={{
                           animationDelay: `${index * 100}ms`,
@@ -293,7 +289,7 @@ const Settings = () => {
                           {/* Icon Container */}
                           <div className="flex-shrink-0 order-1">
                             <div
-                              className={`p-1.5 xs:p-2 sm:p-3 md:p-4 lg:p-3 xl:p-4 ${colors.iconBg} backdrop-blur-sm rounded-md xs:rounded-lg sm:rounded-xl border ${colors.iconBorder} 
+                              className={`p-1.5 xs:p-2 sm:p-3 md:p-4 lg:p-3 xl:p-4 ${colors.iconBg} backdrop-blur-sm rounded-md xs:rounded-lg sm:rounded-xl border ${colors.iconBorder}
                                     ${colors.iconHoverBg} ${colors.iconHoverBorder} transition-all duration-300 group-hover:scale-105 sm:group-hover:scale-110 group-hover:shadow-lg ${colors.arrowShadow}`}
                             >
                               <div
@@ -329,7 +325,7 @@ const Settings = () => {
                           {/* Arrow Icon */}
                           <div className="flex-shrink-0 order-2 sm:order-3 lg:order-2 xl:order-3 self-end sm:self-center lg:self-end xl:self-center">
                             <div
-                              className={`p-1 xs:p-1.5 sm:p-2 md:p-3 lg:p-2 xl:p-3 ${colors.iconBg} backdrop-blur-sm rounded-full border ${colors.iconBorder} 
+                              className={`p-1 xs:p-1.5 sm:p-2 md:p-3 lg:p-2 xl:p-3 ${colors.iconBg} backdrop-blur-sm rounded-full border ${colors.iconBorder}
                                     ${colors.iconHoverBg} group-hover:translate-x-1 sm:group-hover:translate-x-2 group-hover:scale-105 sm:group-hover:scale-110 transition-all duration-300 group-hover:shadow-lg ${colors.arrowShadow}`}
                             >
                               <FaChevronRight
@@ -341,7 +337,7 @@ const Settings = () => {
 
                         {/* Enhanced Hover Overlay */}
                         <div
-                          className={`absolute inset-0 bg-gradient-to-r from-transparent to-transparent 
+                          className={`absolute inset-0 bg-gradient-to-r from-transparent to-transparent
                                 ${colors.hoverOverlay} transition-all duration-300`}
                         ></div>
 

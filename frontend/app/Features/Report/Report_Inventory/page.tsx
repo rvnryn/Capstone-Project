@@ -166,7 +166,8 @@ export default function ReportInventory() {
   const load = useCallback(async () => {
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const logs = await fetchLogs(today);
+      // Fetch all logs (not just today's) so we can show historical data for "All Time"
+      const logs = await fetchLogs();
       const token =
         typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const masterResponse = await fetch("/api/inventory", {
@@ -201,6 +202,27 @@ export default function ReportInventory() {
           };
         })
       );
+      // Map logs (inventory_log) into InventoryItem shape and keep as pastInventory
+      // Exclude any logs that have the same date as 'today' to avoid duplicate rows
+      if (Array.isArray(logs)) {
+        const mappedPast = logs
+          .map((log: any) => ({
+            id: log.item_id || log.id,
+            name: log.item_name || log.name || "Unknown Item",
+            inStock: typeof log.remaining_stock === "number" ? log.remaining_stock : parseInt(log.remaining_stock || "0", 10),
+            wastage: typeof log.wastage === "number" ? log.wastage : parseInt(log.wastage || "0", 10),
+            stock: log.status || "Unknown",
+            report_date: log.action_date ? new Date(log.action_date).toISOString().slice(0, 10) : "",
+            category: log.category || "(historical)",
+            expiration_date: log.expiration_date || null,
+            batch_id: log.batch_date ? new Date(log.batch_date).toLocaleDateString() : (log.batch_id || null),
+            created_at: log.action_date || null,
+          }))
+          .filter((i: any) => i.report_date && i.report_date !== today);
+        setPastInventory(mappedPast);
+      } else {
+        setPastInventory([]);
+      }
       if ((!logs || logs.length === 0) && user && user.user_id) {
         const logEntries = masterInventory
           .filter((item: any) => item.item_id != null)
@@ -302,13 +324,48 @@ export default function ReportInventory() {
   useEffect(() => {
     load();
 
+    // Helper to reload spoilage summary/items
+    const reloadSpoilage = async () => {
+      let start = startDate;
+      let end = endDate;
+      if (!start && !end && period !== "all") {
+        const now = dayjs();
+        if (period === "weekly") {
+          start = now.subtract(7, "day").format("YYYY-MM-DD");
+          end = now.format("YYYY-MM-DD");
+        } else if (period === "monthly") {
+          start = now.startOf("month").format("YYYY-MM-DD");
+          end = now.format("YYYY-MM-DD");
+        } else if (period === "yearly") {
+          start = now.startOf("year").format("YYYY-MM-DD");
+          end = now.format("YYYY-MM-DD");
+        }
+      }
+      const data = await fetchSpoilageSummary(start, end);
+      if (Array.isArray(data)) {
+        setSpoilageItems(data);
+      } else {
+        setSpoilageItems([]);
+      }
+      let total = 0;
+      if (Array.isArray(data)) {
+        total = data.reduce((sum, rec) => sum + (rec.quantity_spoiled || 0), 0);
+      } else if (typeof data === "number") {
+        total = data;
+      } else if (data && typeof data.total_quantity_spoiled === "number") {
+        total = data.total_quantity_spoiled;
+      }
+      setSpoilageSummary(total);
+    };
+
     const channel = supabase
       .channel("inventory_changes")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "inventory" },
-        (payload) => {
-          load();
+        async (payload) => {
+          await load();
+          await reloadSpoilage();
         }
       )
       .subscribe();
@@ -316,7 +373,7 @@ export default function ReportInventory() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [load]);
+  }, [load, fetchSpoilageSummary, startDate, endDate, period]);
 
   useEffect(() => {
     async function loadAvailableHistoricalDates() {
@@ -421,7 +478,28 @@ export default function ReportInventory() {
   const dataSource = useMemo(() => {
     // Use offlineData if offline, otherwise normal logic
     const baseInventory = isOffline && offlineData ? offlineData : inventory;
-    const sourceData = isHistoricalMode ? historicalInventory : baseInventory;
+    // When not in historical mode and period is 'all', include pastInventory (historical logs)
+    let sourceData = isHistoricalMode ? historicalInventory : baseInventory;
+    if (!isHistoricalMode && period === "all" && Array.isArray(pastInventory) && pastInventory.length > 0) {
+      // Merge pastInventory and baseInventory, preferring baseInventory for items with the same id+report_date
+      const combined = [...pastInventory, ...baseInventory];
+      // Build a map to dedupe by id+report_date (prefer later entries from baseInventory)
+      const map = new Map<string, any>();
+      for (const row of combined) {
+        const key = `${row.id || "-"}::${row.report_date || "-"}`;
+        // If map already has the key and this row comes from baseInventory (live), overwrite
+        if (map.has(key)) {
+          const existing = map.get(key);
+          // Heuristic: if existing.created_at is older than row.created_at, replace
+          const existingCreated = existing.created_at ? new Date(existing.created_at).getTime() : 0;
+          const rowCreated = row.created_at ? new Date(row.created_at).getTime() : 0;
+          if (rowCreated >= existingCreated) map.set(key, row);
+        } else {
+          map.set(key, row);
+        }
+      }
+      sourceData = Array.from(map.values());
+    }
     const mainData =
       period !== "all"
         ? sourceData.filter((item) => matchesPeriod(item.report_date))
@@ -455,11 +533,11 @@ export default function ReportInventory() {
     spoilageItems,
   ]);
 
-  const dates = useMemo(
-    () =>
-      [...new Set([...inventory].map((i) => i.report_date))].filter(Boolean),
-    [inventory]
-  );
+  const dates = useMemo(() => {
+    const invDates = inventory.map((i) => i.report_date).filter(Boolean);
+    const pastDates = pastInventory.map((i) => i.report_date).filter(Boolean);
+    return [...new Set([...invDates, ...pastDates])].filter(Boolean);
+  }, [inventory, pastInventory]);
 
   // Filter helpers
   const filterByCategory = (item: InventoryItem, category: string) => {
@@ -721,18 +799,20 @@ export default function ReportInventory() {
     setShowPopup(false);
   };
 
+
+  // Clear all filters at once
   const handleClear = () => {
-    setSearchQuery("");
-    setCategoryFilter("");
-    setPeriod("all"); // 💡 Smart Balance: Reset to all time
-    setStockStatusFilter("");
-    setExpirationFilter("");
-    setStartDate("");
-    setEndDate("");
-    setReportDate("");
-    setSortConfig({ key: "", direction: "asc" });
+    clearSearch();
+    clearCategory();
+    clearPeriod();
+    clearStockStatus();
+    clearExpiration();
+    clearDateRange();
+    clearReportDate();
+    clearSort();
   };
 
+  // Individual clear functions for each filter
   const clearSearch = () => {
     setSearchQuery("");
   };
@@ -741,13 +821,10 @@ export default function ReportInventory() {
     setCategoryFilter("");
   };
 
-  // clearDate removed (no reportDate)
-
   const clearPeriod = () => {
     setPeriod("all"); // 💡 Smart Balance: Reset to all time
   };
 
-  // Clear functions for new filters
   const clearStockStatus = () => {
     setStockStatusFilter("");
   };
@@ -763,6 +840,10 @@ export default function ReportInventory() {
 
   const clearReportDate = () => {
     setReportDate("");
+  };
+
+  const clearSort = () => {
+    setSortConfig({ key: "", direction: "asc" });
   };
 
   const requestSort = (key: string) => {

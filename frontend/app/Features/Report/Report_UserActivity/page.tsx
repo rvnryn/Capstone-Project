@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useGlobalLoading } from "@/app/context/GlobalLoadingContext";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
@@ -56,8 +57,12 @@ const GoogleSheetIntegration = ({
 };
 
 const Report_UserActivity = () => {
+  const { setLoading } = useGlobalLoading();
   const { isMenuOpen, isMobile } = useNavigation();
   const [searchQuery, setSearchQuery] = useState("");
+  useEffect(() => {
+    setLoading(false); // Reset global loading overlay on mount
+  }, [setLoading]);
   const [showPopup, setShowPopup] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -86,37 +91,41 @@ const Report_UserActivity = () => {
   ];
 
   const { logs, loading: apiLoading, error, fetchLogs } = useUserActivityLogAPI();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLocalLoading] = useState(true);
   const [offlineError, setOfflineError] = useState<string | null>(null);
 
   useEffect(() => {
     // Robust offline/cached loading logic
     const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
-    setLoading(true);
-    setOfflineError(null);
     const cacheKey = "cached_user_activity_logs";
     const params: any = {};
     if (reportDate) params.report_date = reportDate;
     if (role) params.role = role;
+
     if (isCompletelyOffline) {
       const cached = localStorage.getItem(cacheKey);
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
           setUserActivityData(parsed);
+          setOfflineError(null);
         } catch (e) {
           setUserActivityData([]);
+          setOfflineError("Failed to parse cached data.");
         }
       } else {
         setUserActivityData([]);
         setOfflineError("Offline and no cached user activity logs available.");
       }
-      setLoading(false);
+      setLocalLoading(false);
       return;
     }
+
     // Online: fetch from API
+    setOfflineError(null);
+    setLocalLoading(true);
     fetchLogs(params);
-    setLoading(apiLoading);
+
     // Subscribe to changes as before
     const channel = supabase
       .channel("user_activity_log_changes")
@@ -134,7 +143,7 @@ const Report_UserActivity = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [reportDate, role, fetchLogs, apiLoading]);
+  }, [reportDate, role]);
 
   useEffect(() => {
     setUserActivityData(logs);
@@ -143,11 +152,30 @@ const Report_UserActivity = () => {
     if (!isCompletelyOffline && logs && Array.isArray(logs)) {
       localStorage.setItem("cached_user_activity_logs", JSON.stringify(logs));
     }
-    setLoading(false);
+    // Only set loading false if not already offline error
+    setLocalLoading(false);
   }, [logs]);
 
-  // Always use userActivityData as the data source
-  const dataSource = useMemo(() => userActivityData, [userActivityData]);
+  // Always use cached data if offline, or last available data if online fetch fails
+  const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
+  const cachedLogs = typeof window !== "undefined" ? localStorage.getItem("cached_user_activity_logs") : null;
+  const displayLogs = isCompletelyOffline
+    ? (cachedLogs ? JSON.parse(cachedLogs) : [])
+    : userActivityData;
+
+  // If offline and no cached data, show a clear message
+  if (isCompletelyOffline && (!cachedLogs || JSON.parse(cachedLogs).length === 0)) {
+    // Ensure loading spinner is not shown
+    if (loading) setLocalLoading(false);
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-yellow-400">
+        <h2>No cached user activity logs available.</h2>
+        <p>Connect to the internet to load user activity logs.</p>
+      </div>
+    );
+  }
+
+  const dataSource = useMemo(() => displayLogs, [displayLogs]);
 
   function matchesPeriod(dateStr?: string) {
     if (period === "all" || !dateStr) return true;
@@ -182,7 +210,7 @@ const Report_UserActivity = () => {
 
   // Sorting functionality
   const filteredActivity = useMemo(() => {
-    const filtered = dataSource.filter((item) => {
+  const filtered = dataSource.filter((item: any) => {
       // Search query filter
       const matchesSearch = searchQuery
         ? Object.values(item)

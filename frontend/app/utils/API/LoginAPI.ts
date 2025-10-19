@@ -25,6 +25,18 @@ export async function loginUser(email: string, password: string) {
     const data = await response.json();
     if (data?.access_token) {
       localStorage.setItem("token", data.access_token);
+      // Save user and role for offline persistence
+      if (data?.user) {
+        // Ensure cachedUser always has an 'id' property
+        const cachedUser = {
+          ...data.user,
+          id: data.user.id || data.user.user_id || null,
+        };
+        localStorage.setItem("cachedUser", JSON.stringify(cachedUser));
+      }
+      if (data?.role) {
+        localStorage.setItem("cachedRole", data.role);
+      }
     }
     return data;
   } catch (error: any) {

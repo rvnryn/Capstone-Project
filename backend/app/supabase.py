@@ -12,22 +12,23 @@ load_dotenv()
 
 # Initialize Supabase client
 SUPABASE_URL = os.getenv("SUPABASE_URL")
+if SUPABASE_URL and not SUPABASE_URL.startswith("http"):
+    SUPABASE_URL = "https://" + SUPABASE_URL
 SUPABASE_API_KEY = os.getenv("SUPABASE_KEY")
-print(f"[DEBUG] SUPABASE_URL loaded: {SUPABASE_URL!r}")
 
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_API_KEY)
 
 
-# Create a PostgREST client (session argument not supported in your version)
+POSTGREST_URL = SUPABASE_URL + "/rest/v1"
 postgrest_client = SyncPostgrestClient(
-    SUPABASE_URL + "/rest/v1",
+    POSTGREST_URL,
     headers={
         "apikey": SUPABASE_API_KEY,
         "Authorization": f"Bearer {SUPABASE_API_KEY}"
     }
 )
-
+postgrest_client.session = httpx.Client(http2=False)
 
 # Patch the underlying PostgREST client to force HTTP/1.1 (fixes WinError 10035 on Windows)
 if hasattr(supabase, "postgrest"):
@@ -39,7 +40,6 @@ if hasattr(supabase, "postgrest"):
         if postgrest_url is not None:
             try:
                 supabase.postgrest.url = postgrest_url
-                print(f"[DEBUG] Patched postgrest.url: {supabase.postgrest.url!r}")
             except Exception as e:
                 print(f"[DEBUG] Could not set postgrest.url: {e}")
     except Exception as e:

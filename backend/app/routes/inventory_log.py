@@ -28,6 +28,7 @@ class InventoryLogEntry(BaseModel):
     wastage: int
     item_name: str
     batch_date: str  # will parse to datetime in route
+    expiration_date: Optional[str] = None  # ISO format string
 
 
 @router.put("/inventory-log")
@@ -72,17 +73,31 @@ async def put_inventory_log(
             # Ensure int types
             entry_data["remaining_stock"] = int(entry_data["remaining_stock"])
             entry_data["wastage"] = int(entry_data["wastage"])
+
+            # Automatically set status to 'Spoiled' if wastage > 0 and status is not already 'Spoiled'
+            if entry_data["wastage"] > 0 and entry_data["status"].lower() != "spoiled":
+                entry_data["status"] = "Spoiled"
+
+            # Parse expiration_date if present
+            expiration_dt = None
+            if entry_data.get("expiration_date"):
+                try:
+                    expiration_dt = datetime.datetime.fromisoformat(entry_data["expiration_date"].replace("Z", "+00:00"))
+                except Exception as e:
+                    print("Error parsing expiration_date:", entry_data["expiration_date"], e)
+                    expiration_dt = None
             await db.execute(
                 text(
                     """
-                INSERT INTO inventory_log (item_id, remaining_stock, action_date, user_id, status, wastage, item_name, batch_date)
-                VALUES (:item_id, :remaining_stock, :action_date, :user_id, :status, :wastage, :item_name, :batch_date)
+                INSERT INTO inventory_log (item_id, remaining_stock, action_date, user_id, status, wastage, item_name, batch_date, expiration_date)
+                VALUES (:item_id, :remaining_stock, :action_date, :user_id, :status, :wastage, :item_name, :batch_date, :expiration_date)
                 """
                 ),
                 {
                     **entry_data,
                     "action_date": action_date_dt.isoformat(),
                     "batch_date": batch_date_dt.isoformat(),
+                    "expiration_date": expiration_dt.isoformat() if expiration_dt else None,
                 },
             )
         await db.commit()

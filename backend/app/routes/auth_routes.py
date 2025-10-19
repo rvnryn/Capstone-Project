@@ -62,20 +62,28 @@ async def login(
         # Debug print
         print(f"Logging in user: {user_row}")
 
+        # Guard: identifier must be a valid email
+        if not identifier or "@" not in identifier:
+            print(f"[ERROR] Login failed: missing or invalid email for identifier: {identifier}")
+            raise HTTPException(status_code=400, detail="Login failed: missing or invalid email. Please check your username/email.")
+
         result = await login_user(identifier, login_req.password)
         if not result or "user" not in result:
             raise HTTPException(status_code=401, detail="Invalid login credentials")
 
         supabase_user_id = result.get("user", {}).get("id") or result.get("user_id")
         email = identifier
-        if supabase_user_id and email:
+        # Always update auth_id for the user who logged in (by username or email)
+        if supabase_user_id:
+            # Find user by email (should always exist at this point)
             stmt = select(User).where(User.email == email)
             result_user = await db.execute(stmt)
             user_obj = result_user.scalar_one_or_none()
             if user_obj:
-                user_obj.auth_id = supabase_user_id
-                db.add(user_obj)
-                await db.commit()
+                if not user_obj.auth_id or user_obj.auth_id != supabase_user_id:
+                    user_obj.auth_id = supabase_user_id
+                    db.add(user_obj)
+                    await db.commit()
 
         try:
             new_activity = UserActivityLog(
@@ -94,13 +102,18 @@ async def login(
         except Exception as e:
             print("Failed to record login activity:", e)
 
-        response_data = {
-            **result,
-            "email": identifier,
+        # Build user object for frontend (your app's user info)
+        app_user_obj = {
             "user_id": user_row.get("user_id"),
-            "name": user_row.get("name"),
-            "user_role": user_row.get("user_role"),
             "username": user_row.get("username"),
+            "name": user_row.get("name"),
+            "email": user_row.get("email"),
+            "user_role": user_row.get("user_role"),
+        }
+        response_data = {
+            "access_token": result.get("access_token"),
+            "user": app_user_obj,
+            "role": user_row.get("user_role"),
         }
         return response_data
     except HTTPException as e:
@@ -167,20 +180,23 @@ async def get_session(request: Request, db=Depends(get_db)):
     db_user = {
         "auth_id": user.auth_id,
         "user_id": user.user_id,
+        "username": user.username,
         "name": user.name,
         "email": user.email,
         "user_role": user.user_role,
     }
+    print("[DEBUG /auth/session] db_user:", db_user)
 
     # Build response: merge Supabase and DB info
     return {
-        "user": {
-            "id": db_user["auth_id"],
-            "user_id": db_user["user_id"],
-            "name": db_user.get("name") or name,
-            "email": db_user.get("email") or email,
+        'user': {
+            'id': user.id,
+            'user_id': db_user["user_id"],
+            'username': db_user["username"],
+            'name': db_user["name"],
+            'email': db_user["email"],
         },
-        "role": db_user["user_role"],
+        'role': db_user["user_role"]
     }
 
 
@@ -189,7 +205,9 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
     # Get token from Authorization header
     auth_header = request.headers.get("authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
+        # No token, but still return 200 OK for frontend logout
+        print("[LOGOUT] No token provided, returning 200 OK")
+        return {"message": "Logged out (no token provided)"}
     token = auth_header.split(" ")[1]
 
     # Validate token with Supabase
@@ -209,19 +227,23 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
 
     max_retries = 3
     backoff = 0.5
+    response = None
     for attempt in range(1, max_retries + 1):
         try:
             response = await _fetch_user_logout()
             break
         except (httpx.ReadTimeout, httpx.RequestError) as e:
+            print(f"Supabase auth fetch failed after {attempt} attempts: {e}")
             if attempt == max_retries:
-                print(f"Supabase auth fetch failed after {attempt} attempts: {e}")
-                raise HTTPException(status_code=503, detail="Auth provider timed out")
+                # Log error, but return 200 OK for frontend logout
+                return {"message": "Logged out (provider unavailable)"}
             await asyncio.sleep(backoff)
             backoff *= 2
 
-    if response.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not response or response.status_code != 200:
+        print(f"[LOGOUT] Invalid or expired token, returning 200 OK")
+        return {"message": "Logged out (invalid or expired token)"}
+
     user_data = response.json()
     supabase_user_id = user_data.get("id")
 
@@ -233,7 +255,8 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
     result_user = await db.execute(stmt)
     user = result_user.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        print("[LOGOUT] User not found, returning 200 OK")
+        return {"message": "Logged out (user not found)"}
     db_user = {
         "user_id": user.user_id,
         "username": user.username,

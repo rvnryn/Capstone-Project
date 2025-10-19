@@ -1,4 +1,3 @@
-
 import smtplib
 from email.mime.text import MIMEText
 import os
@@ -6,7 +5,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def send_password_change_email(email: str, name: str = "User", sender_email: str = None, sender_password: str = None):
+print("EMAIL:", os.getenv("SYSTEM_EMAIL"))
+print("PASS:", os.getenv("SYSTEM_EMAIL_PASSWORD"))
+
+def send_password_change_email(email: str, name: str = "User", sender_email: str = "cardiacdelights.notifications@gmail.com", sender_password: str = "rsgc rgvz myqw uvby"):
 	smtp_server = "smtp.gmail.com"
 	smtp_port = 587
 	if not sender_email or not sender_password:
@@ -42,3 +44,5 @@ Thank you,\nCardiac Delights Team
 	except Exception as e:
 		print(f"Failed to send password change notification to {email} from {smtp_user}: {e}")
 		return False
+
+

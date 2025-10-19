@@ -71,12 +71,19 @@ export function useSupplierAPI() {
 
   const getSupplier = useCallback(async (id: number | string) => {
     try {
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
       const response = await fetch(`${API_BASE_URL}/api/suppliers/${id}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
         },
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -84,7 +91,7 @@ export function useSupplierAPI() {
 
       return await response.json();
     } catch (error: any) {
-      console.error(`Failed to fetch supplier ${id}:`, error);
+      console.warn(`Failed to fetch supplier ${id} (offline or network error)`);
       throw error;
     }
   }, []);

@@ -26,7 +26,7 @@ import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import { useSimpleSalesReport } from "./hooks/useSimpleSalesReport";
 import annotationPlugin from "chartjs-plugin-annotation";
 import Chart from "chart.js/auto";
-import { useHistoricalAnalysis } from "../../Dashboard/hook/useSalesPrediction";
+import { useSalesAnalytics } from "../../Dashboard/hook/useSalesPrediction";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { saveAs } from "file-saver";
@@ -87,6 +87,8 @@ export default function ReportSales() {
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingSearch, setPendingSearch] = useState("");
   const [topItemsCount, setTopItemsCount] = useState(5);
+  // Add filterType for period selection (daily, weekly, monthly)
+  const [filterType, setFilterType] = useState<"daily" | "weekly" | "monthly">("monthly");
   const [showPopup, setShowPopup] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -98,6 +100,9 @@ export default function ReportSales() {
     key: "",
     direction: "asc" as "asc" | "desc",
   });
+  const [offlineData, setOfflineData] = useState<any>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Use the sales report hook
   const {
@@ -109,11 +114,6 @@ export default function ReportSales() {
     fetchWeekReport,
     fetchMonthReport,
   } = useSimpleSalesReport();
-
-  // --- OFFLINE STATE AND EFFECTS (moved to just before return) ---
-  const [offlineData, setOfflineData] = useState<any>(null);
-  const [offlineError, setOfflineError] = useState<string | null>(null);
-  const [isOffline, setIsOffline] = useState(false);
 
   // Offline/online detection and fallback logic
   useEffect(() => {
@@ -169,13 +169,11 @@ export default function ReportSales() {
 
   // ...existing code...
 
-  // Use historical analytics for top selling (offline aware)
-  const {
-    data: historicalData,
-    loading: historicalLoading,
-    error: historicalError,
-  } = useHistoricalAnalysis();
-  const effectiveReportData = isOffline && offlineData ? offlineData : reportData;
+  // Use sales analytics for top selling (matches Dashboard)
+  // Map filterType to days for correct period filtering
+  const periodDays = filterType === "daily" ? 1 : filterType === "weekly" ? 7 : 30;
+  const { historical, loading: historicalLoading, error: historicalError } = useSalesAnalytics(filterType, topItemsCount, periodDays);
+  const historicalData = historical?.data;
 
   // (Removed chart effect for Top Selling - not needed for historical analytics table)
 
@@ -187,8 +185,6 @@ export default function ReportSales() {
       !Array.isArray(historicalData.top_performers.by_total_sales)
     )
       return [];
-    // If unit price is available in historicalData, use it; otherwise, fallback to '-'
-    // For now, assume unit price is not available, so show '-'.
     return historicalData.top_performers.by_total_sales
       .filter((item: any) => item.total_sales > 0)
       .sort((a: any, b: any) => b.total_sales - a.total_sales)
@@ -217,9 +213,9 @@ export default function ReportSales() {
     return label;
   };
 
-  // Only show item count selector for Top Selling
+  // Show item count and period selector for Top Selling
   const renderTopItemsCountSelector = () => (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <label className="text-gray-300 text-xs sm:text-sm whitespace-nowrap">
         Items:
       </label>
@@ -231,6 +227,18 @@ export default function ReportSales() {
         <option value={3}>Top 3</option>
         <option value={5}>Top 5</option>
         <option value={10}>Top 10</option>
+      </select>
+      <label className="text-gray-300 text-xs sm:text-sm ml-2 whitespace-nowrap">
+        Period:
+      </label>
+      <select
+        value={filterType}
+        onChange={(e) => setFilterType(e.target.value as "daily" | "weekly" | "monthly")}
+        className="bg-gray-700 text-white text-xs sm:text-sm px-2 py-1 rounded border border-gray-600 focus:border-yellow-400 focus:outline-none min-w-0 transition-all duration-200"
+      >
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
       </select>
     </div>
   );
@@ -456,6 +464,9 @@ export default function ReportSales() {
       direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
     }));
   }, []);
+
+  // Choose the correct report data source (online or offline)
+  const effectiveReportData = isOffline && offlineData ? offlineData : reportData;
 
   // Convert hook data to the format expected by the component
   const salesData = useMemo(() => {

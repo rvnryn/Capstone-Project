@@ -202,6 +202,12 @@ const NavigationBar = ({
   const { user, role } = useAuth();
   useEffect(() => {
     console.log("[NavigationBar] useAuth user/role:", { user, role });
+    if (user) {
+      console.log("[NavigationBar] user keys:", Object.keys(user));
+      console.log("[NavigationBar] user object:", user);
+    } else {
+      console.log("[NavigationBar] user is null or undefined");
+    }
     console.log("[NavigationBar] localStorage:", {
       cachedUser: typeof window !== "undefined" ? localStorage.getItem("cachedUser") : null,
       cachedRole: typeof window !== "undefined" ? localStorage.getItem("cachedRole") : null,
@@ -449,17 +455,7 @@ const NavigationBar = ({
     if (isCompactDevice()) {
       closeMenu();
     }
-    // Patch: Allow offline navigation if user is cached
-    if (typeof window !== "undefined" && !navigator.onLine) {
-      const cachedUser = localStorage.getItem("cachedUser");
-      if (cachedUser) {
-        router.push(path);
-        return;
-      }
-      // If no cached user, show offline error or fallback
-      alert("Offline: Please login online at least once to access modules offline.");
-      return;
-    }
+    // Always allow navigation, even offline
     router.push(path);
   };
 

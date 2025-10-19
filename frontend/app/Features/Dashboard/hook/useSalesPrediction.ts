@@ -72,7 +72,9 @@ export function useSalesHistory(
       console.log("[SalesHistory] API response for", timeframe, top_n, data);
       return data;
     },
-    refetchInterval: 10000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
     staleTime: 10000,
   });
   console.log("[SalesHistory] Hook data for", timeframe, top_n, data);
@@ -104,7 +106,9 @@ export function useHistoricalAnalysis(days: number = 90) {
 
       return await response.json();
     },
-    refetchInterval: 10000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
     staleTime: 10000,
   });
   return { data, loading, error, fetchHistoricalAnalysis };

@@ -1,33 +1,57 @@
 "use client";
-
-import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { useAuth } from "@/app/context/AuthContext";
-import { routes } from "@/app/routes/routes";
-import { FaEdit, FaTrash, FaSearch, FaTruck } from "react-icons/fa";
-import NavigationBar from "@/app/components/navigation/navigation";
-import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
+import React, { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSupplierAPI } from "./hook/useSupplierAPI";
-import ResponsiveMain from "@/app/components/ResponsiveMain";
-import { MdWarning } from "react-icons/md";
+import { useRouter } from "next/navigation";
+import { FaEdit, FaTrash, FaTruck, FaSearch } from "react-icons/fa";
 import { FiRefreshCw } from "react-icons/fi";
+import { MdWarning } from "react-icons/md";
+import NavigationBar from "@/app/components/navigation/navigation";
+import ResponsiveMain from "../../components/ResponsiveMain";
+import { useAuth } from "../../context/AuthContext";
+import { useSupplierAPI } from "./hook/useSupplierAPI";
+import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
+import { routes } from "@/app/routes/routes";
 
 type SupplierItem = {
   supplier_id: number;
   supplier_name: string;
-  contact_person?: string;
-  phone_number?: string;
-  email?: string;
-  address?: string;
-  supplies?: string;
-  created_at?: string | Date;
-  updated_at?: string | Date;
-  [key: string]: unknown;
-};
+  contact_person: string;
+  supplies: string;
+  phone_number: string;
+  email: string;
+  address: string;
+  created_at: string;
+  [key: string]: string | number;
+}
 
-export default function SupplierPage() {
+function formatDateTime(dateString: string) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const SupplierPage = () => {
+  const [isOnline, setIsOnline] = useState(
+    typeof window !== "undefined" ? navigator.onLine : true
+  );
+  useEffect(() => {
+    setIsOnline(typeof window !== "undefined" ? navigator.onLine : true);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
   const { role } = useAuth();
   // Patch: Prevent redirect to login when offline and cached user exists
   useEffect(() => {
@@ -52,7 +76,6 @@ export default function SupplierPage() {
   const router = useRouter();
   const { isMenuOpen, isMobile } = useNavigation();
 
-  // Fetch suppliers using React Query
   // Patch: Use cached data when offline, and show offline message if no cache
   const [offlineSuppliers, setOfflineSuppliers] = useState<SupplierItem[] | null>(null);
   const [offlineError, setOfflineError] = useState<string | null>(null);
@@ -94,41 +117,31 @@ export default function SupplierPage() {
     refetchOnWindowFocus: true,
   });
 
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: deleteSupplier,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
-    },
-    onError: (error: any) => {
-      alert(
-        error?.response?.data?.detail ||
-          "Supplier not found or already deleted."
-      );
-    },
-  });
+  // Patch: reconstruct supplier objects with correct actions/icons when offline
+  let displaySuppliers: SupplierItem[] = [];
+  if (isOnline) {
+    displaySuppliers = supplierData;
+  } else if (offlineSuppliers) {
+    displaySuppliers = offlineSuppliers.map((item) => ({
+      ...item,
+      // Add any computed properties here if needed
+    }));
+  } else {
+    displaySuppliers = supplierData;
+  }
 
-  const formatDateTime = (date: string | Date | null): string => {
-    if (!date) return "-";
-    const dt = typeof date === "string" ? new Date(date) : date;
-    if (isNaN(dt.getTime())) return "-";
-    return dt.toLocaleString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  };
-
-  const handleClear = () => {
-    setSearchQuery("");
-    setSortConfig({ key: "", direction: "asc" });
-  };
+  // If offline and no cached data, show a clear message
+  if (!isOnline && (!offlineSuppliers || offlineSuppliers.length === 0)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-yellow-400">
+        <h2>No cached supplier data available.</h2>
+        <p>Connect to the internet to load supplier data.</p>
+      </div>
+    );
+  }
 
   const filtered = useMemo(() => {
-    return supplierData.filter(
+    return displaySuppliers.filter(
       (item: SupplierItem) =>
         !searchQuery ||
         Object.values(item)
@@ -136,10 +149,16 @@ export default function SupplierPage() {
           .toLowerCase()
           .includes(searchQuery.toLowerCase())
     );
-  }, [supplierData, searchQuery]);
+  }, [displaySuppliers, searchQuery]);
   // Add missing handleRefresh function
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+  };
+
+  // Add missing handleClear function
+  const handleClear = () => {
+    setSearchQuery("");
+    setSortConfig({ key: "", direction: "asc" });
   };
 
   const sortedData = useMemo(() => {
@@ -149,14 +168,8 @@ export default function SupplierPage() {
       return data.sort((a, b) => {
         const aVal = a[sortConfig.key];
         const bVal = b[sortConfig.key];
-        const aDate =
-          aVal instanceof Date
-            ? aVal
-            : new Date(aVal as string | number | Date);
-        const bDate =
-          bVal instanceof Date
-            ? bVal
-            : new Date(bVal as string | number | Date);
+        const aDate = new Date(aVal as string | number | Date);
+        const bDate = new Date(bVal as string | number | Date);
         return sortConfig.direction === "asc"
           ? aDate.getTime() - bDate.getTime()
           : bDate.getTime() - aDate.getTime();
@@ -190,6 +203,12 @@ export default function SupplierPage() {
     });
   };
 
+  const deleteMutation = useMutation({
+    mutationFn: async (supplierId: number) => {
+      await deleteSupplier(supplierId);
+    },
+  });
+
   const confirmDelete = async () => {
     if (supplierToDelete === null) return;
     await deleteMutation.mutateAsync(supplierToDelete);
@@ -208,6 +227,9 @@ export default function SupplierPage() {
     { key: "created_at", label: "Added Date" },
     { key: "actions", label: "Actions" },
   ];
+
+  // Helper for disabling actions when offline
+  const disableActions = !isOnline;
 
   return (
     <section className="text-white font-poppins">
@@ -243,17 +265,19 @@ export default function SupplierPage() {
                       type="button"
                       onClick={handleRefresh}
                       className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                      disabled={disableActions}
                     >
                       <FiRefreshCw className="text-xs xs:text-sm" />
                       <span className="sm:inline">Refresh</span>
                     </button>
 
-                    {["Owner", "General Manager", "Store Manager"].includes(
-                      role || ""
+                    {['Owner', 'General Manager', 'Store Manager'].includes(
+                      role || ''
                     ) && (
                       <button
                         onClick={() => router.push(routes.addSupplier)}
                         className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
+                        disabled={disableActions}
                       >
                         + Add Supplier
                       </button>
@@ -422,40 +446,41 @@ export default function SupplierPage() {
                             </td>
                             <td className="px-3 xl:px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-1 xl:gap-2">
-                                {[
-                                  "Owner",
-                                  "General Manager",
-                                  "Store Manager",
-                                ].includes(role || "") && (
+                                {["Owner", "General Manager", "Store Manager"].includes(role || "") && (
                                   <>
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        if (!isOnline) return;
                                         router.push(
                                           routes.UpdateSupplier(
                                             item.supplier_id
                                           )
                                         );
                                       }}
-                                      className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-400 hover:text-yellow-300 transition-all duration-200 cursor-pointer border border-yellow-400/20 hover:border-yellow-400/40"
+                                      className={`p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-400 hover:text-yellow-300 transition-all duration-200 border border-yellow-400/20 hover:border-yellow-400/40 ${!isOnline ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
                                       title="Edit"
+                                      disabled={!isOnline}
                                     >
                                       <FaEdit className="text-xs xs:text-sm" />
                                     </button>
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        if (!isOnline) return;
                                         setSupplierToDelete(item.supplier_id);
                                         setShowDeleteModal(true);
                                       }}
-                                      className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-all duration-200 cursor-pointer border border-red-500/20 hover:border-red-500/40"
+                                      className={`p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-all duration-200 border border-red-500/20 hover:border-red-500/40 ${!isOnline ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
                                       title="Delete"
+                                      disabled={!isOnline}
                                     >
                                       <FaTrash className="text-xs xs:text-sm" />
                                     </button>
                                   </>
                                 )}
                               </div>
+                             
                             </td>
                           </tr>
                         ))
@@ -541,4 +566,6 @@ export default function SupplierPage() {
       </ResponsiveMain>
     </section>
   );
-}
+};
+
+export default SupplierPage;

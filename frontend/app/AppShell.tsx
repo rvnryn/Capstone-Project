@@ -11,27 +11,26 @@ import PWAInstallPrompt from "@/app/components/PWAInstallPrompt";
 import { DataPreloader } from "@/app/components/DataPreloader";
 import { PagePreloader } from "@/app/components/PagePreloader";
 import { ToastContainer } from "react-toastify";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
+import { GlobalLoadingProvider } from "@/app/context/GlobalLoadingContext";
+import { GlobalLoadingOverlay } from "@/app/components/GlobalLoadingOverlay";
 // @ts-ignore - missing type declarations for CSS side-effect import
 import "react-toastify/dist/ReactToastify.css";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient();
-
+  const [mounted, setMounted] = React.useState(false);
   useEffect(() => {
+    setMounted(true);
     // Store install prompt globally for custom banner
     let deferredPrompt: any = null;
-
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       deferredPrompt = e;
       console.log("Install prompt intercepted by AppShell");
-      // Store in window for PWA components to access
       (window as any).deferredInstallPrompt = deferredPrompt;
     };
-
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-
     const hideBrowserInstallBanners = () => {
       const browserBannerSelectors = [
         ".ms-appx-web-install-banner",
@@ -42,7 +41,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         '[style*="background: #4285f4"]',
         '[class*="blue"][class*="banner"]:not([class*="custom"])',
       ];
-
       browserBannerSelectors.forEach((selector) => {
         try {
           const elements = document.querySelectorAll(selector);
@@ -57,31 +55,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         } catch {}
       });
     };
-
     hideBrowserInstallBanners();
-
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", hideBrowserInstallBanners);
     } else {
       hideBrowserInstallBanners();
     }
-
     const intervalId = setInterval(hideBrowserInstallBanners, 1000);
-
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
           .register("/service-worker.js")
           .then((registration) => {
             console.log("✅ SW registered: ", registration);
-
-            // Automatically pre-cache all critical pages
             if (registration.active) {
               registration.active.postMessage({ type: 'CACHE_CRITICAL_ASSETS' });
               console.log("🚀 Auto-caching all pages for offline use...");
             }
-
-            // Listen for cache completion messages
             navigator.serviceWorker.addEventListener("message", (event) => {
               if (event.data.type === "CACHE_COMPLETE") {
                 console.log(`✅ Pre-cached ${event.data.cached} pages automatically!`);
@@ -93,7 +83,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           });
       });
     }
-
     return () => {
       clearInterval(intervalId);
       window.removeEventListener(
@@ -102,22 +91,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       );
     };
   }, []);
-
+  if (!mounted) return null;
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <OfflineProvider>
-          <DataPreloader />
-          <PagePreloader />
-          <OfflineStatusBar />
-          {children}
-          <EnhancedOfflineStatusBar />
-          <PWAInstallBanner />
-          <PWAInstallPrompt />
-          <NetworkStatusIndicator />
-          <ToastContainer />
-        </OfflineProvider>
-      </AuthProvider>
+      <GlobalLoadingProvider>
+        <AuthProvider>
+          <OfflineProvider>
+            <DataPreloader />
+            <PagePreloader />
+            <OfflineStatusBar />
+            <GlobalLoadingOverlay />
+            {children}
+            <EnhancedOfflineStatusBar />
+            <PWAInstallBanner />
+            <PWAInstallPrompt />
+            <NetworkStatusIndicator />
+            <ToastContainer />
+          </OfflineProvider>
+        </AuthProvider>
+      </GlobalLoadingProvider>
     </QueryClientProvider>
   );
 }

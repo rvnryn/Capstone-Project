@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { useGlobalLoading } from "@/app/context/GlobalLoadingContext";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { useRouter } from "next/navigation";
@@ -14,6 +15,58 @@ import { HiSparkles } from "react-icons/hi";
 const Inventory = () => {
   const router = useRouter();
   const { isMenuOpen, isMobile } = useNavigation();
+  // Offline fallback logic
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+  const [cachedInventoryButtons, setCachedInventoryButtons] = useState<any>(null);
+  const { setLoading } = useGlobalLoading();
+  useEffect(() => {
+    setIsOnline(typeof window !== "undefined" ? navigator.onLine : true);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+  // Set global loading state based on local loading (if any)
+  useEffect(() => {
+    setLoading(false); // Inventory page does not have a loading spinner, but ensure global overlay is reset
+  }, [setLoading]);
+  useEffect(() => {
+    if (!isOnline) {
+      // Try to load cached inventory buttons
+      try {
+        const cached = localStorage.getItem("inventoryButtonsCache");
+        if (cached) {
+          setCachedInventoryButtons(JSON.parse(cached));
+          setOfflineError(null);
+        } else {
+          setCachedInventoryButtons(null);
+          setOfflineError("No cached inventory data available. Please connect to the internet to load inventory.");
+        }
+      } catch {
+        setCachedInventoryButtons(null);
+        setOfflineError("Failed to load cached inventory data.");
+      }
+    } else {
+      // Online: cache only serializable inventory button data
+      const serializableButtons = inventoryButtons.map(btn => ({
+        title: btn.title,
+        description: btn.description,
+        color: btn.color,
+        hoverColor: btn.hoverColor,
+        badge: btn.badge
+      }));
+      localStorage.setItem("inventoryButtonsCache", JSON.stringify(serializableButtons));
+      setCachedInventoryButtons(null);
+      setOfflineError(null);
+    }
+    setLoading(false); // Always reset global loading overlay after cache logic
+  }, [isOnline, setLoading]);
+
   const Nav_master = () => router.push(routes.master_inventory);
   const Nav_today = () => router.push(routes.todays_inventory);
   const Nav_surplus = () => router.push(routes.surplus_inventory);
@@ -58,6 +111,52 @@ const Inventory = () => {
     },
   ];
 
+  // If offline and no cached data, show a clear message
+  if (!isOnline && (!cachedInventoryButtons || cachedInventoryButtons.length === 0)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-yellow-400">
+        <h2>No cached inventory data available.</h2>
+        <p>Connect to the internet to load inventory data.</p>
+      </div>
+    );
+  }
+
+  // Use cached data if offline, otherwise use default
+  // If offline, reconstruct buttons with icons/actions
+  const displayButtons = isOnline
+    ? inventoryButtons
+    : (cachedInventoryButtons
+        ? cachedInventoryButtons.map((btn: any) => {
+            let icon, action;
+            switch (btn.title) {
+              case "Master Inventory":
+                icon = <MdInventory2 className="text-4xl" />;
+                action = Nav_master;
+                break;
+              case "Today's Inventory":
+                icon = <GiCardboardBoxClosed className="text-4xl" />;
+                action = Nav_today;
+                break;
+              case "Surplus Inventory":
+                icon = <FaWarehouse className="text-4xl" />;
+                action = Nav_surplus;
+                break;
+              case "Spoilage Inventory":
+                icon = <GiBiohazard className="text-4xl" />;
+                action = Nav_spoilage;
+                break;
+              default:
+                icon = <MdInventory2 className="text-4xl" />;
+                action = () => {};
+            }
+            return {
+              ...btn,
+              icon,
+              action,
+            };
+          })
+        : inventoryButtons);
+
   return (
     <section>
       <NavigationBar />
@@ -93,7 +192,7 @@ const Inventory = () => {
 
               {/* Cards Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 xs:gap-3 sm:gap-4 md:gap-5 lg:gap-6 xl:gap-8">
-                {inventoryButtons.map((button, index) => (
+                {displayButtons.map((button: any, index: number) => (
                   <div
                     key={button.title}
                     onClick={button.action}

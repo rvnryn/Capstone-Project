@@ -57,12 +57,18 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   // Persistent session: load from localStorage if available
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const cachedUser = localStorage.getItem("cachedUser");
+      const cachedUserRaw = localStorage.getItem("cachedUser");
       const cachedRole = localStorage.getItem("cachedRole");
       const token = localStorage.getItem("token");
-      console.log("[AuthProvider] Initial localStorage:", { cachedUser, cachedRole, token });
-      if (cachedUser && cachedRole && token) {
-        setUser(JSON.parse(cachedUser));
+      console.log("[AuthProvider] Initial localStorage:", { cachedUser: cachedUserRaw, cachedRole, token });
+      if (cachedUserRaw && cachedRole && token) {
+        const cachedUser = JSON.parse(cachedUserRaw);
+        // Ensure user object always has 'id'
+        setUser({
+          ...cachedUser,
+          id: cachedUser.id || cachedUser.user_id || null,
+          user_id: typeof cachedUser.user_id === 'number' ? cachedUser.user_id : (typeof cachedUser.id === 'string' ? parseInt(cachedUser.id, 10) : cachedUser.id),
+        });
         setRole(cachedRole as UserRole);
       }
     }
@@ -70,140 +76,109 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   console.log("AuthProvider mounted");
 
   const refreshSession = async () => {
-    if (refreshing) return;
-    setRefreshing(true);
-    // If offline, try to load from cache
-    if (typeof window !== "undefined" && !navigator.onLine) {
-      const cachedUser = localStorage.getItem("cachedUser");
-      const cachedRole = localStorage.getItem("cachedRole");
-      const token = localStorage.getItem("token");
-      console.log("[AuthProvider] Offline localStorage:", { cachedUser, cachedRole, token });
-      if (cachedUser && cachedRole && token) {
-        setUser(JSON.parse(cachedUser));
-        setRole(cachedRole as UserRole);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      } else {
-        setUser(null);
-        setRole(null);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-    }
-    const { data, error } = await supabase.auth.getSession();
-    console.log("Supabase session:", data.session, "Error:", error);
-
-    const session = data.session;
-    if (
-      error ||
-      !session ||
-      !session.user ||
-      !session.access_token ||
-      (session.expires_at && session.expires_at * 1000 < Date.now())
-    ) {
-      // Only clear if no cached session and no token
-      if (typeof window !== "undefined") {
-        const cachedUser = localStorage.getItem("cachedUser");
-        const cachedRole = localStorage.getItem("cachedRole");
-        const token = localStorage.getItem("token");
-        console.log("[AuthProvider] Session invalid, localStorage:", { cachedUser, cachedRole, token });
-        if (cachedUser && cachedRole && token) {
-          setUser(JSON.parse(cachedUser));
-          setRole(cachedRole as UserRole);
-          setLoading(false);
-          setRefreshing(false);
-          return;
-        } else {
-          setUser(null);
-          setRole(null);
-          setLoading(false);
-          localStorage.removeItem("token");
-          localStorage.removeItem("cachedUser");
-          localStorage.removeItem("cachedRole");
-        }
-      } else {
-        setUser(null);
-        setRole(null);
-        setLoading(false);
-      }
-      setRefreshing(false);
-      return;
-    }
-
-    const supabaseUser = session.user;
-    // Always set auth_id for robust identity checks
-    const newUser = {
-      id: supabaseUser.id,
-      email: supabaseUser.email,
-      ...supabaseUser.user_metadata,
-      auth_id: supabaseUser.user_metadata?.auth_id || supabaseUser.id,
-    };
-    setUser(newUser);
-
+    setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/session`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      console.log("[AuthProvider] /api/auth/session response status:", response.status);
-      if (!response.ok) {
-        console.log("[AuthProvider] /api/auth/session response error:", await response.text());
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const session = await supabase.auth.getSession();
+      if (
+        session.data.session &&
+        session.data.session.user &&
+        session.data.session.access_token &&
+        (!session.data.session.expires_at ||
+          session.data.session.expires_at * 1000 > Date.now())
+      ) {
+        // Always update token in localStorage
+        if (typeof window !== "undefined") {
+          localStorage.setItem("token", session.data.session.access_token);
+        }
+        // Fetch backend user info
+        let backendUser = null;
+        let backendRole = null;
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/auth/session`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${session.data.session.access_token}`,
+              "Content-Type": "application/json",
+            },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            backendUser = data.user;
+            backendRole = data.role;
+          }
+        } catch (err) {
+          console.error("[AuthProvider] Failed to fetch /api/auth/session:", err);
+        }
+        // Merge backend user, cached user, and Supabase user
+        let mergedUser = session.data.session.user;
+        if (backendUser) {
+          mergedUser = {
+            ...session.data.session.user,
+            ...backendUser,
+            id: backendUser.id || backendUser.user_id || session.data.session.user.id || null,
+            user_id: typeof backendUser.user_id === 'number' ? backendUser.user_id : (typeof backendUser.id === 'string' ? parseInt(backendUser.id, 10) : backendUser.id),
+          };
+        } else if (typeof window !== "undefined") {
+          const cachedUserRaw = localStorage.getItem("cachedUser");
+          if (cachedUserRaw) {
+            const cachedUser = JSON.parse(cachedUserRaw);
+            mergedUser = {
+              ...session.data.session.user,
+              ...cachedUser,
+              id: cachedUser.id || cachedUser.user_id || session.data.session.user.id || null,
+              user_id: typeof cachedUser.user_id === 'number' ? cachedUser.user_id : (typeof cachedUser.id === 'string' ? parseInt(cachedUser.id, 10) : cachedUser.id),
+            };
+          }
+        }
+        setUser(mergedUser);
+        if (typeof window !== "undefined") {
+          // Persist merged user and role to localStorage
+          localStorage.setItem("cachedUser", JSON.stringify(mergedUser));
+          if (backendRole) {
+            setRole(backendRole as UserRole);
+            localStorage.setItem("cachedRole", backendRole);
+          } else {
+            // Fallback: if backendRole is missing, use cachedRole or role from mergedUser
+            const fallbackRole = (mergedUser as any)?.user_role || (mergedUser as any)?.role || localStorage.getItem("cachedRole") || null;
+            if (fallbackRole) {
+              setRole(fallbackRole as UserRole);
+              localStorage.setItem("cachedRole", fallbackRole);
+            }
+          }
+        }
+        setLoading(false);
+        if (typeof window !== "undefined") {
+          console.log("[AuthProvider] Loaded user from Supabase+backend+cache:", mergedUser);
+        }
+        return;
       }
-
-      const data = await response.json();
-      setRole(data.role);
-      setUser((prev) => ({
-        ...prev,
-        ...data.user,
-        auth_id: data.user?.auth_id || prev?.auth_id || prev?.id,
-      }));
-      // Cache user and role for offline login
+      // If no valid session, fallback to cache
       if (typeof window !== "undefined") {
-        localStorage.setItem(
-          "cachedUser",
-          JSON.stringify({ ...newUser, ...data.user })
-        );
-        localStorage.setItem("cachedRole", data.role);
-        localStorage.setItem("token", session.access_token);
-      }
-      console.log("[AuthProvider] Session restored:", { user: newUser, role: data.role });
-    } catch (err) {
-      // Patch: If offline and cached user exists, do NOT force logout
-      if (typeof window !== "undefined" && !navigator.onLine) {
-        const cachedUser = localStorage.getItem("cachedUser");
+        const cachedUserRaw = localStorage.getItem("cachedUser");
         const cachedRole = localStorage.getItem("cachedRole");
         const token = localStorage.getItem("token");
-        console.log("[AuthProvider] /api/auth/session error, offline localStorage:", { cachedUser, cachedRole, token });
-        if (cachedUser && cachedRole && token) {
-          setUser(JSON.parse(cachedUser));
+        if (cachedUserRaw && cachedRole && token) {
+          const cachedUser = JSON.parse(cachedUserRaw);
+          setUser({
+            ...cachedUser,
+            id: cachedUser.id || cachedUser.user_id || null,
+            user_id: typeof cachedUser.user_id === 'number' ? cachedUser.user_id : (typeof cachedUser.id === 'string' ? parseInt(cachedUser.id, 10) : cachedUser.id),
+          });
           setRole(cachedRole as UserRole);
           setLoading(false);
-          setRefreshing(false);
           return;
         }
       }
       setUser(null);
       setRole(null);
       setLoading(false);
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("token");
-        localStorage.removeItem("cachedUser");
-        localStorage.removeItem("cachedRole");
-      }
-      await supabase.auth.signOut();
-      setRefreshing(false);
-      return;
+    } catch (error) {
+      setUser(null);
+      setRole(null);
+      setLoading(false);
     }
-    setLoading(false);
-    setRefreshing(false);
   };
+
 
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange(
@@ -220,18 +195,71 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
           }
           refreshSession();
         } else {
-          setUser(null);
-          setRole(null);
-          setLoading(false);
+          // Fallback to cache if available, but do NOT remove credentials
           if (typeof window !== "undefined") {
-            localStorage.removeItem("token");
-            localStorage.removeItem("cachedUser");
-            localStorage.removeItem("cachedRole");
+            const cachedUserRaw = localStorage.getItem("cachedUser");
+            const cachedRole = localStorage.getItem("cachedRole");
+            const token = localStorage.getItem("token");
+            if (cachedUserRaw && cachedRole && token) {
+              const cachedUser = JSON.parse(cachedUserRaw);
+              setUser({
+                ...cachedUser,
+                id: cachedUser.id || cachedUser.user_id || null,
+                user_id: typeof cachedUser.user_id === 'number' ? cachedUser.user_id : (typeof cachedUser.id === 'string' ? parseInt(cachedUser.id, 10) : cachedUser.id),
+              });
+              setRole(cachedRole as UserRole);
+              setLoading(false);
+              return;
+            } else {
+              setUser(null);
+              setRole(null);
+              setLoading(false);
+              // Do NOT remove credentials here
+            }
+          } else {
+            setUser(null);
+            setRole(null);
+            setLoading(false);
           }
         }
       }
     );
-    refreshSession();
+    // On initial mount, always load cached credentials if no session
+    (async () => {
+      const session = await supabase.auth.getSession();
+      if (
+        !session.data.session ||
+        !session.data.session.user ||
+        !session.data.session.access_token ||
+        (session.data.session.expires_at && session.data.session.expires_at * 1000 < Date.now())
+      ) {
+        if (typeof window !== "undefined") {
+          const cachedUserRaw = localStorage.getItem("cachedUser");
+          const cachedRole = localStorage.getItem("cachedRole");
+          const token = localStorage.getItem("token");
+          if (cachedUserRaw && cachedRole && token) {
+            const cachedUser = JSON.parse(cachedUserRaw);
+            const userObj = {
+              ...cachedUser,
+              id: cachedUser.id || cachedUser.user_id || null,
+              user_id: typeof cachedUser.user_id === 'number' ? cachedUser.user_id : (typeof cachedUser.id === 'string' ? parseInt(cachedUser.id, 10) : cachedUser.id),
+            };
+            setUser(userObj);
+            setRole(cachedRole as UserRole);
+            setLoading(false);
+            if (typeof window !== "undefined") {
+              console.log("[AuthProvider] Loaded user from cache:", userObj);
+            }
+            return; // Do NOT call refreshSession if loaded from cache
+          }
+        }
+        // If no cache, call refreshSession to try to get from API
+        refreshSession();
+        return;
+      }
+      // If session is valid, call refreshSession
+      refreshSession();
+    })();
     return () => {
       listener?.subscription.unsubscribe();
     };

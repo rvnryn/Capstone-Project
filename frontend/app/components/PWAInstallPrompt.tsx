@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useInstallPrompt } from "@/app/hooks/usePWA";
+import { isPWA } from "@/app/utils/pwa";
 import { FaDownload, FaTimes, FaMobile, FaDesktop } from "react-icons/fa";
 
 
@@ -12,16 +13,10 @@ const PWAInstallPrompt: React.FC = () => {
   const [showDetails, setShowDetails] = useState(false);
   const [showInstallTimeout, setShowInstallTimeout] = useState(false);
 
-  // Always check standalone mode at render time
-  const [isStandalone, setIsStandalone] = useState(false);
+  // Use isPWA utility for robust standalone detection
+  const [isStandalone, setIsStandalone] = useState(isPWA());
   React.useEffect(() => {
-    const checkStandalone = () => {
-      setIsStandalone(
-        typeof window !== "undefined" &&
-  (window.matchMedia("(display-mode: standalone)").matches ||
-   ("standalone" in window.navigator && (window.navigator as any).standalone === true))
-      );
-    };
+    const checkStandalone = () => setIsStandalone(isPWA());
     checkStandalone();
     window.addEventListener("resize", checkStandalone);
     return () => window.removeEventListener("resize", checkStandalone);
@@ -40,8 +35,8 @@ const PWAInstallPrompt: React.FC = () => {
       };
     }, []);
 
-    // Show offline error if offline and no install prompt
-    if (isOffline && (!showPrompt || !canInstall)) {
+    // Show offline error if offline and no install prompt, but NOT if already installed or in standalone/PWA mode (robust)
+    if (isOffline && (!showPrompt || !canInstall) && !isInstalled && !isStandalone && !isPWA()) {
       return (
         <div className="fixed top-4 left-4 right-4 md:left-auto md:right-4 md:max-w-md bg-gradient-to-r from-gray-900/95 to-black/95 backdrop-blur-xl border border-red-400/30 rounded-2xl shadow-2xl z-[9999] p-4">
           <div className="flex items-center gap-3 mb-2">

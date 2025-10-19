@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
@@ -19,6 +19,65 @@ import { saveAs } from "file-saver";
 const Report = () => {
   const router = useRouter();
   const { role } = useAuth();
+  // Offline fallback logic
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+  const [cachedReports, setCachedReports] = useState<any>(null);
+  useEffect(() => {
+    setIsOnline(typeof window !== "undefined" ? navigator.onLine : true);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+  useEffect(() => {
+    if (!isOnline) {
+      // Try to load cached report buttons (only serializable data)
+      try {
+        const cached = localStorage.getItem("reportButtonsCache");
+        if (cached) {
+          let parsed = JSON.parse(cached);
+          // Only allow valid report button titles
+          const validTitles = ["Sales", "Inventory", "User Activity"];
+          parsed = Array.isArray(parsed)
+            ? parsed.filter(btn => validTitles.includes(btn.title))
+            : [];
+          // If cache is corrupted or missing valid buttons, reconstruct from defaults
+          if (parsed.length === 0) {
+            setCachedReports(null);
+            setOfflineError("No valid cached report data available. Please connect to the internet to load reports.");
+          } else {
+            setCachedReports(parsed);
+            setOfflineError(null);
+          }
+        } else {
+          setCachedReports(null);
+          setOfflineError("No cached report data available. Please connect to the internet to load reports.");
+        }
+      } catch {
+        setCachedReports(null);
+        setOfflineError("Failed to load cached report data.");
+      }
+    } else {
+      // Online: cache only serializable report button data (no React elements/functions)
+      const serializableButtons = reportButtons.map(btn => ({
+        title: btn.title,
+        description: btn.description,
+        badge: btn.badge,
+        role: btn.role,
+        color: btn.color,
+        hoverColor: btn.hoverColor,
+      }));
+      localStorage.setItem("reportButtonsCache", JSON.stringify(serializableButtons));
+      setCachedReports(null);
+      setOfflineError(null);
+    }
+  }, [isOnline]);
+
   const Nav_Sales = () => router.push(routes.salesReport);
   const Nav_Inventory = () => router.push(routes.inventoryReport);
   const Nav_UserActivity = () => router.push(routes.userActivityReport);
@@ -57,6 +116,75 @@ const Report = () => {
     },
   ];
 
+  // Patch: If offline and no cached data, show a clear message
+  if (!isOnline && (!cachedReports || cachedReports.length === 0)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-yellow-400">
+        <h2>No cached report data available.</h2>
+        <p>Connect to the internet to load report data.</p>
+      </div>
+    );
+  }
+
+  // Always reconstruct icons/actions from code when offline
+  const displayButtons = isOnline
+    ? reportButtons
+    : cachedReports
+    ? cachedReports.map((btn: any) => {
+        // Only use cached serializable data, reconstruct icon/action from code
+        switch (btn.title) {
+          case "Sales":
+            return {
+              ...btn,
+              icon: <FaChartBar className="text-4xl" />,
+              action: Nav_Sales,
+            };
+          case "Inventory":
+            return {
+              ...btn,
+              icon: <FaBoxes className="text-4xl" />,
+              action: Nav_Inventory,
+            };
+          case "User Activity":
+            return {
+              ...btn,
+              icon: <FaUserCheck className="text-4xl" />,
+              action: Nav_UserActivity,
+            };
+          default:
+            return {
+              ...btn,
+              icon: <HiDocumentReport className="text-4xl" />,
+              action: () => {},
+            };
+        }
+      })
+    : reportButtons;
+
+  // Patch: If displayButtons is not an array or is empty in offline mode, show a clear error
+  if (!isOnline && (!Array.isArray(displayButtons) || displayButtons.length === 0)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-yellow-400">
+        <h2>No offline report data available.</h2>
+        <p>Connect to the internet to load report data.</p>
+      </div>
+    );
+  }
+
+  // Patch: In offline mode, do not filter by role if role is undefined/null
+  // Guard: Ensure every button has a valid React element for icon at the mapping stage
+  const filteredButtons = (!isOnline
+    ? displayButtons
+    : displayButtons.filter((button: any) => !button.role || button.role === role)
+  ).map((button: any) => {
+    return {
+      ...button,
+      icon: React.isValidElement(button.icon)
+        ? button.icon
+        : <HiDocumentReport className="text-4xl" />,
+    };
+  });
+
   return (
     <section>
       <NavigationBar />
@@ -92,9 +220,8 @@ const Report = () => {
 
               {/* Cards Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-2 xs:gap-3 sm:gap-4 md:gap-5 lg:gap-6 xl:gap-8">
-                {reportButtons
-                  .filter((button) => !button.role || button.role === role)
-                  .map((button, index) => {
+                {filteredButtons
+                  .map((button: any, index: number) => {
                     // Define colors based on report type
                     const getReportColors = (title: string) => {
                       switch (title) {
@@ -191,6 +318,17 @@ const Report = () => {
 
                     const colors = getReportColors(button.title);
 
+                    // Final guard: Only call React.cloneElement if iconElement is valid
+                    let iconNode;
+                    if (React.isValidElement(button.icon)) {
+                      iconNode = React.cloneElement(button.icon, {
+                        className:
+                          "text-lg xs:text-xl sm:text-2xl md:text-3xl lg:text-2xl xl:text-3xl 2xl:text-4xl",
+                      });
+                    } else {
+                      iconNode = <HiDocumentReport className="text-lg xs:text-xl sm:text-2xl md:text-3xl lg:text-2xl xl:text-3xl 2xl:text-4xl" />;
+                    }
+
                     return (
                       <div
                         key={button.title}
@@ -220,10 +358,7 @@ const Report = () => {
                               <div
                                 className={`${colors.iconText} ${colors.iconHoverText} transition-colors duration-300`}
                               >
-                                {React.cloneElement(button.icon, {
-                                  className:
-                                    "text-lg xs:text-xl sm:text-2xl md:text-3xl lg:text-2xl xl:text-3xl 2xl:text-4xl",
-                                })}
+                                {iconNode}
                               </div>
                             </div>
                           </div>
