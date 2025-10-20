@@ -393,13 +393,139 @@ export default function AddInventoryItem() {
               >
                 <fieldset className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8" disabled={!isOnline} style={!isOnline ? { opacity: 0.6, pointerEvents: 'none' } : {}}>
                   {/* Item Name Field */}
-                  {/* ...unchanged fields... */}
+                  <div>
+                    <label htmlFor="name" className="block font-semibold text-gray-200 mb-1">
+                      Item Name
+                    </label>
+                    <input
+                      id="name"
+                      name="name"
+                      type="text"
+                      value={formData.name}
+                      onChange={handleChange}
+                      onFocus={() => handleFocus("name")}
+                      onBlur={handleBlur}
+                      className={`w-full px-4 py-3 rounded-lg border-2 ${
+                        errors.name
+                          ? "border-red-500"
+                          : focusedField === "name"
+                          ? "border-yellow-400"
+                          : "border-gray-700"
+                      } bg-gray-900 text-white placeholder-gray-500 focus:outline-none transition-all duration-300`}
+                      placeholder="Enter item name"
+                      autoComplete="off"
+                      required
+                      aria-invalid={!!errors.name}
+                      aria-describedby={errors.name ? "name-error" : undefined}
+                    />
+                    {errors.name && (
+                      <span id="name-error" className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                        <FiAlertCircle className="inline-block mr-1" />
+                        {errors.name}
+                      </span>
+                    )}
+                  </div>
                   {/* Category Field */}
-                  {/* ...unchanged fields... */}
+                  <div>
+                    <label htmlFor="category" className="block font-semibold text-gray-200 mb-1">
+                      Category
+                    </label>
+                    <select
+                      id="category"
+                      name="category"
+                      value={formData.category}
+                      onChange={handleChange}
+                      onFocus={() => handleFocus("category")}
+                      onBlur={handleBlur}
+                      className={`w-full px-4 py-3 rounded-lg border-2 ${
+                        errors.category
+                          ? "border-red-500"
+                          : focusedField === "category"
+                          ? "border-yellow-400"
+                          : "border-gray-700"
+                      } bg-gray-900 text-white placeholder-gray-500 focus:outline-none transition-all duration-300`}
+                      required
+                      aria-invalid={!!errors.category}
+                      aria-describedby={errors.category ? "category-error" : undefined}
+                    >
+                      <option value="">Select category</option>
+                      {CATEGORY_OPTIONS.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.category && (
+                      <span id="category-error" className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                        <FiAlertCircle className="inline-block mr-1" />
+                        {errors.category}
+                      </span>
+                    )}
+                  </div>
                   {/* Stock Quantity Field */}
-                  {/* ...unchanged fields... */}
+                  <div>
+                    <label htmlFor="stock" className="block font-semibold text-gray-200 mb-1">
+                      Quantity in Stock
+                    </label>
+                    <input
+                      id="stock"
+                      name="stock"
+                      type="number"
+                      min={1}
+                      value={formData.stock === 0 ? "" : formData.stock}
+                      onChange={handleChange}
+                      onFocus={() => handleFocus("stock")}
+                      onBlur={handleBlur}
+                      className={`w-full px-4 py-3 rounded-lg border-2 ${
+                        errors.stock
+                          ? "border-red-500"
+                          : focusedField === "stock"
+                          ? "border-yellow-400"
+                          : "border-gray-700"
+                      } bg-gray-900 text-white placeholder-gray-500 focus:outline-none transition-all duration-300`}
+                      placeholder="Enter quantity"
+                      required
+                      aria-invalid={!!errors.stock}
+                      aria-describedby={errors.stock ? "stock-error" : undefined}
+                    />
+                    {errors.stock && (
+                      <span id="stock-error" className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                        <FiAlertCircle className="inline-block mr-1" />
+                        {errors.stock}
+                      </span>
+                    )}
+                  </div>
                   {/* Expiration Date Field */}
-                  {/* ...unchanged fields... */}
+                  <div>
+                    <label htmlFor="expiration_date" className="block font-semibold text-gray-200 mb-1">
+                      Expiration Date
+                    </label>
+                    <input
+                      id="expiration_date"
+                      name="expiration_date"
+                      type="date"
+                      value={formData.expiration_date}
+                      onChange={handleChange}
+                      onFocus={() => handleFocus("expiration_date")}
+                      onBlur={handleBlur}
+                      className={`w-full px-4 py-3 rounded-lg border-2 ${
+                        errors.expiration_date
+                          ? "border-red-500"
+                          : focusedField === "expiration_date"
+                          ? "border-yellow-400"
+                          : "border-gray-700"
+                      } bg-gray-900 text-white placeholder-gray-500 focus:outline-none transition-all duration-300`}
+                      required
+                      aria-invalid={!!errors.expiration_date}
+                      aria-describedby={errors.expiration_date ? "expiration-error" : undefined}
+                    />
+                    {errors.expiration_date && (
+                      <span id="expiration-error" className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                        <FiAlertCircle className="inline-block mr-1" />
+                        {errors.expiration_date}
+                      </span>
+                    )}
+                  </div>
                 </fieldset>
 
                 {/* Action Buttons */}

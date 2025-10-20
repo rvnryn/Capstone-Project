@@ -260,7 +260,10 @@ export default function BackupRestorePage() {
 
   return (
     <section className="text-white font-poppins">
-      <NavigationBar />
+      <NavigationBar
+        modalOpen={modalOpen}
+        localRestoreModalOpen={localRestoreModalOpen}
+      />
       <ResponsiveMain>
         <main
           className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"

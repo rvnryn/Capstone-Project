@@ -134,7 +134,7 @@ export default function EditUser() {
     };
     fetchUser();
     // Only refetch if userId or isOnline changes
-  }, [userId, router, getUser, isOnline]);
+  }, [userId, isOnline]);
 
   // Validation logic
   const validate = useCallback((data: Partial<User>) => {

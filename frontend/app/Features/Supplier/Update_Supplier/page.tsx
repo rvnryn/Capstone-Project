@@ -123,7 +123,7 @@ export default function EditSupplier() {
       }
     };
     fetchSupplier();
-  }, [supplierId, router, getSupplier, isOnline]);
+  }, [supplierId, isOnline]);
 
   const capitalizeWords = (str: string) =>
     str.replace(/\b\w/g, (char) => char.toUpperCase());

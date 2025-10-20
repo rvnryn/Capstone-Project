@@ -694,8 +694,8 @@ async def update_inventory_today_item(
                 update_data[key] = update_data[key].isoformat()
 
         # If stock_quantity is being updated, recalculate stock_status
-        if "stock_quantity" in update_data:
 
+        if "stock_quantity" in update_data:
             @run_blocking
             def _fetch():
                 return (
@@ -713,7 +713,7 @@ async def update_inventory_today_item(
                 else None
             )
             if item_name:
-                threshold = get_threshold_for_item(item_name)
+                threshold = await get_threshold_for_item(item_name)
                 update_data["stock_status"] = calculate_stock_status(
                     update_data["stock_quantity"], threshold
                 )
@@ -790,6 +790,7 @@ async def transfer_to_today(
         transfer_status = calculate_stock_status(transfer_quantity, threshold)
         now = datetime.utcnow().isoformat()
         payload = {
+            "item_id": item["item_id"],
             "item_name": item["item_name"],
             "batch_date": item["batch_date"],
             "category": item["category"],
@@ -980,6 +981,7 @@ async def transfer_to_surplus(
         transfer_status = calculate_stock_status(transfer_quantity, threshold)
         now = datetime.utcnow().isoformat()
         payload = {
+            "item_id": item["item_id"],
             "item_name": item["item_name"],
             "batch_date": item["batch_date"],
             "category": item["category"],

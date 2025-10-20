@@ -77,6 +77,7 @@ export default function EditInventoryItem() {
         return;
       }
       try {
+        // Call getItem and fetchSettings directly, not as dependencies
         const [data, settingsData] = await Promise.all([
           getItem(itemId),
           fetchSettings(),
@@ -109,7 +110,7 @@ export default function EditInventoryItem() {
       }
     };
     fetchAll();
-  }, [itemId, router, getItem, fetchSettings]);
+  }, [itemId, router]);
 
   // Validation logic
   const validate = useCallback((data: any) => {

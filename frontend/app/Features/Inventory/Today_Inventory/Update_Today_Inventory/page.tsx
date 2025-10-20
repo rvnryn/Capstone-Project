@@ -107,7 +107,7 @@ export default function EditTodayInventoryItem() {
       }
     };
     fetchAll();
-  }, [itemId, router, getTodayItem, fetchSettings]);
+  }, [itemId, router]);
 
   const validate = useCallback((data: any) => {
     const newErrors = {

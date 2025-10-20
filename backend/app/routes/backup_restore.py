@@ -432,60 +432,90 @@ async def restore(upload_file, password, user, db):
         backup_data = json.loads(backup_json)
         print(f"[Restore Debug] JSON loaded. Keys: {list(backup_data.keys())}")
 
-        # Restore tables
+        # Restore tables with explicit PK and auto-increment for mapped tables
         engine = create_engine(POSTGRES_URL.replace("asyncpg", "psycopg2"))
+        pk_map = {
+            "suppliers": "supplier_id",
+            "users": "user_id",
+            "user_activity_log": "activity_id",
+            "orders": "order_id",
+            "order_items": "item_id",
+            "top_sales": "id",
+            "roles": "role_id",
+            "custom_holidays": "id",
+            "ph_holidays": "id",
+            "notification": "notification_id",
+            "notification_settings": "user_id",
+            "menu": "menu_id",
+            "menu_ingredients": "id",
+            "ingredients": "id",
+            "inventory": "item_id",
+            "inventory_spoilage": "spoilage_id",
+            "inventory_settings": "id",
+            "inventory_log": "id",
+            "backup_history": "id",
+            "backup_schedule": "id",
+        }
         with engine.connect() as conn:
             for table_name, records in backup_data.items():
-                print(
-                    f"[Restore Debug] Restoring table: {table_name}, Records: {len(records)}"
-                )
+                print(f"[Restore Debug] Restoring table: {table_name}, Records: {len(records)}")
                 df = pd.DataFrame(records)
-                # Skip all DB operations for empty DataFrames
                 if df.empty and len(df.columns) == 0:
-                    print(
-                        f"[Restore Debug] Skipping restore for {table_name}: empty DataFrame with no columns."
-                    )
+                    print(f"[Restore Debug] Skipping restore for {table_name}: empty DataFrame with no columns.")
                     continue
-                # Only drop table if not suppliers (so replace works, but append does not lose schema)
-                if table_name != "suppliers":
+                # Drop table
+                try:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE"))
+                except Exception as drop_err:
+                    print(f"[Restore Debug] Error dropping table {table_name}: {drop_err}")
+                # Explicitly create table with PK and auto-increment if in pk_map
+                pk_col = pk_map.get(table_name)
+                if pk_col and pk_col in df.columns:
+                    # Build CREATE TABLE statement with user_id as INTEGER if present
+                    col_defs = []
+                    for col in df.columns:
+                        if col == pk_col:
+                            col_defs.append(f'"{col}" SERIAL PRIMARY KEY')
+                        elif col == "user_id":
+                            col_defs.append(f'"{col}" INTEGER')
+                        else:
+                            val = df[col].dropna().iloc[0] if not df[col].dropna().empty else None
+                            if isinstance(val, int):
+                                col_type = "INTEGER"
+                            elif isinstance(val, float):
+                                col_type = "FLOAT"
+                            elif isinstance(val, bool):
+                                col_type = "BOOLEAN"
+                            elif isinstance(val, str) and len(val) < 256:
+                                col_type = "VARCHAR(255)"
+                            else:
+                                col_type = "TEXT"
+                            col_defs.append(f'"{col}" {col_type}')
+                    create_sql = f'CREATE TABLE "{table_name}" ({", ".join(col_defs)});'
                     try:
-                        conn.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE"))
-                    except Exception as drop_err:
-                        print(
-                            f"[Restore Debug] Error dropping table {table_name}: {drop_err}"
-                        )
-                print(
-                    f"[Restore Debug] DataFrame for {table_name} (first 5 rows):\n{df.head()}"
-                )
-                print(
-                    f"[Restore Debug] DataFrame columns for {table_name}: {list(df.columns)}"
-                )
+                        conn.execute(text(create_sql))
+                        print(f"[Restore Debug] Created table {table_name} with PK {pk_col}")
+                    except Exception as create_err:
+                        print(f"[Restore Debug] Error creating table {table_name}: {create_err}")
+                print(f"[Restore Debug] DataFrame for {table_name} (first 5 rows):\n{df.head()}")
+                print(f"[Restore Debug] DataFrame columns for {table_name}: {list(df.columns)}")
                 if not df.empty:
                     try:
-                        df.to_sql(table_name, conn, if_exists="replace", index=False)
+                        # Remove PK column if SERIAL PRIMARY KEY (let DB auto-generate)
+                        if pk_col and pk_col in df.columns:
+                            df2 = df.drop(columns=[pk_col])
+                            df2.to_sql(table_name, conn, if_exists="append", index=False)
+                        else:
+                            df.to_sql(table_name, conn, if_exists="replace", index=False)
                         conn.commit()
-                        result = conn.execute(
-                            text(f"SELECT COUNT(*) FROM {table_name}")
-                        )
-                        count = (
-                            result.scalar()
-                            if hasattr(result, "scalar")
-                            else list(result)[0][0]
-                        )
-                        print(
-                            f"[Restore Debug] {table_name} row count after restore: {count}"
-                        )
-                        result2 = conn.execute(
-                            text(f"SELECT * FROM {table_name} LIMIT 5")
-                        )
+                        result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                        count = result.scalar() if hasattr(result, "scalar") else list(result)[0][0]
+                        print(f"[Restore Debug] {table_name} row count after restore: {count}")
+                        result2 = conn.execute(text(f"SELECT * FROM {table_name} LIMIT 5"))
                         rows = result2.fetchall()
-                        print(
-                            f"[Restore Debug] First rows in {table_name} after restore: {rows}"
-                        )
+                        print(f"[Restore Debug] First rows in {table_name} after restore: {rows}")
                     except Exception as to_sql_err:
-                        print(
-                            f"[Restore Debug] Error restoring table {table_name} with to_sql: {to_sql_err}"
-                        )
+                        print(f"[Restore Debug] Error restoring table {table_name} with to_sql: {to_sql_err}")
 
         return {"message": "Restore completed successfully."}
     except Exception as e:
@@ -501,8 +531,105 @@ async def restore_backup(
     user = None
     try:
         file_bytes = await file.read()
-        result = await restore(file_bytes, password, user, session)
-        return result
+        # Inline restore logic to ensure PK and auto-increment
+        # (same as patched restore function)
+        print(f"[Restore Debug] Using POSTGRES_URL: {POSTGRES_URL}")
+        key = derive_fernet_key(password)
+        fernet = Fernet(key)
+        try:
+            decrypted = fernet.decrypt(file_bytes)
+            print(f"[Restore Debug] Decryption successful. Decrypted length: {len(decrypted)}")
+        except Exception:
+            print(f"[Restore Debug] Fernet decryption failed. Encrypted data type: {type(file_bytes)}")
+            print(f"[Restore Debug] Encrypted file length: {len(file_bytes)} bytes")
+            print(f"[Restore Debug] First 64 bytes: {file_bytes[:64]}")
+            raise HTTPException(status_code=400, detail="Decryption failed. Check your password and backup file.")
+        buf = io.BytesIO(decrypted)
+        with gzip.GzipFile(fileobj=buf, mode="r") as gz_file:
+            backup_json = gz_file.read().decode("utf-8")
+        print(f"[Restore Debug] Decompression successful. JSON length: {len(backup_json)}")
+        backup_data = json.loads(backup_json)
+        print(f"[Restore Debug] JSON loaded. Keys: {list(backup_data.keys())}")
+        engine = create_engine(POSTGRES_URL.replace("asyncpg", "psycopg2"))
+        pk_map = {
+            "suppliers": "supplier_id",
+            "users": "user_id",
+            "user_activity_log": "activity_id",
+            "orders": "order_id",
+            "order_items": "item_id",
+            "top_sales": "id",
+            "roles": "role_id",
+            "custom_holidays": "id",
+            "ph_holidays": "id",
+            "notification": "notification_id",
+            "notification_settings": "user_id",
+            "menu": "menu_id",
+            "menu_ingredients": "id",
+            "ingredients": "id",
+            "inventory": "item_id",
+            "inventory_spoilage": "spoilage_id",
+            "inventory_settings": "id",
+            "inventory_log": "id",
+            "backup_history": "id",
+            "backup_schedule": "id",
+        }
+        with engine.connect() as conn:
+            for table_name, records in backup_data.items():
+                print(f"[Restore Debug] Restoring table: {table_name}, Records: {len(records)}")
+                df = pd.DataFrame(records)
+                if df.empty and len(df.columns) == 0:
+                    print(f"[Restore Debug] Skipping restore for {table_name}: empty DataFrame with no columns.")
+                    continue
+                try:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE"))
+                except Exception as drop_err:
+                    print(f"[Restore Debug] Error dropping table {table_name}: {drop_err}")
+                pk_col = pk_map.get(table_name)
+                if pk_col and pk_col in df.columns:
+                    col_defs = []
+                    for col in df.columns:
+                        if col == pk_col:
+                            col_defs.append(f'"{col}" SERIAL PRIMARY KEY')
+                        elif col == "user_id":
+                            col_defs.append(f'"{col}" INTEGER')
+                        else:
+                            val = df[col].dropna().iloc[0] if not df[col].dropna().empty else None
+                            if isinstance(val, int):
+                                col_type = "INTEGER"
+                            elif isinstance(val, float):
+                                col_type = "FLOAT"
+                            elif isinstance(val, bool):
+                                col_type = "BOOLEAN"
+                            elif isinstance(val, str) and len(val) < 256:
+                                col_type = "VARCHAR(255)"
+                            else:
+                                col_type = "TEXT"
+                            col_defs.append(f'"{col}" {col_type}')
+                    create_sql = f'CREATE TABLE "{table_name}" ({", ".join(col_defs)});'
+                    try:
+                        conn.execute(text(create_sql))
+                        print(f"[Restore Debug] Created table {table_name} with PK {pk_col}")
+                    except Exception as create_err:
+                        print(f"[Restore Debug] Error creating table {table_name}: {create_err}")
+                print(f"[Restore Debug] DataFrame for {table_name} (first 5 rows):\n{df.head()}")
+                print(f"[Restore Debug] DataFrame columns for {table_name}: {list(df.columns)}")
+                if not df.empty:
+                    try:
+                        if pk_col and pk_col in df.columns:
+                            df2 = df.drop(columns=[pk_col])
+                            df2.to_sql(table_name, conn, if_exists="append", index=False)
+                        else:
+                            df.to_sql(table_name, conn, if_exists="replace", index=False)
+                        conn.commit()
+                        result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                        count = result.scalar() if hasattr(result, "scalar") else list(result)[0][0]
+                        print(f"[Restore Debug] {table_name} row count after restore: {count}")
+                        result2 = conn.execute(text(f"SELECT * FROM {table_name} LIMIT 5"))
+                        rows = result2.fetchall()
+                        print(f"[Restore Debug] First rows in {table_name} after restore: {rows}")
+                    except Exception as to_sql_err:
+                        print(f"[Restore Debug] Error restoring table {table_name} with to_sql: {to_sql_err}")
+        return {"message": "Restore completed successfully."}
     except Exception as e:
         print("Restore error:", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
