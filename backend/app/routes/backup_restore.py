@@ -230,9 +230,24 @@ def reschedule_backup(frequency, day_of_week, day_of_month, time_of_day):
         )
 
 
+from fastapi import Request
+
 @router.post("/schedule")
-async def update_schedule(settings: dict, session=Depends(get_db)):
-    user_id = 1  # Replace with actual user/session logic
+async def update_schedule(settings: dict,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    session=Depends(get_db)):
+    # Extract user_id from request/session context (example: request.state.user or JWT claims)
+    user_id = user["user_id"]
+    if user_id is None:
+        # Fallback: try to get from settings or raise error
+        user_id = settings.get("user_id")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+    # Ensure user_id is always int for SQL query
+    try:
+        user_id = int(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id type")
     time_of_day_raw = settings.get("time_of_day", "")
 
     def convert_time_to_24h(time_str):
@@ -272,20 +287,20 @@ async def update_schedule(settings: dict, session=Depends(get_db)):
         insert,
         Table,
         Column,
-        Integer,
         String,
         MetaData,
     )
+    from sqlalchemy.dialects.postgresql import INTEGER
 
     metadata = MetaData()
     backup_schedule = Table(
         "backup_schedule",
         metadata,
-        Column("id", Integer, primary_key=True),
-        Column("user_id", Integer),
+        Column("id", INTEGER, primary_key=True),
+        Column("user_id", INTEGER),  # Use dialect-specific type
         Column("frequency", String),
         Column("day_of_week", String),
-        Column("day_of_month", Integer),
+        Column("day_of_month", INTEGER),
         Column("time_of_day", String),
     )
     stmt = select(backup_schedule).where(backup_schedule.c.user_id == user_id)
@@ -323,8 +338,17 @@ async def update_schedule(settings: dict, session=Depends(get_db)):
 
 
 @router.get("/schedule")
-async def get_schedule(session=Depends(get_db)):
-    user_id = 1  # Replace with actual user/session logic
+async def get_schedule(user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    session=Depends(get_db)):
+    # Extract user_id from request/session context (example: request.state.user or JWT claims)
+    user_id = user["user_id"]
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    # Ensure user_id is always int for SQL query
+    try:
+        user_id = int(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id type")
     from sqlalchemy import select, MetaData, Table, Integer, String
 
     metadata = MetaData()
