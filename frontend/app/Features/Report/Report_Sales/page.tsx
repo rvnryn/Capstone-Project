@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { isOnline } from "@/app/utils/offlineUtils";
 import OfflineDataBanner from "@/app/components/OfflineDataBanner";
 import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 import {
   FaSearch,
   FaGoogle,
@@ -13,6 +14,7 @@ import {
   FaDownload,
   FaFilter,
   FaChartBar,
+  FaFileImport,
 } from "react-icons/fa";
 import {
   MdCheckCircle,
@@ -20,12 +22,11 @@ import {
   MdTrendingUp,
   MdInsights,
 } from "react-icons/md";
-import { FiBarChart, FiPieChart, FiActivity } from "react-icons/fi";
+import { BiImport, BiExport } from "react-icons/bi";
+import { FiBarChart, FiPieChart, FiActivity, FiUpload } from "react-icons/fi";
 import { TbReportAnalytics } from "react-icons/tb";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import { useSimpleSalesReport } from "./hooks/useSimpleSalesReport";
-import annotationPlugin from "chartjs-plugin-annotation";
-import Chart from "chart.js/auto";
 import { useSalesAnalytics } from "../../Dashboard/hook/useSalesPrediction";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
@@ -81,14 +82,14 @@ const GoogleSheetIntegration = ({
 };
 
 export default function ReportSales() {
-  // ...existing variable and hook declarations...
-
   // UI state
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingSearch, setPendingSearch] = useState("");
   const [topItemsCount, setTopItemsCount] = useState(5);
   // Add filterType for period selection (daily, weekly, monthly)
-  const [filterType, setFilterType] = useState<"daily" | "weekly" | "monthly">("monthly");
+  const [filterType, setFilterType] = useState<"daily" | "weekly" | "monthly">(
+    "monthly"
+  );
   const [showPopup, setShowPopup] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -104,6 +105,15 @@ export default function ReportSales() {
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
 
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importedRows, setImportedRows] = useState<any[]>([]);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importSuccess, setImportSuccess] = useState(false);
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
+    start: "",
+    end: "",
+  });
+
   // Use the sales report hook
   const {
     data: reportData,
@@ -113,6 +123,7 @@ export default function ReportSales() {
     fetchTodayReport,
     fetchWeekReport,
     fetchMonthReport,
+    importSalesData,
   } = useSimpleSalesReport();
 
   // Offline/online detection and fallback logic
@@ -158,21 +169,35 @@ export default function ReportSales() {
           setOfflineError(null);
         } else {
           setOfflineData(null);
-          setOfflineError("No cached sales report data available. Please connect to the internet to load report.");
+          setOfflineError(
+            "No cached sales report data available. Please connect to the internet to load report."
+          );
         }
       } catch {
         setOfflineData(null);
         setOfflineError("Failed to load cached sales report data.");
       }
     }
-  }, [period, isOffline, fetchTodayReport, fetchWeekReport, fetchMonthReport, fetchReportData]);
+  }, [
+    period,
+    isOffline,
+    fetchTodayReport,
+    fetchWeekReport,
+    fetchMonthReport,
+    fetchReportData,
+  ]);
 
   // ...existing code...
 
   // Use sales analytics for top selling (matches Dashboard)
   // Map filterType to days for correct period filtering
-  const periodDays = filterType === "daily" ? 1 : filterType === "weekly" ? 7 : 30;
-  const { historical, loading: historicalLoading, error: historicalError } = useSalesAnalytics(filterType, topItemsCount, periodDays);
+  const periodDays =
+    filterType === "daily" ? 1 : filterType === "weekly" ? 7 : 30;
+  const {
+    historical,
+    loading: historicalLoading,
+    error: historicalError,
+  } = useSalesAnalytics(filterType, topItemsCount, periodDays);
   const historicalData = historical?.data;
 
   // (Removed chart effect for Top Selling - not needed for historical analytics table)
@@ -233,7 +258,9 @@ export default function ReportSales() {
       </label>
       <select
         value={filterType}
-        onChange={(e) => setFilterType(e.target.value as "daily" | "weekly" | "monthly")}
+        onChange={(e) =>
+          setFilterType(e.target.value as "daily" | "weekly" | "monthly")
+        }
         className="bg-gray-700 text-white text-xs sm:text-sm px-2 py-1 rounded border border-gray-600 focus:border-yellow-400 focus:outline-none min-w-0 transition-all duration-200"
       >
         <option value="daily">Daily</option>
@@ -399,10 +426,6 @@ export default function ReportSales() {
     "Extras",
   ];
 
-  // Fetch data based on period
-  // Enhanced: Fetch report data and ML forecast with item/category filters
-
-  // Supabase Realtime: Listen for changes in order_items and refresh sales data
   useEffect(() => {
     const channel = supabase
       .channel("order_items_changes")
@@ -466,25 +489,52 @@ export default function ReportSales() {
   }, []);
 
   // Choose the correct report data source (online or offline)
-  const effectiveReportData = isOffline && offlineData ? offlineData : reportData;
+  const effectiveReportData =
+    isOffline && offlineData ? offlineData : reportData;
 
   // Convert hook data to the format expected by the component
   const salesData = useMemo(() => {
     if (!effectiveReportData) return [];
-    return effectiveReportData.topItems?.map((item: any) => ({
-      name: item.name,
-      quantity: item.quantity,
-      unitPrice: (item.revenue / item.quantity).toFixed(2),
-      totalRevenue: item.revenue,
-      category: item.category || "",
-      report_date: "",
-    })) || [];
+    return (
+      effectiveReportData.topItems?.map((item: any) => ({
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: (item.revenue / item.quantity).toFixed(2),
+        totalRevenue: item.revenue,
+        category: item.category || "",
+        report_date: "",
+      })) || []
+    );
   }, [effectiveReportData]);
 
   // Filter helpers
   const filterByCategory = (item: any, category: string) => {
     if (!category) return true;
     return item.category === category;
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportClick = () => {
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFile(file);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const data = evt.target?.result;
+      const workbook = XLSX.read(data, { type: "binary" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet);
+      setImportedRows(rows);
+      setImportModalOpen(true);
+    };
+    reader.readAsBinaryString(file);
   };
 
   const filterByPeriod = (item: any, period: string) => {
@@ -525,7 +575,8 @@ export default function ReportSales() {
         : true;
 
       // Category filter
-      const matchesCategory = !categoryFilter || item.category === categoryFilter;
+      const matchesCategory =
+        !categoryFilter || item.category === categoryFilter;
 
       // Period filter
       const matchesPeriod = filterByPeriod(item, period);
@@ -554,8 +605,20 @@ export default function ReportSales() {
       if (performanceFilter) {
         const quantity = Number(item.quantity) || 0;
         const revenue = Number(item.totalRevenue) || 0;
-  const avgQuantity = salesData.length > 0 ? salesData.reduce((sum: number, i: typeof salesData[0]) => sum + i.quantity, 0) / salesData.length : 0;
-  const avgRevenue = salesData.length > 0 ? salesData.reduce((sum: number, i: typeof salesData[0]) => sum + i.totalRevenue, 0) / salesData.length : 0;
+        const avgQuantity =
+          salesData.length > 0
+            ? salesData.reduce(
+                (sum: number, i: (typeof salesData)[0]) => sum + i.quantity,
+                0
+              ) / salesData.length
+            : 0;
+        const avgRevenue =
+          salesData.length > 0
+            ? salesData.reduce(
+                (sum: number, i: (typeof salesData)[0]) => sum + i.totalRevenue,
+                0
+              ) / salesData.length
+            : 0;
         switch (performanceFilter) {
           case "top_seller":
             matchesPerformanceFilter = quantity >= avgQuantity * 1.5;
@@ -564,14 +627,24 @@ export default function ReportSales() {
             matchesPerformanceFilter = revenue >= avgRevenue * 1.5;
             break;
           case "low_performer":
-            matchesPerformanceFilter = quantity < avgQuantity * 0.5 || revenue < avgRevenue * 0.5;
+            matchesPerformanceFilter =
+              quantity < avgQuantity * 0.5 || revenue < avgRevenue * 0.5;
             break;
           case "average":
-            matchesPerformanceFilter = quantity >= avgQuantity * 0.5 && quantity < avgQuantity * 1.5;
+            matchesPerformanceFilter =
+              quantity >= avgQuantity * 0.5 && quantity < avgQuantity * 1.5;
             break;
           default:
             matchesPerformanceFilter = true;
         }
+      }
+
+      let matchesDateRange = true;
+      if (dateRange.start && dateRange.end && item.report_date) {
+        const itemDate = new Date(item.report_date);
+        const startDate = new Date(dateRange.start);
+        const endDate = new Date(dateRange.end);
+        matchesDateRange = itemDate >= startDate && itemDate <= endDate;
       }
 
       return (
@@ -579,7 +652,8 @@ export default function ReportSales() {
         matchesCategory &&
         matchesPeriod &&
         matchesPriceRangeFilter &&
-        matchesPerformanceFilter
+        matchesPerformanceFilter &&
+        matchesDateRange
       );
     });
   }, [
@@ -589,6 +663,7 @@ export default function ReportSales() {
     period,
     priceRangeFilter,
     performanceFilter,
+    dateRange,
   ]);
 
   const groupedSales = filteredSales;
@@ -620,8 +695,8 @@ export default function ReportSales() {
 
   // Prepare main sales data for export
   const values = [
-    ["Item Name", "Category", "Quantity Sold", "Unit Price", "Total Revenue"],
-  ...sortedSales.map((item: any) => [
+    ["Item Name", "Category", "Quantity Sold", "Unit Price", "Total Sales"],
+    ...sortedSales.map((item: any) => [
       item.name,
       item.category,
       item.quantity,
@@ -632,7 +707,7 @@ export default function ReportSales() {
 
   // Prepare forecast data for export
   let forecastTableRows = [
-  ...historicalPredictions.map((w: any) => [
+    ...historicalPredictions.map((w: any) => [
       w.week_start,
       w.actual_sales,
       w.predicted_sales,
@@ -640,7 +715,8 @@ export default function ReportSales() {
     ]),
     ...forecast
       .filter(
-        (f: any) => !historicalPredictions.some((h: any) => h.week_start === f.week_start)
+        (f: any) =>
+          !historicalPredictions.some((h: any) => h.week_start === f.week_start)
       )
       .map((f: any) => [
         f.week_start,
@@ -828,6 +904,13 @@ export default function ReportSales() {
     return `${month} ${dayNumber}, ${year}`;
   };
 
+  useEffect(() => {
+    if (importSuccess) {
+      const timer = setTimeout(() => setImportSuccess(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [importSuccess]);
+
   return (
     <GoogleOAuthProvider clientId={CLIENT_ID}>
       <section className="min-h-screen bg-yellow-600 text-white font-poppins">
@@ -869,12 +952,20 @@ export default function ReportSales() {
 
                       {/* Action Buttons */}
                       <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                        {/* Import Button */}
+                        <button
+                          onClick={() => setImportModalOpen(true)}
+                          className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black px-3 py-2 sm:px-4 sm:py-2 md:px-6 md:py-3 rounded-lg sm:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm md:text-base whitespace-nowrap flex-1 sm:flex-none min-h-[44px]"
+                        >
+                          <BiImport className="text-xs sm:text-sm" />
+                          <span>Import Report</span>
+                        </button>
                         {/* Export Button */}
                         <button
                           onClick={() => setShowPopup(true)}
                           className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black px-3 py-2 sm:px-4 sm:py-2 md:px-6 md:py-3 rounded-lg sm:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm md:text-base whitespace-nowrap flex-1 sm:flex-none min-h-[44px]"
                         >
-                          <FaDownload className="text-xs sm:text-sm" />
+                          <BiExport className="text-xs sm:text-sm" />
                           <span>Export Report</span>
                         </button>
                       </div>
@@ -904,17 +995,25 @@ export default function ReportSales() {
                       <div className="flex items-center justify-between gap-1">
                         <div className="flex-1 min-w-0">
                           <p className="text-green-400 text-2xs xs:text-xs sm:text-sm font-medium truncate">
-                            Revenue
+                            Sales
                           </p>
                           <p
                             className="text-white text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold truncate"
                             title={`₱${sortedSales
-                              .reduce((sum: any, item: any) => sum + item.totalRevenue, 0)
+                              .reduce(
+                                (sum: any, item: any) =>
+                                  sum + item.totalRevenue,
+                                0
+                              )
                               .toLocaleString()}`}
                           >
                             ₱
                             {sortedSales
-                              .reduce((sum: number, item: typeof groupedSales[0]) => sum + item.totalRevenue, 0)
+                              .reduce(
+                                (sum: number, item: (typeof groupedSales)[0]) =>
+                                  sum + item.totalRevenue,
+                                0
+                              )
                               .toLocaleString()}
                           </p>
                         </div>
@@ -931,11 +1030,18 @@ export default function ReportSales() {
                           <p
                             className="text-white text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold truncate"
                             title={`${sortedSales
-                              .reduce((sum: any, item: any) => sum + item.quantity, 0)
+                              .reduce(
+                                (sum: any, item: any) => sum + item.quantity,
+                                0
+                              )
                               .toLocaleString()} sold`}
                           >
                             {sortedSales
-                              .reduce((sum: number, item: typeof groupedSales[0]) => sum + item.quantity, 0)
+                              .reduce(
+                                (sum: number, item: (typeof groupedSales)[0]) =>
+                                  sum + item.quantity,
+                                0
+                              )
                               .toLocaleString()}
                           </p>
                         </div>
@@ -955,8 +1061,10 @@ export default function ReportSales() {
                               sortedSales.length > 0
                                 ? (
                                     sortedSales.reduce(
-                                      (sum: number, item: typeof groupedSales[0]) =>
-                                        sum + Number(item.unitPrice),
+                                      (
+                                        sum: number,
+                                        item: (typeof groupedSales)[0]
+                                      ) => sum + Number(item.unitPrice),
                                       0
                                     ) / sortedSales.length
                                   ).toFixed(2)
@@ -967,7 +1075,8 @@ export default function ReportSales() {
                             {sortedSales.length > 0
                               ? (
                                   sortedSales.reduce(
-                                    (sum: any, item: any) => sum + Number(item.unitPrice),
+                                    (sum: any, item: any) =>
+                                      sum + Number(item.unitPrice),
                                     0
                                   ) / sortedSales.length
                                 ).toFixed(2)
@@ -993,7 +1102,9 @@ export default function ReportSales() {
                                       (item: any) =>
                                         item.quantity ===
                                         Math.max(
-                                          ...sortedSales.map((i: any) => i.quantity)
+                                          ...sortedSales.map(
+                                            (i: any) => i.quantity
+                                          )
                                         )
                                     )
                                     .map((item: any) => item.name)
@@ -1007,7 +1118,9 @@ export default function ReportSales() {
                                     (item: any) =>
                                       item.quantity ===
                                       Math.max(
-                                        ...sortedSales.map((i: any) => i.quantity)
+                                        ...sortedSales.map(
+                                          (i: any) => i.quantity
+                                        )
                                       )
                                   )
                                   .map(
@@ -1391,10 +1504,41 @@ export default function ReportSales() {
                         >
                           <option value="">All Performance</option>
                           <option value="top_seller">Top Sellers</option>
-                          <option value="high_revenue">High Revenue</option>
+                          <option value="high_revenue">High Sales</option>
                           <option value="average">Average Performance</option>
                           <option value="low_performer">Low Performers</option>
                         </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
+                          Date Range
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="date"
+                            value={dateRange.start}
+                            onChange={(e) =>
+                              setDateRange((prev) => ({
+                                ...prev,
+                                start: e.target.value,
+                              }))
+                            }
+                            className="bg-gray-700/50 text-white rounded-md px-2 py-2 border border-gray-600/50 focus:border-yellow-400"
+                          />
+                          <span className="text-gray-400">to</span>
+                          <input
+                            type="date"
+                            value={dateRange.end}
+                            onChange={(e) =>
+                              setDateRange((prev) => ({
+                                ...prev,
+                                end: e.target.value,
+                              }))
+                            }
+                            className="bg-gray-700/50 text-white rounded-md px-2 py-2 border border-gray-600/50 focus:border-yellow-400"
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -1544,28 +1688,30 @@ export default function ReportSales() {
                           </p>
                         </div>
                       ) : (
-                        sortedSales.map((item: typeof sortedSales[0], index: number) => (
-                          <div
-                            key={`${item.name}-${index}`}
-                            className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded p-1.5 border border-gray-700/30 fold-compact"
-                          >
-                            <div className="flex justify-between items-start gap-1 mb-1">
-                              <span
-                                className="text-white font-semibold text-2xs truncate flex-1"
-                                title={item.name}
-                              >
-                                {item.name.substring(0, 12)}...
-                              </span>
-                              <span className="text-yellow-400 font-bold text-2xs">
-                                ₱{item.totalRevenue.toLocaleString()}
-                              </span>
+                        sortedSales.map(
+                          (item: (typeof sortedSales)[0], index: number) => (
+                            <div
+                              key={`${item.name}-${index}`}
+                              className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded p-1.5 border border-gray-700/30 fold-compact"
+                            >
+                              <div className="flex justify-between items-start gap-1 mb-1">
+                                <span
+                                  className="text-white font-semibold text-2xs truncate flex-1"
+                                  title={item.name}
+                                >
+                                  {item.name.substring(0, 12)}...
+                                </span>
+                                <span className="text-yellow-400 font-bold text-2xs">
+                                  ₱{item.totalRevenue.toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-2xs text-gray-400">
+                                <span>Qty: {item.quantity}</span>
+                                <span>₱{item.unitPrice}</span>
+                              </div>
                             </div>
-                            <div className="flex justify-between text-2xs text-gray-400">
-                              <span>Qty: {item.quantity}</span>
-                              <span>₱{item.unitPrice}</span>
-                            </div>
-                          </div>
-                        ))
+                          )
+                        )
                       )}
                     </div>
                   </div>
@@ -1584,40 +1730,42 @@ export default function ReportSales() {
                           </p>
                         </div>
                       ) : (
-                        sortedSales.map((item: typeof sortedSales[0], index: number) => (
-                          <div
-                            key={`${item.name}-${index}`}
-                            className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded-lg p-2 border border-gray-700/30 xs-compact"
-                          >
-                            <div className="flex justify-between items-start gap-2 mb-2">
-                              <div className="flex-1 min-w-0">
-                                <span
-                                  className="text-white font-semibold text-xs truncate block"
-                                  title={item.name}
-                                >
-                                  {item.name}
-                                </span>
-                                <span className="text-yellow-400 text-2xs">
-                                  Sales Item
-                                </span>
+                        sortedSales.map(
+                          (item: (typeof sortedSales)[0], index: number) => (
+                            <div
+                              key={`${item.name}-${index}`}
+                              className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded-lg p-2 border border-gray-700/30 xs-compact"
+                            >
+                              <div className="flex justify-between items-start gap-2 mb-2">
+                                <div className="flex-1 min-w-0">
+                                  <span
+                                    className="text-white font-semibold text-xs truncate block"
+                                    title={item.name}
+                                  >
+                                    {item.name}
+                                  </span>
+                                  <span className="text-yellow-400 text-2xs">
+                                    Sales Item
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1.5 text-2xs">
+                                <div className="bg-blue-500/10 rounded p-1.5">
+                                  <p className="text-blue-400 mb-0.5">Qty</p>
+                                  <p className="text-white font-bold">
+                                    {item.quantity}
+                                  </p>
+                                </div>
+                                <div className="bg-green-500/10 rounded p-1.5">
+                                  <p className="text-green-400 mb-0.5">Total</p>
+                                  <p className="text-white font-bold">
+                                    ₱{item.totalRevenue.toLocaleString()}
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-1.5 text-2xs">
-                              <div className="bg-blue-500/10 rounded p-1.5">
-                                <p className="text-blue-400 mb-0.5">Qty</p>
-                                <p className="text-white font-bold">
-                                  {item.quantity}
-                                </p>
-                              </div>
-                              <div className="bg-green-500/10 rounded p-1.5">
-                                <p className="text-green-400 mb-0.5">Total</p>
-                                <p className="text-white font-bold">
-                                  ₱{item.totalRevenue.toLocaleString()}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))
+                          )
+                        )
                       )}
                     </div>
                   </div>
@@ -1673,45 +1821,47 @@ export default function ReportSales() {
                           </p>
                         </div>
                       ) : (
-                        sortedSales.map((item: typeof sortedSales[0], index: number) => (
-                          <div
-                            key={`${item.name}-${index}`}
-                            className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-lg xs:rounded-xl p-2 xs:p-3 border border-gray-700/30 hover:border-yellow-500/30 transition-all duration-200 touch-manipulation responsive-card"
-                          >
-                            <div className="flex items-start justify-between mb-2 gap-2">
-                              <div className="flex-1 min-w-0">
-                                <h3
-                                  className="text-white font-semibold text-xs xs:text-sm mb-1 truncate"
-                                  title={item.name}
-                                >
-                                  {item.name}
-                                </h3>
-                                <span className="px-1.5 py-0.5 bg-yellow-600/20 rounded text-2xs xs:text-xs font-medium text-yellow-300 whitespace-nowrap">
-                                  Sales Item
-                                </span>
+                        sortedSales.map(
+                          (item: (typeof sortedSales)[0], index: number) => (
+                            <div
+                              key={`${item.name}-${index}`}
+                              className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-lg xs:rounded-xl p-2 xs:p-3 border border-gray-700/30 hover:border-yellow-500/30 transition-all duration-200 touch-manipulation responsive-card"
+                            >
+                              <div className="flex items-start justify-between mb-2 gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <h3
+                                    className="text-white font-semibold text-xs xs:text-sm mb-1 truncate"
+                                    title={item.name}
+                                  >
+                                    {item.name}
+                                  </h3>
+                                  <span className="px-1.5 py-0.5 bg-yellow-600/20 rounded text-2xs xs:text-xs font-medium text-yellow-300 whitespace-nowrap">
+                                    Sales Item
+                                  </span>
+                                </div>
                               </div>
-                            </div>
 
-                            <div className="grid grid-cols-2 gap-2 xs:gap-3 mb-2">
-                              <div className="bg-blue-500/10 rounded-md xs:rounded-lg p-1.5 xs:p-2 border border-blue-500/20">
-                                <p className="text-blue-400 text-2xs xs:text-xs font-medium mb-0.5 truncate">
-                                  Quantity
-                                </p>
-                                <p className="text-white text-sm xs:text-base font-bold">
-                                  {item.quantity}
-                                </p>
-                              </div>
-                              <div className="bg-green-500/10 rounded-md xs:rounded-lg p-1.5 xs:p-2 border border-green-500/20">
-                                <p className="text-green-400 mb-0.5 text-2xs xs:text-xs font-medium truncate">
-                                  Total
-                                </p>
-                                <p className="text-white text-sm xs:text-base font-bold">
-                                  ₱{item.totalRevenue.toLocaleString()}
-                                </p>
+                              <div className="grid grid-cols-2 gap-2 xs:gap-3 mb-2">
+                                <div className="bg-blue-500/10 rounded-md xs:rounded-lg p-1.5 xs:p-2 border border-blue-500/20">
+                                  <p className="text-blue-400 text-2xs xs:text-xs font-medium mb-0.5 truncate">
+                                    Quantity
+                                  </p>
+                                  <p className="text-white text-sm xs:text-base font-bold">
+                                    {item.quantity}
+                                  </p>
+                                </div>
+                                <div className="bg-green-500/10 rounded-md xs:rounded-lg p-1.5 xs:p-2 border border-green-500/20">
+                                  <p className="text-green-400 mb-0.5 text-2xs xs:text-xs font-medium truncate">
+                                    Total
+                                  </p>
+                                  <p className="text-white text-sm xs:text-base font-bold">
+                                    ₱{item.totalRevenue.toLocaleString()}
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          )
+                        )
                       )}
                     </div>
                   </div>
@@ -1726,7 +1876,7 @@ export default function ReportSales() {
                             { key: "category", label: "Category" },
                             { key: "quantity", label: "Quantity Sold" },
                             { key: "unitPrice", label: "Unit Price" },
-                            { key: "totalRevenue", label: "Total Revenue" },
+                            { key: "totalRevenue", label: "Total Sales" },
                           ].map((col) => (
                             <th
                               key={col.key}
@@ -1788,44 +1938,46 @@ export default function ReportSales() {
                             </td>
                           </tr>
                         ) : (
-                          sortedSales.map((item: typeof sortedSales[0], index: number) => (
-                            <tr
-                              key={`${item.name}-${index}`}
-                              className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
-                                index % 2 === 0
-                                  ? "bg-gray-800/20"
-                                  : "bg-gray-900/20"
-                              }`}
-                            >
-                              <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 font-medium">
-                                <div className="flex items-center gap-2 lg:gap-3 min-w-0">
-                                  <div className="w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full bg-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"></div>
-                                  <span
-                                    className="text-white group-hover:text-yellow-400 transition-colors truncate text-xs lg:text-sm xl:text-base"
-                                    title={item.name}
-                                  >
-                                    {item.name}
+                          sortedSales.map(
+                            (item: (typeof sortedSales)[0], index: number) => (
+                              <tr
+                                key={`${item.name}-${index}`}
+                                className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
+                                  index % 2 === 0
+                                    ? "bg-gray-800/20"
+                                    : "bg-gray-900/20"
+                                }`}
+                              >
+                                <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 font-medium">
+                                  <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+                                    <div className="w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full bg-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"></div>
+                                    <span
+                                      className="text-white group-hover:text-yellow-400 transition-colors truncate text-xs lg:text-sm xl:text-base"
+                                      title={item.name}
+                                    >
+                                      {item.name}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap text-gray-400 text-xs lg:text-sm xl:text-base">
+                                  {item.category || "-"}
+                                </td>
+                                <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap">
+                                  <span className="text-white font-semibold text-sm lg:text-base xl:text-lg">
+                                    {item.quantity}
                                   </span>
-                                </div>
-                              </td>
-                              <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap text-gray-400 text-xs lg:text-sm xl:text-base">
-                                {item.category || "-"}
-                              </td>
-                              <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap">
-                                <span className="text-white font-semibold text-sm lg:text-base xl:text-lg">
-                                  {item.quantity}
-                                </span>
-                              </td>
-                              <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap text-gray-300 text-xs lg:text-sm xl:text-base">
-                                ₱ {item.unitPrice}
-                              </td>
-                              <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap">
-                                <span className="text-green-400 font-semibold text-sm lg:text-base xl:text-lg">
-                                  ₱ {item.totalRevenue.toLocaleString()}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
+                                </td>
+                                <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap text-gray-300 text-xs lg:text-sm xl:text-base">
+                                  ₱ {item.unitPrice}
+                                </td>
+                                <td className="px-3 lg:px-4 xl:px-6 py-3 lg:py-4 xl:py-5 whitespace-nowrap">
+                                  <span className="text-green-400 font-semibold text-sm lg:text-base xl:text-lg">
+                                    ₱ {item.totalRevenue.toLocaleString()}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          )
                         )}
                       </tbody>
                     </table>
@@ -1883,43 +2035,45 @@ export default function ReportSales() {
                             </td>
                           </tr>
                         ) : (
-                          sortedSales.map((item: typeof sortedSales[0], index: number) => (
-                            <tr
-                              key={`${item.name}-${index}`}
-                              className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
-                                index % 2 === 0
-                                  ? "bg-gray-800/20"
-                                  : "bg-gray-900/20"
-                              }`}
-                            >
-                              <td className="px-3 py-3 font-medium">
-                                <div className="flex flex-col gap-1">
-                                  <span
-                                    className="text-white group-hover:text-yellow-400 transition-colors text-sm font-semibold truncate"
-                                    title={item.name}
-                                  >
-                                    {item.name}
+                          sortedSales.map(
+                            (item: (typeof sortedSales)[0], index: number) => (
+                              <tr
+                                key={`${item.name}-${index}`}
+                                className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
+                                  index % 2 === 0
+                                    ? "bg-gray-800/20"
+                                    : "bg-gray-900/20"
+                                }`}
+                              >
+                                <td className="px-3 py-3 font-medium">
+                                  <div className="flex flex-col gap-1">
+                                    <span
+                                      className="text-white group-hover:text-yellow-400 transition-colors text-sm font-semibold truncate"
+                                      title={item.name}
+                                    >
+                                      {item.name}
+                                    </span>
+                                    <span className="text-gray-400 text-xs">
+                                      ₱{item.unitPrice} each
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-3 whitespace-nowrap text-gray-400 text-xs text-center">
+                                  {item.category || "-"}
+                                </td>
+                                <td className="px-3 py-3 whitespace-nowrap text-center">
+                                  <span className="text-white font-semibold text-base">
+                                    {item.quantity}
                                   </span>
-                                  <span className="text-gray-400 text-xs">
-                                    ₱{item.unitPrice} each
+                                </td>
+                                <td className="px-3 py-3 whitespace-nowrap text-right">
+                                  <span className="text-green-400 font-semibold text-base">
+                                    ₱{item.totalRevenue.toLocaleString()}
                                   </span>
-                                </div>
-                              </td>
-                              <td className="px-3 py-3 whitespace-nowrap text-gray-400 text-xs text-center">
-                                {item.category || "-"}
-                              </td>
-                              <td className="px-3 py-3 whitespace-nowrap text-center">
-                                <span className="text-white font-semibold text-base">
-                                  {item.quantity}
-                                </span>
-                              </td>
-                              <td className="px-3 py-3 whitespace-nowrap text-right">
-                                <span className="text-green-400 font-semibold text-base">
-                                  ₱{item.totalRevenue.toLocaleString()}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
+                                </td>
+                              </tr>
+                            )
+                          )
                         )}
                       </tbody>
                     </table>
@@ -1976,76 +2130,78 @@ export default function ReportSales() {
                         </p>
                       </div>
                     ) : (
-                      sortedSales.map((item: typeof sortedSales[0], index: number) => (
-                        <div
-                          key={`${item.name}-${index}`}
-                          className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-lg xs:rounded-xl p-3 xs:p-4 border border-gray-700/30 hover:border-yellow-500/30 transition-all duration-200 touch-manipulation"
-                        >
-                          {/* Card Header */}
-                          <div className="flex items-start justify-between mb-2 xs:mb-3 gap-2">
-                            <div className="flex-1 min-w-0">
-                              <h3
-                                className="text-white font-semibold text-sm xs:text-base mb-1 truncate"
-                                title={item.name}
-                              >
-                                {item.name}
-                              </h3>
-                              <div className="flex flex-wrap gap-1 xs:gap-1.5 mb-1 xs:mb-2">
-                                <span className="px-1.5 xs:px-2 py-0.5 xs:py-1 bg-yellow-600/20 rounded text-xs font-medium text-yellow-300 whitespace-nowrap">
-                                  Sales Item
-                                </span>
-                                {item.category && (
-                                  <span className="px-1.5 xs:px-2 py-0.5 xs:py-1 bg-blue-600/20 rounded text-xs font-medium text-blue-300 whitespace-nowrap">
-                                    {item.category}
+                      sortedSales.map(
+                        (item: (typeof sortedSales)[0], index: number) => (
+                          <div
+                            key={`${item.name}-${index}`}
+                            className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-lg xs:rounded-xl p-3 xs:p-4 border border-gray-700/30 hover:border-yellow-500/30 transition-all duration-200 touch-manipulation"
+                          >
+                            {/* Card Header */}
+                            <div className="flex items-start justify-between mb-2 xs:mb-3 gap-2">
+                              <div className="flex-1 min-w-0">
+                                <h3
+                                  className="text-white font-semibold text-sm xs:text-base mb-1 truncate"
+                                  title={item.name}
+                                >
+                                  {item.name}
+                                </h3>
+                                <div className="flex flex-wrap gap-1 xs:gap-1.5 mb-1 xs:mb-2">
+                                  <span className="px-1.5 xs:px-2 py-0.5 xs:py-1 bg-yellow-600/20 rounded text-xs font-medium text-yellow-300 whitespace-nowrap">
+                                    Sales Item
                                   </span>
-                                )}
+                                  {item.category && (
+                                    <span className="px-1.5 xs:px-2 py-0.5 xs:py-1 bg-blue-600/20 rounded text-xs font-medium text-blue-300 whitespace-nowrap">
+                                      {item.category}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          {/* Card Stats */}
-                          <div className="grid grid-cols-2 gap-2 xs:gap-3 sm:gap-4 mb-2 xs:mb-3">
-                            <div className="bg-blue-500/10 rounded-md xs:rounded-lg p-2 xs:p-3 border border-blue-500/20">
-                              <p className="text-blue-400 text-xs font-medium mb-0.5 xs:mb-1 truncate">
-                                Quantity Sold
+                            {/* Card Stats */}
+                            <div className="grid grid-cols-2 gap-2 xs:gap-3 sm:gap-4 mb-2 xs:mb-3">
+                              <div className="bg-blue-500/10 rounded-md xs:rounded-lg p-2 xs:p-3 border border-blue-500/20">
+                                <p className="text-blue-400 text-xs font-medium mb-0.5 xs:mb-1 truncate">
+                                  Quantity Sold
+                                </p>
+                                <p className="text-white text-base xs:text-lg font-bold">
+                                  {item.quantity}
+                                </p>
+                              </div>
+                              <div className="bg-yellow-500/10 rounded-md xs:rounded-lg p-2 xs:p-3 border border-yellow-500/20">
+                                <p className="text-yellow-400 text-xs font-medium mb-0.5 xs:mb-1 truncate">
+                                  Unit Price
+                                </p>
+                                <p className="text-white text-base xs:text-lg font-bold">
+                                  ₱{item.unitPrice}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Category (if not in header) for extra visibility on mobile */}
+                            {!item.category && (
+                              <div className="bg-blue-500/10 rounded-md xs:rounded-lg p-2 xs:p-3 border border-blue-500/20 mb-2 xs:mb-3">
+                                <p className="text-blue-400 text-xs font-medium mb-0.5 xs:mb-1 truncate">
+                                  Category
+                                </p>
+                                <p className="text-white text-base xs:text-lg font-bold">
+                                  -
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Total Sales */}
+                            <div className="bg-green-500/10 rounded-md xs:rounded-lg p-2 xs:p-3 border border-green-500/20">
+                              <p className="text-green-400 text-xs font-medium mb-0.5 xs:mb-1 truncate">
+                                Total Sales
                               </p>
-                              <p className="text-white text-base xs:text-lg font-bold">
-                                {item.quantity}
+                              <p className="text-white text-lg xs:text-xl font-bold">
+                                ₱{item.totalRevenue.toLocaleString()}
                               </p>
                             </div>
-                            <div className="bg-yellow-500/10 rounded-md xs:rounded-lg p-2 xs:p-3 border border-yellow-500/20">
-                              <p className="text-yellow-400 text-xs font-medium mb-0.5 xs:mb-1 truncate">
-                                Unit Price
-                              </p>
-                              <p className="text-white text-base xs:text-lg font-bold">
-                                ₱{item.unitPrice}
-                              </p>
-                            </div>
                           </div>
-
-                          {/* Category (if not in header) for extra visibility on mobile */}
-                          {!item.category && (
-                            <div className="bg-blue-500/10 rounded-md xs:rounded-lg p-2 xs:p-3 border border-blue-500/20 mb-2 xs:mb-3">
-                              <p className="text-blue-400 text-xs font-medium mb-0.5 xs:mb-1 truncate">
-                                Category
-                              </p>
-                              <p className="text-white text-base xs:text-lg font-bold">
-                                -
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Total Revenue */}
-                          <div className="bg-green-500/10 rounded-md xs:rounded-lg p-2 xs:p-3 border border-green-500/20">
-                            <p className="text-green-400 text-xs font-medium mb-0.5 xs:mb-1 truncate">
-                              Total Revenue
-                            </p>
-                            <p className="text-white text-lg xs:text-xl font-bold">
-                              ₱{item.totalRevenue.toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                      ))
+                        )
+                      )
                     )}
                   </div>
                 </div>
@@ -2088,7 +2244,11 @@ export default function ReportSales() {
                           <span className="text-green-400 font-semibold">
                             ₱
                             {sortedSales
-                              .reduce((sum: number, item: typeof groupedSales[0]) => sum + item.totalRevenue, 0)
+                              .reduce(
+                                (sum: number, item: (typeof groupedSales)[0]) =>
+                                  sum + item.totalRevenue,
+                                0
+                              )
                               .toLocaleString()}
                           </span>{" "}
                           revenue
@@ -2096,7 +2256,11 @@ export default function ReportSales() {
                         <div className="text-gray-300 truncate">
                           <span className="text-blue-400 font-semibold">
                             {sortedSales
-                              .reduce((sum: number, item: typeof groupedSales[0]) => sum + item.quantity, 0)
+                              .reduce(
+                                (sum: number, item: (typeof groupedSales)[0]) =>
+                                  sum + item.quantity,
+                                0
+                              )
                               .toLocaleString()}
                           </span>{" "}
                           sold
@@ -2107,7 +2271,10 @@ export default function ReportSales() {
                             {sortedSales.length > 0
                               ? (
                                   sortedSales.reduce(
-                                    (sum: number, item: typeof groupedSales[0]) => sum + Number(item.unitPrice),
+                                    (
+                                      sum: number,
+                                      item: (typeof groupedSales)[0]
+                                    ) => sum + Number(item.unitPrice),
                                     0
                                   ) / sortedSales.length
                                 ).toFixed(2)
@@ -2223,6 +2390,214 @@ export default function ReportSales() {
                       </p>
                     </div>
                   </form>
+                </div>
+              )}
+
+              {importModalOpen && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-100">
+                  <div className="bg-black rounded-2xl p-6 max-w-5xl w-full shadow-2xl relative">
+                    {/* Header */}
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold text-yellow-400 flex items-center gap-2">
+                        <BiImport className="text-yellow-500 text-2xl" />
+                        Import Sales Data
+                      </h3>
+                      <button
+                        className="text-gray-500 hover:text-black transition"
+                        onClick={() => {
+                          setImportModalOpen(false);
+                          setImportedRows([]);
+                          setImportFile(null);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {/* File Upload - Enhanced UX */}
+                    <div
+                      className="mb-4 border-2 border-dashed border-gray-300 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:border-yellow-500 transition relative group"
+                      onClick={handleImportClick}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) {
+                          fileInputRef.current!.files = e.dataTransfer.files;
+                          handleFileChange({
+                            target: { files: e.dataTransfer.files },
+                          } as React.ChangeEvent<HTMLInputElement>);
+                        }
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        ref={fileInputRef}
+                        className="hidden"
+                        onChange={handleFileChange}
+                        id="fileUpload"
+                      />
+                      <label
+                        htmlFor="fileUpload"
+                        className="cursor-pointer text-gray-600 hover:text-yellow-600 font-medium flex flex-col items-center"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ")
+                            handleImportClick();
+                        }}
+                      >
+                        <FiUpload className="text-2xl mb-2 text-yellow-500 group-hover:text-yellow-600 transition" />
+                        <span>
+                          <span className="font-semibold text-yellow-600 group-hover:text-yellow-700 transition">
+                            Click
+                          </span>{" "}
+                          or{" "}
+                          <span className="font-semibold text-yellow-600 group-hover:text-yellow-700 transition">
+                            drag & drop
+                          </span>{" "}
+                          your Excel file here
+                        </span>
+                        <span className="text-xs text-gray-400 mt-1">
+                          Supported: .xlsx, .xls
+                        </span>
+                      </label>
+                      {importFile && (
+                        <p className="text-sm text-gray-500 mt-2">
+                          <span className="font-semibold text-yellow-500">
+                            Selected:
+                          </span>{" "}
+                          {importFile.name}
+                        </p>
+                      )}
+                    </div>
+                    {/* Imported Table - Responsive and Modal-friendly */}
+                    {importedRows.length > 0 && (
+                      <div className="overflow-x-auto max-h-[40vh] mb-6 rounded-lg border border-gray-700/40">
+                        <table className="min-w-full text-xs sm:text-sm text-left border-collapse bg-gray-900/80 rounded-lg">
+                          <thead>
+                            <tr>
+                              {Object.keys(importedRows[0] || {}).map((col) => (
+                                <th
+                                  key={col}
+                                  className="px-2 py-2 sm:px-3 sm:py-3 font-semibold text-gray-300 bg-gray-800/70 whitespace-nowrap"
+                                >
+                                  {col}
+                                </th>
+                              ))}
+                              <th className="px-2 py-2 sm:px-3 sm:py-3 font-semibold text-gray-300 bg-gray-800/70 whitespace-nowrap">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importedRows.map((row, idx) => (
+                              <tr
+                                key={idx}
+                                className={`border-b border-gray-700/20 ${
+                                  idx % 2 === 0
+                                    ? "bg-gray-800/10"
+                                    : "bg-gray-900/10"
+                                }`}
+                              >
+                                {Object.keys(row).map((col) => (
+                                  <td
+                                    key={col}
+                                    className="px-2 py-2 sm:px-3 sm:py-3"
+                                  >
+                                    <input
+                                      value={row[col]}
+                                      onChange={(e) => {
+                                        const newRows = [...importedRows];
+                                        newRows[idx][col] = e.target.value;
+                                        setImportedRows(newRows);
+                                      }}
+                                      className="w-full border border-gray-600 rounded-md px-1.5 py-1 text-xs bg-gray-900 text-white focus:ring-1 focus:ring-yellow-400 outline-none"
+                                    />
+                                  </td>
+                                ))}
+                                <td className="px-2 py-2 sm:px-3 sm:py-3 text-center">
+                                  <button
+                                    className="text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-2 py-1 rounded transition text-xs font-medium"
+                                    onClick={() =>
+                                      setImportedRows(
+                                        importedRows.filter((_, i) => i !== idx)
+                                      )
+                                    }
+                                  >
+                                    Delete
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+                      <button
+                        onClick={() => {
+                          if (importedRows.length > 0) {
+                            const columns = Object.keys(importedRows[0]);
+                            const blankRow = columns.reduce(
+                              (acc, col) => ({ ...acc, [col]: "" }),
+                              {}
+                            );
+                            setImportedRows([...importedRows, blankRow]);
+                          }
+                        }}
+                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition"
+                      >
+                        + Add Row
+                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-medium transition"
+                          onClick={() => {
+                            setImportModalOpen(false);
+                            setImportedRows([]);
+                            setImportFile(null);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          disabled={importedRows.length === 0}
+                          onClick={async () => {
+                            await importSalesData(importedRows);
+                            setImportModalOpen(false);
+                            setImportedRows([]);
+                            setImportFile(null);
+                            setImportSuccess(true);
+                          }}
+                          className={`px-5 py-2 rounded-lg font-semibold shadow-md transition flex items-center gap-2 ${
+                            importedRows.length === 0
+                              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                              : "bg-yellow-600 hover:bg-yellow-700 text-white"
+                          }`}
+                        >
+                          <BiImport />
+                          Import to System
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {importSuccess && (
+                <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
+                  <div className="flex items-center gap-2 xs:gap-3">
+                    <MdCheckCircle className="text-white text-4xl mb-4 mx-auto" />
+                    <h3 className="text-lg font-bold text-white mb-2">
+                      Import Successful!
+                    </h3>
+                    <p className="text-white mb-4">
+                      Your sales data has been imported successfully.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

@@ -44,6 +44,7 @@ import {
   FaDownload,
   FaFilter,
 } from "react-icons/fa";
+import { BiExport } from "react-icons/bi";
 
 export default function ReportInventory() {
   // Google OAuth Client ID
@@ -51,41 +52,41 @@ export default function ReportInventory() {
 
   // GoogleSheetIntegration stub (if not imported elsewhere)
   // Accepts onSuccess and exporting props for compatibility
-const GoogleSheetIntegration = ({
-  onSuccess,
-  exporting,
-}: {
-  onSuccess: (tr: any) => void;
-  exporting: boolean;
-}) => {
-  const login = useGoogleLogin({
-    scope:
-      "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive",
+  const GoogleSheetIntegration = ({
     onSuccess,
-    onError: (err) => {
-      console.error(err);
-      alert(
-        "Google authentication failed. Please ensure you grant all requested permissions."
-      );
-    },
-  });
+    exporting,
+  }: {
+    onSuccess: (tr: any) => void;
+    exporting: boolean;
+  }) => {
+    const login = useGoogleLogin({
+      scope:
+        "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive",
+      onSuccess,
+      onError: (err) => {
+        console.error(err);
+        alert(
+          "Google authentication failed. Please ensure you grant all requested permissions."
+        );
+      },
+    });
 
-  return (
-    <button
-      disabled={exporting}
-      onClick={() => login()}
-      className={`w-full flex items-center justify-center gap-2 font-semibold px-6 py-3 rounded-xl transition-all duration-200 ${
-        exporting
-          ? "bg-blue-400/50 cursor-not-allowed text-blue-200 border-2 border-blue-400/50"
-          : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white border-2 border-blue-500/70 hover:border-blue-400/70"
-      }`}
-      type="button"
-    >
-      <FaGoogle />
-      {exporting ? "Exporting..." : "Export to Google Sheets"}
-    </button>
-  );
-};
+    return (
+      <button
+        disabled={exporting}
+        onClick={() => login()}
+        className={`w-full flex items-center justify-center gap-2 font-semibold px-6 py-3 rounded-xl transition-all duration-200 ${
+          exporting
+            ? "bg-blue-400/50 cursor-not-allowed text-blue-200 border-2 border-blue-400/50"
+            : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white border-2 border-blue-500/70 hover:border-blue-400/70"
+        }`}
+        type="button"
+      >
+        <FaGoogle />
+        {exporting ? "Exporting..." : "Export to Google Sheets"}
+      </button>
+    );
+  };
 
   // ...all state declarations above...
   // Helper to reload all inventory and spoilage data
@@ -108,8 +109,6 @@ const GoogleSheetIntegration = ({
     }
     await fetchSpoilageSummary(start, end);
   };
-
-
 
   // (Removed duplicate offline state declarations and effects)
   // Spoilage items state
@@ -169,7 +168,9 @@ const GoogleSheetIntegration = ({
           setOfflineError(null);
         } else {
           setOfflineData(null);
-          setOfflineError("No cached inventory report data available. Please connect to the internet to load report.");
+          setOfflineError(
+            "No cached inventory report data available. Please connect to the internet to load report."
+          );
         }
       } catch {
         setOfflineData(null);
@@ -264,13 +265,23 @@ const GoogleSheetIntegration = ({
           .map((log: any) => ({
             id: log.item_id || log.id,
             name: log.item_name || log.name || "Unknown Item",
-            inStock: typeof log.remaining_stock === "number" ? log.remaining_stock : parseInt(log.remaining_stock || "0", 10),
-            wastage: typeof log.wastage === "number" ? log.wastage : parseInt(log.wastage || "0", 10),
+            inStock:
+              typeof log.remaining_stock === "number"
+                ? log.remaining_stock
+                : parseInt(log.remaining_stock || "0", 10),
+            wastage:
+              typeof log.wastage === "number"
+                ? log.wastage
+                : parseInt(log.wastage || "0", 10),
             stock: log.status || "Unknown",
-            report_date: log.action_date ? new Date(log.action_date).toISOString().slice(0, 10) : "",
+            report_date: log.action_date
+              ? new Date(log.action_date).toISOString().slice(0, 10)
+              : "",
             category: log.category || "(historical)",
             expiration_date: log.expiration_date || null,
-            batch_id: log.batch_date ? new Date(log.batch_date).toLocaleDateString() : (log.batch_id || null),
+            batch_id: log.batch_date
+              ? new Date(log.batch_date).toLocaleDateString()
+              : log.batch_id || null,
             created_at: log.action_date || null,
           }))
           .filter((i: any) => i.report_date && i.report_date !== today);
@@ -535,7 +546,12 @@ const GoogleSheetIntegration = ({
     const baseInventory = isOffline && offlineData ? offlineData : inventory;
     // When not in historical mode and period is 'all', include pastInventory (historical logs)
     let sourceData = isHistoricalMode ? historicalInventory : baseInventory;
-    if (!isHistoricalMode && period === "all" && Array.isArray(pastInventory) && pastInventory.length > 0) {
+    if (
+      !isHistoricalMode &&
+      period === "all" &&
+      Array.isArray(pastInventory) &&
+      pastInventory.length > 0
+    ) {
       // Merge pastInventory and baseInventory, preferring baseInventory for items with the same id+report_date
       const combined = [...pastInventory, ...baseInventory];
       // Build a map to dedupe by id+report_date (prefer later entries from baseInventory)
@@ -546,8 +562,12 @@ const GoogleSheetIntegration = ({
         if (map.has(key)) {
           const existing = map.get(key);
           // Heuristic: if existing.created_at is older than row.created_at, replace
-          const existingCreated = existing.created_at ? new Date(existing.created_at).getTime() : 0;
-          const rowCreated = row.created_at ? new Date(row.created_at).getTime() : 0;
+          const existingCreated = existing.created_at
+            ? new Date(existing.created_at).getTime()
+            : 0;
+          const rowCreated = row.created_at
+            ? new Date(row.created_at).getTime()
+            : 0;
           if (rowCreated >= existingCreated) map.set(key, row);
         } else {
           map.set(key, row);
@@ -893,9 +913,6 @@ const GoogleSheetIntegration = ({
     }
   };
 
-  
-  
-
   const handleGoogleLoginSuccess = (tokenResponse: any) => {
     console.log(
       "[Google Export] handleGoogleLoginSuccess called",
@@ -908,7 +925,6 @@ const GoogleSheetIntegration = ({
       setIsExporting(false);
     });
   };
-
 
   // Clear all filters at once
   const handleClear = () => {
@@ -1004,7 +1020,12 @@ const GoogleSheetIntegration = ({
         />
         <ResponsiveMain>
           {isOffline && (
-            <OfflineDataBanner message={offlineError || "You are offline. Showing cached inventory report data."} />
+            <OfflineDataBanner
+              message={
+                offlineError ||
+                "You are offline. Showing cached inventory report data."
+              }
+            />
           )}
           <main
             className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
@@ -1045,7 +1066,7 @@ const GoogleSheetIntegration = ({
                           }}
                           className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-black px-3 py-2 sm:px-4 sm:py-2 md:px-6 md:py-3 rounded-lg sm:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm md:text-base whitespace-nowrap flex-1 sm:flex-none min-h-[44px] touch-manipulation"
                         >
-                          <FaDownload className="text-xs sm:text-sm" />
+                          <BiExport className="text-xs sm:text-sm" />
                           <span>Export Report</span>
                         </button>
                       </div>
@@ -2360,35 +2381,33 @@ const GoogleSheetIntegration = ({
                   </div>
 
                   <div className="space-y-2 xs:space-y-3 sm:space-y-4 pt-1 xs:pt-2">
-                      <button
-                        onClick={() => {
+                    <button
+                      onClick={() => {
                         exportExcel();
                         setExportSuccess(true);
                       }}
-                        className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-semibold px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 rounded-md xs:rounded-lg sm:rounded-xl transition-all duration-200 hover:shadow-lg flex items-center justify-center gap-1.5 xs:gap-2 text-xs xs:text-sm sm:text-base min-h-[40px] xs:min-h-[44px] touch-manipulation"
-                        type="button"
-                      >
-                        <span className="text-sm xs:text-base sm:text-lg">
-                          📊
-                        </span>
-                        <span className="truncate">
-                          Export to Excel (.xlsx)
-                        </span>
-                      </button>
+                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white font-semibold px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 rounded-md xs:rounded-lg sm:rounded-xl transition-all duration-200 hover:shadow-lg flex items-center justify-center gap-1.5 xs:gap-2 text-xs xs:text-sm sm:text-base min-h-[40px] xs:min-h-[44px] touch-manipulation"
+                      type="button"
+                    >
+                      <span className="text-sm xs:text-base sm:text-lg">
+                        📊
+                      </span>
+                      <span className="truncate">Export to Excel (.xlsx)</span>
+                    </button>
 
-                      <GoogleSheetIntegration
-                        onSuccess={handleGoogleLoginSuccess}
-                        exporting={isExporting}
-                      />
+                    <GoogleSheetIntegration
+                      onSuccess={handleGoogleLoginSuccess}
+                      exporting={isExporting}
+                    />
 
-                      <button
-                        onClick={() => setShowPopup(false)}
-                        className="w-full border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 rounded-md xs:rounded-lg sm:rounded-xl transition-all duration-200 text-xs xs:text-sm sm:text-base min-h-[40px] xs:min-h-[44px] touch-manipulation"
-                        type="button"
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => setShowPopup(false)}
+                      className="w-full border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 rounded-md xs:rounded-lg sm:rounded-xl transition-all duration-200 text-xs xs:text-sm sm:text-base min-h-[40px] xs:min-h-[44px] touch-manipulation"
+                      type="button"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

@@ -35,7 +35,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             if not user:
                 print("[RBAC] User not found in DB for auth_id:", auth_id)
                 raise HTTPException(status_code=404, detail="User not found")
-            return {"user_id": user.user_id, "user_role": user.user_role, "name": user.name, "email": user.email}
+            if isinstance(user, tuple):
+                return {"user_id": user[0], "user_role": user[1], "name": user[2], "email": user[3]}
+            else:
+                return {
+                    "user_id": user.user_id,
+                    "user_role": user.user_role,
+                    "name": user.name,
+                    "email": user.email
+                }
+
     except Exception as e:
         import traceback
         print("[RBAC] Exception during authentication:", str(e))
@@ -48,3 +57,26 @@ def require_role(*roles):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
         return user
     return role_checker
+
+def get_owner_user(session):
+    """
+    Fetches an Owner user using a synchronous SQLAlchemy session.
+    This function must NOT be called with an async session.
+    """
+    from sqlalchemy import text
+    result = session.execute(
+        text("SELECT user_id, user_role, name, email FROM users WHERE user_role = :role LIMIT 1"),
+        {"role": "Owner"}
+    )
+    user = result.fetchone()
+    if not user:
+        return {"user_id": None, "user_role": "Owner", "name": "ScheduledJob", "email": None}
+    if isinstance(user, tuple):
+        return {"user_id": user[0], "user_role": user[1], "name": user[2], "email": user[3]}
+    else:
+        return {
+            "user_id": user.user_id,
+            "user_role": user.user_role,
+            "name": user.name,
+            "email": user.email
+        }

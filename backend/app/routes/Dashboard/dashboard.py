@@ -1,8 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from slowapi.util import get_remote_address
 from slowapi import Limiter
-
-limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, text, cast, Date, String
 from app.supabase import get_db
@@ -18,6 +16,7 @@ import matplotlib.pyplot as plt
 
 router = APIRouter()
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 
 @limiter.limit("10/minute")
 @router.get("/dashboard/low-stock")

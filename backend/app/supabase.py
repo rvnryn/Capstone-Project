@@ -33,12 +33,15 @@ postgrest_client = SyncPostgrestClient(
 )
 postgrest_client.session = httpx.Client(http2=False)
 
- # ...existing code...
-
 # SQLAlchemy engine/session for direct Postgres access
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 engine = create_async_engine(POSTGRES_URL, echo=False)
 SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+# Synchronous engine/session for scheduled jobs
+from sqlalchemy import create_engine as create_sync_engine
+sync_engine = create_sync_engine(POSTGRES_URL.replace("asyncpg", "psycopg2"), echo=False)
+SyncSessionLocal = sessionmaker(bind=sync_engine)
 
 async def get_db():
     async with SessionLocal() as session:

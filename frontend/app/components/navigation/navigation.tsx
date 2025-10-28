@@ -132,6 +132,7 @@ interface NavigationBarProps {
   showAdminPasswordModal?: boolean;
   localRestoreModalOpen?: boolean;
   modalOpen?: boolean;
+  showSpoilageModal?: boolean;
 }
 
 const NavigationBar = ({
@@ -157,7 +158,8 @@ const NavigationBar = ({
   showHistoryModal,
   showAdminPasswordModal,
   localRestoreModalOpen,
-  modalOpen
+  modalOpen,
+  showSpoilageModal,
 }: NavigationBarProps) => {
   // Enhanced navigation state using the improved hook
   const {
@@ -213,9 +215,16 @@ const NavigationBar = ({
       console.log("[NavigationBar] user is null or undefined");
     }
     console.log("[NavigationBar] localStorage:", {
-      cachedUser: typeof window !== "undefined" ? localStorage.getItem("cachedUser") : null,
-      cachedRole: typeof window !== "undefined" ? localStorage.getItem("cachedRole") : null,
-      token: typeof window !== "undefined" ? localStorage.getItem("token") : null,
+      cachedUser:
+        typeof window !== "undefined"
+          ? localStorage.getItem("cachedUser")
+          : null,
+      cachedRole:
+        typeof window !== "undefined"
+          ? localStorage.getItem("cachedRole")
+          : null,
+      token:
+        typeof window !== "undefined" ? localStorage.getItem("token") : null,
     });
   }, [user, role]);
 
@@ -655,7 +664,8 @@ const NavigationBar = ({
     showHistoryModal ||
     showAdminPasswordModal ||
     localRestoreModalOpen ||
-    modalOpen
+    modalOpen ||
+    showSpoilageModal
   );
 
   const handleBurgerClick = anyModalOpen

@@ -192,14 +192,6 @@ export default function InventoryPage() {
             const stockQty = Number(item.stock_quantity);
             // Get unit of measurement from settings
             const unit = setting?.default_unit || "";
-            // Debug: log the mapping for visual comparison
-            // console.log("Inventory:", {
-            //   itemName: item.item_name,
-            //   stock: stockQty,
-            //   matchedSetting: setting?.name,
-            //   threshold: setting?.low_stock_threshold,
-            //   unit,
-            // });
 
             let status: "Out Of Stock" | "Critical" | "Low" | "Normal" =
               "Normal";
@@ -248,7 +240,9 @@ export default function InventoryPage() {
                     .trim()
                     .toLowerCase();
                   const setting = settings.find(
-                    (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+                    (s) =>
+                      (s.name || "").toString().trim().toLowerCase() ===
+                      itemName
                   );
                   const threshold = Number(setting?.low_stock_threshold);
                   const fallbackThreshold = 100;
@@ -258,7 +252,8 @@ export default function InventoryPage() {
                       : fallbackThreshold;
                   const stockQty = Number(item.stock_quantity);
                   const unit = setting?.default_unit || "";
-                  let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
+                  let status: "Out Of Stock" | "Critical" | "Low" | "Normal" =
+                    "Normal";
                   if (stockQty === 0) {
                     status = "Out Of Stock";
                   } else if (stockQty <= useThreshold * 0.5) {
@@ -276,7 +271,9 @@ export default function InventoryPage() {
                     category: item.category,
                     stock: stockQty,
                     status,
-                    added: item.created_at ? new Date(item.created_at) : new Date(),
+                    added: item.created_at
+                      ? new Date(item.created_at)
+                      : new Date(),
                     expires: item.expiration_date
                       ? new Date(item.expiration_date)
                       : null,
@@ -293,9 +290,9 @@ export default function InventoryPage() {
       }
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchOnMount: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   // Delete mutation with optimistic UI and offline support
@@ -692,6 +689,7 @@ export default function InventoryPage() {
       <NavigationBar
         showDeleteModal={showDeleteModal}
         showTransferModal={showTransferModal}
+        showSpoilageModal={showSpoilageModal}
       />
       <ResponsiveMain>
         <main
@@ -1121,7 +1119,9 @@ export default function InventoryPage() {
                               {formatDateTime(item.added)}
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm">
-                              {formatDateOnly(item.expires)}
+                              {item.expires
+                                ? formatDateOnly(item.expires)
+                                : "No Expiration Date"}
                             </td>
                             <td className="px-3 xl:px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-1 xl:gap-2">

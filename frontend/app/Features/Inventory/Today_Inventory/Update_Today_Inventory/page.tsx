@@ -55,6 +55,7 @@ export default function EditTodayInventoryItem() {
     name: "",
     category: "",
     stock: "",
+    unit_price: "",
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,8 +77,9 @@ export default function EditTodayInventoryItem() {
         return;
       }
       try {
+        const batch_date = searchParams.get("batch_date") || "";
         const [data, settingsData] = await Promise.all([
-          getTodayItem(itemId),
+          getTodayItem(itemId, batch_date),
           fetchSettings(),
         ]);
         const mappedItem = {
@@ -109,39 +111,56 @@ export default function EditTodayInventoryItem() {
     fetchAll();
   }, [itemId, router]);
 
-  const validate = useCallback((data: any) => {
-    const newErrors = {
-      name: "",
-      category: "",
-      stock: "",
-    };
+  const validate = useCallback(
+    (data: any) => {
+      const newErrors = {
+        name: "",
+        category: "",
+        stock: "",
+        unit_price: "",
+      };
 
-    if (!data.name || !data.name.trim()) {
-      newErrors.name = "Item name is required.";
-    } else if (data.name.trim().length < 2) {
-      newErrors.name = "Item name must be at least 2 characters.";
-    } else if (!/^[a-zA-Z0-9\s]+$/.test(data.name.trim())) {
-      newErrors.name =
-        "Item name can only contain letters, numbers, and spaces.";
-    }
+      if (!data.name || !data.name.trim()) {
+        newErrors.name = "Item name is required.";
+      } else if (data.name.trim().length < 2) {
+        newErrors.name = "Item name must be at least 2 characters.";
+      } else if (!/^[a-zA-Z0-9\s]+$/.test(data.name.trim())) {
+        newErrors.name =
+          "Item name can only contain letters, numbers, and spaces.";
+      }
 
-    if (!data.category) {
-      newErrors.category = "Category is required.";
-    } else if (!CATEGORY_OPTIONS.includes(data.category)) {
-      newErrors.category = "Invalid category selected.";
-    }
+      if (!data.category) {
+        newErrors.category = "Category is required.";
+      } else if (!CATEGORY_OPTIONS.includes(data.category)) {
+        newErrors.category = "Invalid category selected.";
+      }
 
-    if (data.stock === null || data.stock === undefined || data.stock === "") {
-      newErrors.stock = "Quantity in stock is required.";
-    } else if (
-      !Number.isInteger(Number(data.stock)) ||
-      Number(data.stock) < 0
-    ) {
-      newErrors.stock = "Quantity must be a non-negative integer.";
-    }
+      if (
+        data.stock === null ||
+        data.stock === undefined ||
+        data.stock === ""
+      ) {
+        newErrors.stock = "Quantity in stock is required.";
+      } else if (
+        !Number.isInteger(Number(data.stock)) ||
+        Number(data.stock) < 0
+      ) {
+        newErrors.stock = "Quantity must be a non-negative integer.";
+      }
 
-    return newErrors;
-  }, []);
+      if (
+        data.unit_price !== undefined &&
+        data.unit_price !== null &&
+        data.unit_price !== "" &&
+        (isNaN(Number(data.unit_price)) || Number(data.unit_price) < 0)
+      ) {
+        newErrors.unit_price = "Unit price must be a non-negative number.";
+      }
+
+      return newErrors;
+    },
+    [CATEGORY_OPTIONS]
+  );
 
   useEffect(() => {
     if (isSubmitted) {
@@ -197,13 +216,17 @@ export default function EditTodayInventoryItem() {
     }
 
     try {
-      await updateTodayItem(itemId, {
-        item_name: formData.name.trim(),
-        category: formData.category,
-        batch_date: formData.batch,
-        stock_quantity: formData.stock,
-        expiration_date: formData.expiration_date || null,
-      });
+      await updateTodayItem(
+        itemId,
+        {
+          item_name: formData.name.trim(),
+          category: formData.category,
+          batch_date: formData.batch,
+          stock_quantity: formData.stock,
+          expiration_date: formData.expiration_date || null,
+        },
+        formData.batch
+      );
 
       setShowSuccessMessage(true);
       setIsDirty(false);
@@ -564,6 +587,50 @@ export default function EditTodayInventoryItem() {
                       <div className="flex items-center gap-2 mt-2 text-red-400 text-xs sm:text-sm">
                         <FiAlertCircle className="flex-shrink-0" />
                         {errors.stock}
+                      </div>
+                    )}
+                  </div>
+                  {/* Unit Price Field */}
+                  <div className="group lg:col-span-2">
+                    <label
+                      htmlFor="unit_price"
+                      className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                    >
+                      <FiTag className="text-green-400" />
+                      Unit Price
+                    </label>
+                    <div className="relative max-w-md">
+                      <input
+                        type="number"
+                        id="unit_price"
+                        name="unit_price"
+                        min={0}
+                        step="0.01"
+                        value={formData.unit_price ?? ""}
+                        onChange={handleChange}
+                        onFocus={() => handleFocus("unit_price")}
+                        onBlur={handleBlur}
+                        placeholder="Enter unit price..."
+                        className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
+                          isSubmitted && errors.unit_price
+                            ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                            : focusedField === "unit_price"
+                            ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                            : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                        }`}
+                        inputMode="decimal"
+                        pattern="[0-9]*"
+                      />
+                      {focusedField === "unit_price" && !errors.unit_price && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                        </div>
+                      )}
+                    </div>
+                    {isSubmitted && errors.unit_price && (
+                      <div className="flex items-center gap-2 mt-2 text-red-400 text-xs sm:text-sm">
+                        <FiAlertCircle className="flex-shrink-0" />
+                        {errors.unit_price}
                       </div>
                     )}
                   </div>

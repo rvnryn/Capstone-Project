@@ -29,7 +29,7 @@ from app.supabase import postgrest_client, supabase, get_db
 from starlette.concurrency import run_in_threadpool
 import uuid
 from datetime import datetime
-from app.routes.userActivity import UserActivityLog
+from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 import logging
 import math
@@ -45,10 +45,8 @@ async def trigger_recalculate(
     user=Depends(require_role("Owner", "General Manager", "Store Manager")),
     db=Depends(get_db),
 ):
-    # run in threadpool to avoid blocking
     result = await run_in_threadpool(recalculate_stock_status)
 
-    # record activity (best-effort)
     try:
         user_row = getattr(user, "user_row", user)
         desc = result.get("message") if isinstance(result, dict) else str(result)

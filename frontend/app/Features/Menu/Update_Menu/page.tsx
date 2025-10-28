@@ -21,14 +21,19 @@ import {
   FiArrowRight,
   FiImage,
 } from "react-icons/fi";
+import { useInventoryItemNames } from "@/app/hooks/Itemnames";
 
 const CATEGORY_OPTIONS = [
-  "Soup & Noodles",
-  "Rice Toppings",
+  "Bagnet Meals",
   "Sizzlers",
-  "Extras",
+  "Unli Rice w/ Bone Marrow",
+  "Soups w/ Bone Marrow",
+  "Combo",
+  "For Sharing",
+  "Noodles",
   "Desserts",
-  "Beverage",
+  "Sides",
+  "Drinks",
 ];
 
 export default function EditMenuPage() {
@@ -41,6 +46,7 @@ export default function EditMenuPage() {
     fetchMenuById,
     deleteIngredientFromMenu,
   } = useMenuAPI();
+  const { items, loading: itemNamesLoading } = useInventoryItemNames();
 
   // Fetch menu by id with localStorage fallback for offline support
   const { data: menu, isLoading } = useQuery({
@@ -60,7 +66,10 @@ export default function EditMenuPage() {
         menuData = await fetchMenuById(menu_id);
         // Save to localStorage for offline use
         if (typeof window !== "undefined" && menuData) {
-          localStorage.setItem(`menuCache_${menu_id}` , JSON.stringify(menuData));
+          localStorage.setItem(
+            `menuCache_${menu_id}`,
+            JSON.stringify(menuData)
+          );
         }
       }
       return menuData;
@@ -94,8 +103,14 @@ export default function EditMenuPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [error, setError] = useState("");
-  const [ingredients, setIngredients] = useState([
-    { id: "", name: "", quantity: "" },
+  type Ingredient = {
+    id: string;
+    name: string;
+    quantity: string;
+    measurement: string;
+  };
+  const [ingredients, setIngredients] = useState<Ingredient[]>([
+    { id: "", name: "", quantity: "", measurement: "" },
   ]);
   const [showRemoveIngredientModal, setShowRemoveIngredientModal] =
     useState(false);
@@ -126,6 +141,7 @@ export default function EditMenuPage() {
               id: ing.ingredient_id,
               name: ing.ingredient_name || ing.name || "",
               quantity: ing.quantity || "",
+              measurement: ing.measurement || "",
             }))
           : [{ id: "", name: "", quantity: "" }]
       );
@@ -139,6 +155,7 @@ export default function EditMenuPage() {
           id: ing.ingredient_id,
           name: ing.ingredient_name || ing.name || "",
           quantity: ing.quantity || "",
+          measurement: ing.measurement || "",
         })),
       });
     }
@@ -183,7 +200,10 @@ export default function EditMenuPage() {
     setIsDirty(true);
   };
   const addIngredient = () =>
-    setIngredients([...ingredients, { id: "", name: "", quantity: "" }]);
+    setIngredients([
+      ...ingredients,
+      { id: "", name: "", quantity: "", measurement: "" },
+    ]);
 
   const removeIngredient = (idx: number) => {
     setIngredientToRemoveIdx(idx);
@@ -304,7 +324,6 @@ export default function EditMenuPage() {
     router.push(path);
   };
 
-
   return (
     <section className="text-white font-poppins w-full min-h-screen">
       <NavigationBar
@@ -326,7 +345,9 @@ export default function EditMenuPage() {
               {!isOnline && (
                 <div className="mb-6 p-4 bg-yellow-900/80 border border-yellow-500/40 rounded-xl text-yellow-300 text-center font-semibold">
                   <MdCancel className="inline mr-2 text-yellow-400 text-lg align-text-bottom" />
-                  You are offline. <b>Editing, adding, or removing</b> menu items is <b>disabled</b> while offline. Please reconnect to make changes.
+                  You are offline. <b>Editing, adding, or removing</b> menu
+                  items is <b>disabled</b> while offline. Please reconnect to
+                  make changes.
                 </div>
               )}
               <div className="flex flex-row items-center justify-center gap-4 mb-6 w-full">
@@ -362,311 +383,357 @@ export default function EditMenuPage() {
                 className="space-y-3 xs:space-y-4 sm:space-y-6 md:space-y-8"
               >
                 {/* Disable all fields and buttons if offline */}
-                <fieldset disabled={!isOnline} style={!isOnline ? { opacity: 0.6, pointerEvents: 'none' } : {}}>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8">
-                  <div className="space-y-4">
-                    {/* Dish Name */}
-                    <div className="group">
-                      <label
-                        htmlFor="dish_name"
-                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                      >
-                        <FiTag className="text-yellow-400" />
-                        Dish Name
-                        <span className="text-red-400">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          id="dish_name"
-                          name="dish_name"
-                          required
-                          value={formData.dish_name}
-                          onChange={handleChange}
-                          onFocus={() => handleFocus("dish_name")}
-                          onBlur={handleBlur}
-                          placeholder="Enter dish name..."
-                          className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
-                            isSubmitted && !formData.dish_name
-                              ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                              : focusedField === "dish_name"
-                              ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                              : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                          }`}
-                          disabled={!isOnline}
-                        />
-                        {focusedField === "dish_name" && (
-                          <div className="absolute right-2 xs:right-3 top-1/2 transform -translate-y-1/2">
-                            <div className="w-1.5 xs:w-2 h-1.5 xs:h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Category */}
-                    <div className="group">
-                      <label
-                        htmlFor="category"
-                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                      >
-                        <FiPackage className="text-yellow-400" />
-                        Category
-                        <span className="text-red-400">*</span>
-                      </label>
-                      <div className="relative">
-                        <select
-                          id="category"
-                          name="category"
-                          required
-                          value={formData.category}
-                          onChange={handleChange}
-                          onFocus={() => handleFocus("category")}
-                          onBlur={handleBlur}
-                          className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 cursor-pointer ${
-                            isSubmitted && !formData.category
-                              ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                              : focusedField === "category"
-                              ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                              : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                          }`}
-                          disabled={!isOnline}
+                <fieldset
+                  disabled={!isOnline}
+                  style={
+                    !isOnline ? { opacity: 0.6, pointerEvents: "none" } : {}
+                  }
+                >
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8">
+                    <div className="space-y-4">
+                      {/* Dish Name */}
+                      <div className="group">
+                        <label
+                          htmlFor="dish_name"
+                          className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
                         >
-                          <option value="" className="bg-gray-800">
-                            Select Category...
-                          </option>
-                          {CATEGORY_OPTIONS.map((cat) => (
-                            <option
-                              key={cat}
-                              value={cat}
-                              className="bg-gray-800"
-                            >
-                              {cat}
+                          <FiTag className="text-yellow-400" />
+                          Dish Name
+                          <span className="text-red-400">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            id="dish_name"
+                            name="dish_name"
+                            required
+                            value={formData.dish_name}
+                            onChange={handleChange}
+                            onFocus={() => handleFocus("dish_name")}
+                            onBlur={handleBlur}
+                            placeholder="Enter dish name..."
+                            className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
+                              isSubmitted && !formData.dish_name
+                                ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                                : focusedField === "dish_name"
+                                ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                                : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                            }`}
+                            disabled={!isOnline}
+                          />
+                          {focusedField === "dish_name" && (
+                            <div className="absolute right-2 xs:right-3 top-1/2 transform -translate-y-1/2">
+                              <div className="w-1.5 xs:w-2 h-1.5 xs:h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Category */}
+                      <div className="group">
+                        <label
+                          htmlFor="category"
+                          className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                        >
+                          <FiPackage className="text-yellow-400" />
+                          Category
+                          <span className="text-red-400">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            id="category"
+                            name="category"
+                            required
+                            value={formData.category}
+                            onChange={handleChange}
+                            onFocus={() => handleFocus("category")}
+                            onBlur={handleBlur}
+                            className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 cursor-pointer ${
+                              isSubmitted && !formData.category
+                                ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                                : focusedField === "category"
+                                ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                                : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                            }`}
+                            disabled={!isOnline}
+                          >
+                            <option value="" className="bg-gray-800">
+                              Select Category...
                             </option>
-                          ))}
-                        </select>
-                        {focusedField === "category" && (
-                          <div className="absolute right-8 top-1/2 transform -translate-y-1/2">
-                            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                          </div>
-                        )}
+                            {CATEGORY_OPTIONS.map((cat) => (
+                              <option
+                                key={cat}
+                                value={cat}
+                                className="bg-gray-800"
+                              >
+                                {cat}
+                              </option>
+                            ))}
+                          </select>
+                          {focusedField === "category" && (
+                            <div className="absolute right-8 top-1/2 transform -translate-y-1/2">
+                              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Price */}
-                    <div className="group">
-                      <label
-                        htmlFor="price"
-                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                      >
-                        <FiHash className="text-yellow-400" />
-                        Price (₱)
-                        <span className="text-red-400">*</span>
-                      </label>
-                      <div className="relative max-w-md">
-                        <input
-                          type="number"
-                          id="price"
-                          name="price"
-                          required
-                          min={0}
-                          step="0.01"
-                          value={formData.price}
-                          onChange={handleChange}
-                          onFocus={() => handleFocus("price")}
-                          onBlur={handleBlur}
-                          placeholder="Enter price..."
-                          className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
-                            isSubmitted && !formData.price
-                              ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                              : focusedField === "price"
-                              ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                              : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                          }`}
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          disabled={!isOnline}
-                        />
-                        {focusedField === "price" && (
-                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Description */}
-                    <div className="group">
-                      <label
-                        htmlFor="description"
-                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                      >
-                        <FiTag className="text-yellow-400" />
-                        Description
-                      </label>
-                      <div className="relative">
-                        <textarea
-                          id="description"
-                          name="description"
-                          value={formData.description}
-                          onChange={handleChange}
-                          onFocus={() => handleFocus("description")}
-                          onBlur={handleBlur}
-                          placeholder="Enter dish description..."
-                          className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 resize-vertical min-h-[80px] ${
-                            focusedField === "description"
-                              ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                              : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                          }`}
-                          rows={3}
-                          disabled={!isOnline}
-                        />
-                        {focusedField === "description" && (
-                          <div className="absolute right-3 top-3">
-                            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {/* Image Preview & Upload */}
-                  <div className="flex flex-col items-center justify-center w-full gap-2">
-                    <label className="flex items-center gap-2 text-gray-300 mb-2 font-medium text-sm sm:text-base">
-                      <FiImage className="text-yellow-400" />
-                      Dish Image
-                    </label>
-                    {previewUrl ? (
-                      <div className="relative w-32 h-32 xs:w-44 xs:h-44 md:w-44 md:h-52 border-2 border-dashed border-yellow-400 bg-gray-900 rounded-lg flex items-center justify-center">
-                        <Image
-                          src={previewUrl}
-                          alt="Selected"
-                          width={208}
-                          height={208}
-                          className="w-full h-full object-contain rounded-lg shadow-xl"
-                          style={{ objectFit: "contain" }}
-                          unoptimized
-                        />
-                      </div>
-                    ) : (
-                      <span className="text-gray-500">No Image</span>
-                    )}
-                    <label className={`mt-4 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-0.5 rounded-lg font-semibold shadow cursor-pointer transition ${!isOnline ? 'opacity-50 pointer-events-none' : ''}`}>
-                      Change Image
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        className="hidden"
-                        disabled={!isOnline}
-                      />
-                    </label>
-                    <span className="text-xs text-gray-400 mt-1">
-                      Choose a new image to update.
-                    </span>
-                  </div>
-                </div>
-
-                {/* Ingredients Section */}
-                <div>
-                  <label className="block text-gray-300 mb-2 font-medium text-lg">
-                    Ingredients
-                  </label>
-                  <div className="space-y-2">
-                    {ingredients.map((ing, idx) => (
-                      <div
-                        key={idx}
-                        className="flex flex-row items-center gap-2 bg-gray-900 rounded-lg px-3 py-2 border border-gray-700 w-full"
-                        style={{ minWidth: 0 }}
-                      >
-                        <input
-                          type="text"
-                          placeholder="Ingredient Name"
-                          value={ing.name}
-                          onChange={(e) =>
-                            handleIngredientChange(idx, "name", e.target.value)
-                          }
-                          className="flex-1 min-w-0 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
-                          disabled={!isOnline}
-                        />
-                        <input
-                          type="text"
-                          placeholder="Quantity (e.g. 100g, 1 cup)"
-                          value={ing.quantity}
-                          onChange={(e) =>
-                            handleIngredientChange(
-                              idx,
-                              "quantity",
-                              e.target.value
-                            )
-                          }
-                          className="flex-1 min-w-0 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
-                          disabled={!isOnline}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeIngredient(idx)}
-                          className="text-red-400 hover:text-red-200 font-semibold px-3 py-2 transition rounded-lg focus:outline-none text-xs xs:text-sm sm:text-base"
-                          aria-label="Remove ingredient"
-                          disabled={!isOnline || ingredients.length < 1}
+                      {/* Price */}
+                      <div className="group">
+                        <label
+                          htmlFor="price"
+                          className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
                         >
-                          Remove
-                        </button>
+                          <FiHash className="text-yellow-400" />
+                          Price (₱)
+                          <span className="text-red-400">*</span>
+                        </label>
+                        <div className="relative max-w-md">
+                          <input
+                            type="number"
+                            id="price"
+                            name="price"
+                            required
+                            min={0}
+                            step="0.01"
+                            value={formData.price}
+                            onChange={handleChange}
+                            onFocus={() => handleFocus("price")}
+                            onBlur={handleBlur}
+                            placeholder="Enter price..."
+                            className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
+                              isSubmitted && !formData.price
+                                ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                                : focusedField === "price"
+                                ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                                : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                            }`}
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            disabled={!isOnline}
+                          />
+                          {focusedField === "price" && (
+                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    ))}
+
+                      {/* Description */}
+                      <div className="group">
+                        <label
+                          htmlFor="description"
+                          className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                        >
+                          <FiTag className="text-yellow-400" />
+                          Description
+                        </label>
+                        <div className="relative">
+                          <textarea
+                            id="description"
+                            name="description"
+                            value={formData.description}
+                            onChange={handleChange}
+                            onFocus={() => handleFocus("description")}
+                            onBlur={handleBlur}
+                            placeholder="Enter dish description..."
+                            className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 resize-vertical min-h-[80px] ${
+                              focusedField === "description"
+                                ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                                : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                            }`}
+                            rows={3}
+                            disabled={!isOnline}
+                          />
+                          {focusedField === "description" && (
+                            <div className="absolute right-3 top-3">
+                              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Image Preview & Upload */}
+                    <div className="flex flex-col items-center justify-center w-full gap-2">
+                      <label className="flex items-center gap-2 text-gray-300 mb-2 font-medium text-sm sm:text-base">
+                        <FiImage className="text-yellow-400" />
+                        Dish Image
+                      </label>
+                      {previewUrl ? (
+                        <div className="relative w-32 h-32 xs:w-44 xs:h-44 md:w-44 md:h-52 border-2 border-dashed border-yellow-400 bg-gray-900 rounded-lg flex items-center justify-center">
+                          <Image
+                            src={previewUrl}
+                            alt="Selected"
+                            width={208}
+                            height={208}
+                            className="w-full h-full object-contain rounded-lg shadow-xl"
+                            style={{ objectFit: "contain" }}
+                            unoptimized
+                          />
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">No Image</span>
+                      )}
+                      <label
+                        className={`mt-4 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-0.5 rounded-lg font-semibold shadow cursor-pointer transition ${
+                          !isOnline ? "opacity-50 pointer-events-none" : ""
+                        }`}
+                      >
+                        Change Image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                          className="hidden"
+                          disabled={!isOnline}
+                        />
+                      </label>
+                      <span className="text-xs text-gray-400 mt-1">
+                        Choose a new image to update.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Ingredients Section */}
+                  <div>
+                    <label className="block text-gray-300 mb-2 font-medium text-lg">
+                      Ingredients
+                    </label>
+                    <div className="space-y-2">
+                      {ingredients.map((ing, idx) => (
+                        <div
+                          key={idx}
+                          className="flex flex-row items-center gap-2 bg-gray-900 rounded-lg px-3 py-2 border border-gray-700 w-full"
+                          style={{ minWidth: 0 }}
+                        >
+                          <select
+                            value={ing.name}
+                            onChange={(e) =>
+                              handleIngredientChange(
+                                idx,
+                                "name",
+                                e.target.value
+                              )
+                            }
+                            className="flex-1 min-w-0 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
+                            disabled={itemNamesLoading || !isOnline}
+                          >
+                            <option value="">Select Ingredient</option>
+                            {items.map((item) => (
+                              <option
+                                key={item.item_name}
+                                value={item.item_name}
+                              >
+                                {item.item_name}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            placeholder="Quantity"
+                            value={ing.quantity}
+                            onChange={(e) =>
+                              handleIngredientChange(
+                                idx,
+                                "quantity",
+                                e.target.value
+                              )
+                            }
+                            className="w-20 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                          />
+                          <select
+                            value={ing.measurement || ""}
+                            onChange={(e) =>
+                              handleIngredientChange(
+                                idx,
+                                "measurement",
+                                e.target.value
+                              )
+                            }
+                            className="w-24 bg-gray-800 text-white rounded-lg px-2 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
+                          >
+                            <option value="">Unit</option>
+                            <option value="g">g</option>
+                            <option value="kg">kg</option>
+                            <option value="ml">ml</option>
+                            <option value="l">L</option>
+                            <option value="pcs">pcs</option>
+                            <option value="tbsp">tbsp</option>
+                            <option value="tsp">tsp</option>
+                            <option value="cup">cup</option>
+                            <option value="oz">oz</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => removeIngredient(idx)}
+                            className="text-red-400 hover:text-red-200 font-semibold px-3 py-2 transition rounded-lg focus:outline-none text-xs xs:text-sm sm:text-base"
+                            aria-label="Remove ingredient"
+                            disabled={!isOnline || ingredients.length < 1}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={addIngredient}
+                        className="mt-3 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-2 rounded-lg font-semibold shadow transition focus:outline-none"
+                        disabled={!isOnline}
+                      >
+                        + Add Ingredient
+                      </button>
+                      <p className="text-gray-400 text-xs mt-2">
+                        Tip: Add all ingredients with their amounts. You can
+                        remove or edit any ingredient before saving.
+                      </p>
+                    </div>
+
+                    {error && (
+                      <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-2 rounded text-sm mt-2">
+                        {error}
+                      </div>
+                    )}
+                  </div>
+                  {/* Action Buttons */}
+                  <div className="flex flex-col xs:flex-row justify-end gap-2 xs:gap-3 sm:gap-4 md:gap-4 pt-4 xs:pt-5 sm:pt-6 md:pt-8 border-t border-gray-700/50">
                     <button
                       type="button"
-                      onClick={addIngredient}
-                      className="mt-3 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-2 rounded-lg font-semibold shadow transition focus:outline-none"
+                      onClick={handleCancel}
+                      className="group flex items-center justify-center gap-1.5 xs:gap-2 px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto order-2 xs:order-1"
+                      style={{ minWidth: 0 }}
                       disabled={!isOnline}
                     >
-                      + Add Ingredient
+                      <MdCancel className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 group-hover:rotate-180 transition-transform duration-300" />
+                      <span className="hidden xs:inline">Cancel</span>
+                      <span className="xs:hidden">Cancel</span>
                     </button>
-                    <p className="text-gray-400 text-xs mt-2">
-                      Tip: Add all ingredients with their amounts. You can
-                      remove or edit any ingredient before saving.
-                    </p>
+                    <button
+                      type="button"
+                      onClick={handleSaveClick}
+                      disabled={isSubmitting || !isOnline}
+                      className="group flex items-center justify-center gap-1.5 xs:gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl font-medium xs:font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto shadow-lg hover:shadow-yellow-400/25 order-1 xs:order-2"
+                      style={{ minWidth: 0 }}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <div className="w-3.5 h-3.5 xs:w-4 xs:h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
+                          <span className="hidden xs:inline">Updating...</span>
+                          <span className="xs:hidden">Update</span>
+                        </>
+                      ) : (
+                        <>
+                          <MdSave className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform duration-300" />
+                          <span className="hidden sm:inline">Update Item</span>
+                          <span className="sm:hidden">Update</span>
+                        </>
+                      )}
+                    </button>
                   </div>
-
-                  {error && (
-                    <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-2 rounded text-sm mt-2">
-                      {error}
-                    </div>
-                  )}
-                </div>
-                {/* Action Buttons */}
-                <div className="flex flex-col xs:flex-row justify-end gap-2 xs:gap-3 sm:gap-4 md:gap-4 pt-4 xs:pt-5 sm:pt-6 md:pt-8 border-t border-gray-700/50">
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="group flex items-center justify-center gap-1.5 xs:gap-2 px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto order-2 xs:order-1"
-                    style={{ minWidth: 0 }}
-                    disabled={!isOnline}
-                  >
-                    <MdCancel className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 group-hover:rotate-180 transition-transform duration-300" />
-                    <span className="hidden xs:inline">Cancel</span>
-                    <span className="xs:hidden">Cancel</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveClick}
-                    disabled={isSubmitting || !isOnline}
-                    className="group flex items-center justify-center gap-1.5 xs:gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl font-medium xs:font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto shadow-lg hover:shadow-yellow-400/25 order-1 xs:order-2"
-                    style={{ minWidth: 0 }}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <div className="w-3.5 h-3.5 xs:w-4 xs:h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
-                        <span className="hidden xs:inline">Updating...</span>
-                        <span className="xs:hidden">Update</span>
-                      </>
-                    ) : (
-                      <>
-                        <MdSave className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform duration-300" />
-                        <span className="hidden sm:inline">Update Item</span>
-                        <span className="sm:hidden">Update</span>
-                      </>
-                    )}
-                  </button>
-                </div>
                 </fieldset>
               </form>
             </div>
@@ -892,7 +959,6 @@ export default function EditMenuPage() {
             </div>
           </div>
         )}
-
       </ResponsiveMain>
     </section>
   );

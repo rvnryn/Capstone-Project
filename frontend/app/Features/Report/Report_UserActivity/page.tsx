@@ -18,6 +18,7 @@ import {
   FaFilter,
   FaGoogle,
 } from "react-icons/fa";
+import { BiExport } from "react-icons/bi";
 import { MdCheckCircle, MdAssessment } from "react-icons/md";
 import { TbReportAnalytics } from "react-icons/tb";
 import { FiBarChart } from "react-icons/fi";
@@ -102,13 +103,19 @@ const Report_UserActivity = () => {
     "Assistant Store Manager",
   ];
 
-  const { logs, loading: apiLoading, error, fetchLogs } = useUserActivityLogAPI();
+  const {
+    logs,
+    loading: apiLoading,
+    error,
+    fetchLogs,
+  } = useUserActivityLogAPI();
   const [loading, setLocalLoading] = useState(true);
   const [offlineError, setOfflineError] = useState<string | null>(null);
 
   useEffect(() => {
     // Robust offline/cached loading logic
-    const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
+    const isCompletelyOffline =
+      typeof window !== "undefined" && !navigator.onLine;
     const cacheKey = "cached_user_activity_logs";
     const params: any = {};
     if (reportDate) params.report_date = reportDate;
@@ -160,7 +167,8 @@ const Report_UserActivity = () => {
   useEffect(() => {
     setUserActivityData(logs);
     // Cache logs if online
-    const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
+    const isCompletelyOffline =
+      typeof window !== "undefined" && !navigator.onLine;
     if (!isCompletelyOffline && logs && Array.isArray(logs)) {
       localStorage.setItem("cached_user_activity_logs", JSON.stringify(logs));
     }
@@ -169,14 +177,23 @@ const Report_UserActivity = () => {
   }, [logs]);
 
   // Always use cached data if offline, or last available data if online fetch fails
-  const isCompletelyOffline = typeof window !== "undefined" && !navigator.onLine;
-  const cachedLogs = typeof window !== "undefined" ? localStorage.getItem("cached_user_activity_logs") : null;
+  const isCompletelyOffline =
+    typeof window !== "undefined" && !navigator.onLine;
+  const cachedLogs =
+    typeof window !== "undefined"
+      ? localStorage.getItem("cached_user_activity_logs")
+      : null;
   const displayLogs = isCompletelyOffline
-    ? (cachedLogs ? JSON.parse(cachedLogs) : [])
+    ? cachedLogs
+      ? JSON.parse(cachedLogs)
+      : []
     : userActivityData;
 
   // If offline and no cached data, show a clear message
-  if (isCompletelyOffline && (!cachedLogs || JSON.parse(cachedLogs).length === 0)) {
+  if (
+    isCompletelyOffline &&
+    (!cachedLogs || JSON.parse(cachedLogs).length === 0)
+  ) {
     // Ensure loading spinner is not shown
     if (loading) setLocalLoading(false);
     return (
@@ -222,7 +239,7 @@ const Report_UserActivity = () => {
 
   // Sorting functionality
   const filteredActivity = useMemo(() => {
-  const filtered = dataSource.filter((item: any) => {
+    const filtered = dataSource.filter((item: any) => {
       // Search query filter
       const matchesSearch = searchQuery
         ? Object.values(item)
@@ -538,7 +555,9 @@ const Report_UserActivity = () => {
             {loading && !offlineError && (
               <div className="flex justify-center items-center min-h-[200px]">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-                <span className="ml-4 text-white">Loading user activity logs...</span>
+                <span className="ml-4 text-white">
+                  Loading user activity logs...
+                </span>
               </div>
             )}
             <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
@@ -572,7 +591,7 @@ const Report_UserActivity = () => {
                           onClick={() => setShowPopup(true)}
                           className="bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-400 hover:to-violet-500 text-black px-3 py-2 sm:px-4 sm:py-2 md:px-6 md:py-3 rounded-lg sm:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm md:text-base whitespace-nowrap flex-1 sm:flex-none min-h-[44px] touch-manipulation"
                         >
-                          <FaDownload className="text-xs sm:text-sm" />
+                          <BiExport className="text-xs sm:text-sm" />
                           <span>Export Report</span>
                         </button>
                       </div>
@@ -1348,7 +1367,7 @@ const Report_UserActivity = () => {
                   </div>
 
                   {/* Export Options */}
-                  
+
                   <div className="space-y-3 sm:space-y-4 pt-2">
                     <button
                       onClick={() => {
@@ -1363,9 +1382,9 @@ const Report_UserActivity = () => {
                     </button>
 
                     <GoogleSheetIntegration
-                        onSuccess={handleGoogleLoginSuccess}
-                        exporting={isExporting}
-                      />
+                      onSuccess={handleGoogleLoginSuccess}
+                      exporting={isExporting}
+                    />
 
                     <button
                       onClick={() => setShowPopup(false)}

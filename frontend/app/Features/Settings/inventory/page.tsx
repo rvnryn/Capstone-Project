@@ -14,6 +14,7 @@ import { routes } from "@/app/routes/routes";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { MdCancel, MdSave, MdWarning } from "react-icons/md";
 import { FiAlertTriangle, FiSave } from "react-icons/fi";
+import { useInventoryItemNames } from "@/app/hooks/Itemnames";
 
 const CATEGORIES = [
   "Meats",
@@ -58,11 +59,20 @@ export default function InventorySettings() {
   const [ingredientToDelete, setIngredientToDelete] =
     useState<InventorySetting | null>(null);
 
+  const { items, loading: itemNamesLoading } = useInventoryItemNames();
+  const uniqueCategories = Array.from(
+    new Set(items.map((item) => item.category).filter(Boolean))
+  );
+  const selectedItem = items.find(
+    (item) => item.item_name === newIngredient.name
+  );
+  const selectedCategory = selectedItem?.category || "";
+
   // Online/offline detection
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     return () => {
@@ -78,7 +88,7 @@ export default function InventorySettings() {
       setOfflineError(null);
       if (!isOnline) {
         // Try to load from cache
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           const cached = localStorage.getItem(cacheKey);
           if (cached) {
             try {
@@ -92,7 +102,9 @@ export default function InventorySettings() {
             } catch {}
           }
         }
-        setOfflineError("You are offline and no cached inventory data is available. Please connect to the internet to view or edit inventory settings.");
+        setOfflineError(
+          "You are offline and no cached inventory data is available. Please connect to the internet to view or edit inventory settings."
+        );
         setLoading(false);
         return;
       }
@@ -102,7 +114,7 @@ export default function InventorySettings() {
         setPendingIngredients(data);
         setInitialSettings(data);
         // Cache inventory data
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           localStorage.setItem(cacheKey, JSON.stringify(data));
         }
       } catch (error) {
@@ -244,7 +256,9 @@ export default function InventorySettings() {
           <main className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="flex flex-col items-center gap-4">
               <div className="w-8 h-8 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-              <div className="text-yellow-400 font-medium text-base">Loading inventory settings...</div>
+              <div className="text-yellow-400 font-medium text-base">
+                Loading inventory settings...
+              </div>
             </div>
           </main>
         </ResponsiveMain>
@@ -259,7 +273,9 @@ export default function InventorySettings() {
         <ResponsiveMain>
           <main className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="flex flex-col items-center gap-4">
-              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <div className="text-red-400 font-bold text-lg">
+                {offlineError}
+              </div>
               <button
                 className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
                 onClick={() => window.location.reload()}
@@ -351,28 +367,53 @@ export default function InventorySettings() {
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                     {/* Ingredient Name */}
-                    <div className="lg:col-span-2">
+                    <div className="lg:col-span-2 relative">
                       <label
                         htmlFor="ingredient-name"
                         className="block mb-2 text-sm font-medium text-yellow-300"
                       >
                         Ingredient Name *
                       </label>
-                      <input
-                        type="text"
+                      <select
                         id="ingredient-name"
-                        placeholder="Enter ingredient name"
                         value={newIngredient.name}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const selectedName = e.target.value;
+                          const selectedItem = items.find(
+                            (item) => item.item_name === selectedName
+                          );
                           setNewIngredient((ni: InventorySettingInput) => ({
                             ...ni,
-                            name: capitalizeWords(e.target.value.toLowerCase()),
-                          }))
-                        }
-                        className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm placeholder-gray-400 transition-all duration-200 hover:border-gray-500"
-                        autoComplete="off"
+                            name: selectedName,
+                            category: selectedItem?.category || "",
+                          }));
+                        }}
+                        className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                        disabled={itemNamesLoading}
                         required
-                      />
+                      >
+                        <option value="">Select Ingredient</option>
+                        {items.map((item) => (
+                          <option key={item.item_name} value={item.item_name}>
+                            {item.item_name}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute inset-y-0 top-7 right-0 flex items-center pr-3 pointer-events-none">
+                        <svg
+                          className="w-4 h-4 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </div>
                     </div>
 
                     {/* Threshold */}
@@ -432,7 +473,7 @@ export default function InventorySettings() {
                         <option value="g">g</option>
                         <option value="lbs">lbs</option>
                         <option value="oz">oz</option>
-                        <option value="l">l</option>
+                        <option value="l">L</option>
                         <option value="ml">ml</option>
                         <option value="pcs">pcs</option>
                         <option value="pack">pack</option>
@@ -463,51 +504,14 @@ export default function InventorySettings() {
                         htmlFor="category"
                         className="block mb-2 text-sm font-medium text-yellow-300"
                       >
-                        Category *
+                        Category
                       </label>
-                      <div className="relative">
-                        <select
-                          id="category"
-                          value={newIngredient.category}
-                          onChange={(e) =>
-                            setNewIngredient((ni: InventorySettingInput) => ({
-                              ...ni,
-                              category: e.target.value,
-                            }))
-                          }
-                          className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
-                          required
-                        >
-                          <option value="" disabled>
-                            Select category
-                          </option>
-                          {CATEGORIES.map((cat) => (
-                            <option
-                              key={cat}
-                              value={cat}
-                              className="bg-gray-800 text-white"
-                            >
-                              {cat}
-                            </option>
-                          ))}
-                        </select>
-                        {/* Custom dropdown arrow */}
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                          <svg
-                            className="w-4 h-4 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 9l-7 7-7-7"
-                            />
-                          </svg>
-                        </div>
-                      </div>
+                      <input
+                        type="text"
+                        value={newIngredient.category}
+                        readOnly
+                        className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                      />
                     </div>
 
                     {/* Add Button */}
@@ -531,6 +535,32 @@ export default function InventorySettings() {
                         </svg>
                         Add Ingredient
                       </button>
+                      {addError &&
+                        (() => {
+                          const AutoClearError: React.FC<{
+                            message: string;
+                          }> = ({ message }) => {
+                            const [visible, setVisible] = useState(true);
+                            useEffect(() => {
+                              setVisible(true);
+                              const t = setTimeout(
+                                () => setVisible(false),
+                                2000
+                              );
+                              return () => clearTimeout(t);
+                            }, [message]);
+                            useEffect(() => {
+                              if (!visible) setAddError("");
+                            }, [visible]);
+                            if (!visible) return null;
+                            return (
+                              <div className="mt-2 text-red-400 text-sm font-semibold">
+                                {message}
+                              </div>
+                            );
+                          };
+                          return <AutoClearError message={addError} />;
+                        })()}
                     </div>
                   </div>
 
@@ -656,37 +686,7 @@ export default function InventorySettings() {
                               </div>
                             </td>
                             <td className="px-4 py-3 align-middle relative">
-                              <select
-                                aria-label={`Category for ${ing.name}`}
-                                value={ing.category || ""}
-                                onChange={(e) =>
-                                  handleCategoryChange(ing.id, e.target.value)
-                                }
-                                className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 pr-7 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
-                              >
-                                <option value="">All Categories</option>
-                                {CATEGORIES.map((cat) => (
-                                  <option key={cat} value={cat}>
-                                    {cat}
-                                  </option>
-                                ))}
-                              </select>
-                              {/* Custom dropdown arrow */}
-                              <div className="absolute inset-y-0 right-6 flex items-center pointer-events-none">
-                                <svg
-                                  className="w-4 h-4 text-gray-400"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 9l-7 7-7-7"
-                                  />
-                                </svg>
-                              </div>
+                              {ing.category}
                             </td>
                             <td className="px-4 py-3 flex items-center gap-2 align-middle">
                               <button

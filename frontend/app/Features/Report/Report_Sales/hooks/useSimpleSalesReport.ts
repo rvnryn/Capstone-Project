@@ -265,6 +265,15 @@ export function useSimpleSalesReport() {
     setError(null);
   }, []);
 
+  const importSalesData = useCallback(async (rows: any[]) => {
+    const res = await fetch(`${API_BASE_URL}/api/import-sales`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows }),
+    });
+    // handle response...
+  }, []);
+
   return {
     data,
     loading,
@@ -274,6 +283,7 @@ export function useSimpleSalesReport() {
     fetchWeekReport,
     fetchMonthReport,
     clearData,
+    importSalesData,
   };
 }
 

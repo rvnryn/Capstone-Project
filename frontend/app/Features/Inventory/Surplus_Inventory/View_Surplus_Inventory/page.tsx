@@ -74,6 +74,8 @@ export default function ViewSurplusInventoryItem() {
           added: data.created_at,
           updated: data.updated_at,
           expiration_date: data.expiration_date || null,
+          unit_price:
+            data.unit_price !== undefined ? Number(data.unit_price) : null,
         };
         setItem(formatted);
         setSettings(settingsData);
@@ -261,6 +263,15 @@ export default function ViewSurplusInventoryItem() {
                     label="Quantity In Stock"
                     value={
                       unit ? `${item.stock} ${unit}` : item.stock.toString()
+                    }
+                  />
+                  <ItemRow
+                    icon={<FiTag className="text-green-400" />}
+                    label="Unit Price"
+                    value={
+                      item.unit_price !== undefined && item.unit_price !== null
+                        ? `$${Number(item.unit_price).toFixed(2)}`
+                        : "-"
                     }
                   />
                   <ItemRow

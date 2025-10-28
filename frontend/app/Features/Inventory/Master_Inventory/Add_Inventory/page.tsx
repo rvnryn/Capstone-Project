@@ -84,6 +84,7 @@ export default function AddInventoryItem() {
   const [initialSettings, setInitialSettings] = useState<any>(null);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+  const [hasExpiration, setHasExpiration] = useState(false);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -142,10 +143,7 @@ export default function AddInventoryItem() {
         newErrors.stock = "Quantity must be a positive integer.";
       }
 
-      // Expiration date validation (required)
-      if (!data.expiration_date) {
-        newErrors.expiration_date = "Expiration date is required.";
-      } else {
+      if (hasExpiration && data.expiration_date) {
         const today = new Date();
         const expDate = new Date(data.expiration_date);
         today.setHours(0, 0, 0, 0);
@@ -269,7 +267,10 @@ export default function AddInventoryItem() {
         stock_quantity: formData.stock,
         stock_status: stockStatus,
         batch_date: batchDate,
-        expiration_date: formData.expiration_date,
+        expiration_date:
+          hasExpiration && formData.expiration_date
+            ? formData.expiration_date
+            : null,
       });
 
       setShowSuccessMessage(true);
@@ -381,7 +382,8 @@ export default function AddInventoryItem() {
                 <div className="mb-6 p-4 bg-yellow-900/80 border border-yellow-500/40 rounded-xl text-yellow-300 text-center font-semibold">
                   <span>
                     <MdWarning className="inline mr-2 text-yellow-400 text-lg align-text-bottom" />
-                    You are offline. Adding inventory is <b>disabled</b> while offline. Please reconnect to add items.
+                    You are offline. Adding inventory is <b>disabled</b> while
+                    offline. Please reconnect to add items.
                   </span>
                 </div>
               )}
@@ -391,10 +393,19 @@ export default function AddInventoryItem() {
                 className="space-y-3 xs:space-y-4 sm:space-y-6 md:space-y-8"
                 aria-label="Add Inventory Item Form"
               >
-                <fieldset className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8" disabled={!isOnline} style={!isOnline ? { opacity: 0.6, pointerEvents: 'none' } : {}}>
+                <fieldset
+                  className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8"
+                  disabled={!isOnline}
+                  style={
+                    !isOnline ? { opacity: 0.6, pointerEvents: "none" } : {}
+                  }
+                >
                   {/* Item Name Field */}
                   <div>
-                    <label htmlFor="name" className="block font-semibold text-gray-200 mb-1">
+                    <label
+                      htmlFor="name"
+                      className="block font-semibold text-gray-200 mb-1"
+                    >
                       Item Name
                     </label>
                     <input
@@ -419,7 +430,10 @@ export default function AddInventoryItem() {
                       aria-describedby={errors.name ? "name-error" : undefined}
                     />
                     {errors.name && (
-                      <span id="name-error" className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                      <span
+                        id="name-error"
+                        className="text-red-400 text-xs mt-1 flex items-center gap-1"
+                      >
                         <FiAlertCircle className="inline-block mr-1" />
                         {errors.name}
                       </span>
@@ -427,7 +441,10 @@ export default function AddInventoryItem() {
                   </div>
                   {/* Category Field */}
                   <div>
-                    <label htmlFor="category" className="block font-semibold text-gray-200 mb-1">
+                    <label
+                      htmlFor="category"
+                      className="block font-semibold text-gray-200 mb-1"
+                    >
                       Category
                     </label>
                     <select
@@ -446,7 +463,9 @@ export default function AddInventoryItem() {
                       } bg-gray-900 text-white placeholder-gray-500 focus:outline-none transition-all duration-300`}
                       required
                       aria-invalid={!!errors.category}
-                      aria-describedby={errors.category ? "category-error" : undefined}
+                      aria-describedby={
+                        errors.category ? "category-error" : undefined
+                      }
                     >
                       <option value="">Select category</option>
                       {CATEGORY_OPTIONS.map((cat) => (
@@ -456,7 +475,10 @@ export default function AddInventoryItem() {
                       ))}
                     </select>
                     {errors.category && (
-                      <span id="category-error" className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                      <span
+                        id="category-error"
+                        className="text-red-400 text-xs mt-1 flex items-center gap-1"
+                      >
                         <FiAlertCircle className="inline-block mr-1" />
                         {errors.category}
                       </span>
@@ -464,7 +486,10 @@ export default function AddInventoryItem() {
                   </div>
                   {/* Stock Quantity Field */}
                   <div>
-                    <label htmlFor="stock" className="block font-semibold text-gray-200 mb-1">
+                    <label
+                      htmlFor="stock"
+                      className="block font-semibold text-gray-200 mb-1"
+                    >
                       Quantity in Stock
                     </label>
                     <input
@@ -486,10 +511,15 @@ export default function AddInventoryItem() {
                       placeholder="Enter quantity"
                       required
                       aria-invalid={!!errors.stock}
-                      aria-describedby={errors.stock ? "stock-error" : undefined}
+                      aria-describedby={
+                        errors.stock ? "stock-error" : undefined
+                      }
                     />
                     {errors.stock && (
-                      <span id="stock-error" className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                      <span
+                        id="stock-error"
+                        className="text-red-400 text-xs mt-1 flex items-center gap-1"
+                      >
                         <FiAlertCircle className="inline-block mr-1" />
                         {errors.stock}
                       </span>
@@ -497,7 +527,10 @@ export default function AddInventoryItem() {
                   </div>
                   {/* Expiration Date Field */}
                   <div>
-                    <label htmlFor="expiration_date" className="block font-semibold text-gray-200 mb-1">
+                    <label
+                      htmlFor="expiration_date"
+                      className="block font-semibold text-gray-200 mb-1"
+                    >
                       Expiration Date
                     </label>
                     <input
@@ -508,23 +541,53 @@ export default function AddInventoryItem() {
                       onChange={handleChange}
                       onFocus={() => handleFocus("expiration_date")}
                       onBlur={handleBlur}
+                      disabled={!hasExpiration}
                       className={`w-full px-4 py-3 rounded-lg border-2 ${
                         errors.expiration_date
                           ? "border-red-500"
                           : focusedField === "expiration_date"
                           ? "border-yellow-400"
                           : "border-gray-700"
-                      } bg-gray-900 text-white placeholder-gray-500 focus:outline-none transition-all duration-300`}
-                      required
+                      } bg-gray-900 text-white placeholder-gray-500 focus:outline-none transition-all duration-300 ${
+                        !hasExpiration ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
                       aria-invalid={!!errors.expiration_date}
-                      aria-describedby={errors.expiration_date ? "expiration-error" : undefined}
+                      aria-describedby={
+                        errors.expiration_date ? "expiration-error" : undefined
+                      }
                     />
                     {errors.expiration_date && (
-                      <span id="expiration-error" className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                      <span
+                        id="expiration-error"
+                        className="text-red-400 text-xs mt-1 flex items-center gap-1"
+                      >
                         <FiAlertCircle className="inline-block mr-1" />
                         {errors.expiration_date}
                       </span>
                     )}
+                    <div className="flex items-center mb-2">
+                      <input
+                        type="checkbox"
+                        id="hasExpiration"
+                        checked={hasExpiration}
+                        onChange={() => {
+                          setHasExpiration((prev) => !prev);
+                          if (!hasExpiration) {
+                            setFormData((prev) => ({
+                              ...prev,
+                              expiration_date: "",
+                            }));
+                          }
+                        }}
+                        className="mr-2"
+                      />
+                      <label
+                        htmlFor="hasExpiration"
+                        className="text-gray-200 font-semibold"
+                      >
+                        Has Expiration Date
+                      </label>
+                    </div>
                   </div>
                 </fieldset>
 

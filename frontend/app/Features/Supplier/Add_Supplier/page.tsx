@@ -84,7 +84,7 @@ export default function AddSupplier() {
   const validate = useCallback((data: typeof formData) => {
     const newErrors: Record<string, string> = {};
 
-    // Supplier Name validation
+    // Supplier Name validation7
     if (!data.supplier_name.trim()) {
       newErrors.supplier_name = "Supplier name is required.";
     } else if (!nameRegex.test(data.supplier_name.trim())) {

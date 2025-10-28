@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -32,8 +31,7 @@ import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 // import routes from "@/app/routes"; // Commented out due to missing module
 import Image from "next/image";
-
-
+import { routes } from "@/app/routes/routes";
 
 // Inline date formatting utilities
 function formatDateTime(date: string | number | Date | undefined) {
@@ -126,22 +124,22 @@ export default function ViewMenu() {
   const { role } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-    const [isOnline, setIsOnline] = useState(true);
-    useEffect(() => {
-      setIsOnline(navigator.onLine);
-      const handleOnline = () => setIsOnline(true);
-      const handleOffline = () => setIsOnline(false);
-      window.addEventListener("online", handleOnline);
-      window.addEventListener("offline", handleOffline);
-      return () => {
-        window.removeEventListener("online", handleOnline);
-        window.removeEventListener("offline", handleOffline);
-      };
-    }, []);
+  const [isOnline, setIsOnline] = useState(true);
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
   const { fetchMenuById } = useMenuAPI();
   const [menu, setMenu] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-
+  const [showEditModal, setShowEditModal] = useState(false);
   const menuId = searchParams.get("id");
 
   useEffect(() => {
@@ -169,7 +167,9 @@ export default function ViewMenu() {
           }
         } else {
           setMenu(null);
-          setOfflineError("No cached menu data available. Please connect to the internet to load menu.");
+          setOfflineError(
+            "No cached menu data available. Please connect to the internet to load menu."
+          );
         }
       } else {
         setMenu(null);
@@ -195,7 +195,7 @@ export default function ViewMenu() {
         setIsLoading(false);
         setLoading(false);
       });
-  }, [menuId, isOnline, fetchMenuById, setLoading]);
+  }, [menuId, setLoading]);
 
   if (offlineError) {
     return (
@@ -204,7 +204,9 @@ export default function ViewMenu() {
         <ResponsiveMain>
           <main className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="flex flex-col items-center gap-4">
-              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <div className="text-red-400 font-bold text-lg">
+                {offlineError}
+              </div>
               <button
                 className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
                 onClick={() => window.location.reload()}
@@ -220,7 +222,7 @@ export default function ViewMenu() {
   if (isLoading) {
     return (
       <section className="text-white font-poppins">
-        <NavigationBar />
+        <NavigationBar showEditModal={showEditModal} />
         <ResponsiveMain>
           <main
             className="pb-2 xs:pb-4 sm:pb-6 md:pb-8 lg:pb-10 xl:pb-12 pt-16 xs:pt-20 sm:pt-24 md:pt-28 px-1 xs:px-2 sm:px-3 md:px-4 lg:px-6 xl:px-8 2xl:px-10"
@@ -619,7 +621,16 @@ export default function ViewMenu() {
               <div className="flex flex-col xs:flex-row flex-wrap justify-end gap-2 xs:gap-3 sm:gap-4 pt-2 sm:pt-4 md:pt-6 border-t border-gray-700/50">
                 {["Owner", "General Manager", "Store Manager"].includes(
                   role || ""
-                ) && null}
+                ) && (
+                  <button
+                    onClick={() => setShowEditModal(true)}
+                    className="group flex items-center justify-center gap-1.5 xs:gap-2 px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl border-2 border-yellow-400/50 text-yellow-400 hover:border-yellow-400 hover:bg-yellow-400/10 hover:text-yellow-300 font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto order-2 xs:order-1"
+                  >
+                    <FiEdit3 className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 group-hover:rotate-12 transition-transform duration-300" />
+                    <span className="hidden sm:inline">Edit Item</span>
+                    <span className="sm:hidden">Edit</span>
+                  </button>
+                )}
                 <button
                   onClick={() => router.back()}
                   className="group flex items-center justify-center gap-1.5 xs:gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-3 xs:px-4 sm:px-5 md:px-6 py-2 xs:py-2.5 sm:py-3 rounded-lg xs:rounded-xl font-medium xs:font-semibold transition-all duration-300 cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto shadow-lg hover:shadow-yellow-400/25 order-1 xs:order-2"
@@ -631,11 +642,38 @@ export default function ViewMenu() {
               </div>
             </div>
           </div>
-
         </main>
+        {/* Edit Modal */}
+        {showEditModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border border-gray-400/50">
+              <h2 className="text-2xl font-bold text-yellow-400 font-poppins">
+                Edit Item
+              </h2>
+              <p className="text-gray-300">
+                Are you sure you want to edit this item?
+              </p>
+              <div className="flex flex-col sm:flex-row justify-center gap-4">
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    router.push(routes.UpdateMenu(menu.menu_id));
+                  }}
+                  className="px-8 py-3 rounded-lg border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black font-semibold transition-all order-2 sm:order-1 cursor-pointer"
+                >
+                  Yes, Edit
+                </button>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="px-8 py-3 rounded-lg border border-gray-500 text-gray-500 hover:bg-gray-500 hover:text-white font-semibold transition-all order-1 sm:order-2 cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </ResponsiveMain>
     </section>
   );
 }
-
-

@@ -39,7 +39,8 @@
     "react-icons": "^4.12.0",
     "react-toastify": "^11.0.5",
     "swr": "^2.3.6",
-    "tailwindcss": "^4.1.7"
+    "tailwindcss": "^4.1.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -56,6 +57,7 @@
     "@types/react-toastify": "^4.0.2",
     "@types/testing-library__jest-dom": "^5.14.9",
     "@types/testing-library__react": "^10.0.1",
+    "@types/xlsx": "^0.0.35",
     "concurrently": "^9.1.2",
     "eslint": "^9",
     "eslint-config-next": "15.3.2",

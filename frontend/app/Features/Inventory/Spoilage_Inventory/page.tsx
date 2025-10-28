@@ -23,6 +23,7 @@ type SpoilageItem = {
   user_id?: number | null;
   created_at: string;
   updated_at: string;
+  unit_price?: number | null;
 };
 
 // Extend SpoilageItem type to include batch_date, expiration_date, and category
@@ -52,7 +53,9 @@ export default function SpoilageInventoryPage() {
   });
 
   // Patch: Use cached data when offline, and show offline message if no cache
-  const [offlineSpoilage, setOfflineSpoilage] = useState<ExtendedSpoilageItem[] | null>(null);
+  const [offlineSpoilage, setOfflineSpoilage] = useState<
+    ExtendedSpoilageItem[] | null
+  >(null);
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const spoilageQuery = useQuery<ExtendedSpoilageItem[]>({
     queryKey: ["spoilageInventory"],
@@ -67,7 +70,9 @@ export default function SpoilageInventoryPage() {
             return parsed;
           } else {
             setOfflineSpoilage(null);
-            setOfflineError("No cached spoilage data available. Please connect to the internet to load spoilage inventory.");
+            setOfflineError(
+              "No cached spoilage data available. Please connect to the internet to load spoilage inventory."
+            );
             return [];
           }
         } catch (e) {
@@ -85,6 +90,8 @@ export default function SpoilageInventoryPage() {
         quantity_spoiled: Number(item.quantity_spoiled),
         batch_date: item.batch_date || item.batch || null,
         expiration_date: item.expiration_date || null,
+        unit_price:
+          item.unit_price !== undefined ? Number(item.unit_price) : null,
       }));
       if (typeof window !== "undefined") {
         localStorage.setItem("spoilageInventoryCache", JSON.stringify(mapped));
@@ -226,6 +233,7 @@ export default function SpoilageInventoryPage() {
     { key: "category", label: "Category" },
     { key: "item_name", label: "Name" },
     { key: "quantity_spoiled", label: "Quantity Spoiled" },
+    { key: "unit_price", label: "Unit Price" },
     { key: "expiration_date", label: "Expiration Date" },
     { key: "spoilage_date", label: "Spoilage Date" },
     { key: "reason", label: "Reason" },
@@ -498,6 +506,21 @@ export default function SpoilageInventoryPage() {
                                   {item.quantity_spoiled}
                                 </td>
                                 <td
+                                  className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-green-300 text-xs xs:text-sm"
+                                  onClick={() =>
+                                    router.push(
+                                      routes.ViewSpoilageInventory(
+                                        item.spoilage_id
+                                      )
+                                    )
+                                  }
+                                >
+                                  {item.unit_price !== undefined &&
+                                  item.unit_price !== null
+                                    ? `$${item.unit_price.toFixed(2)}`
+                                    : "-"}
+                                </td>
+                                <td
                                   className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm"
                                   onClick={() =>
                                     router.push(
@@ -509,7 +532,7 @@ export default function SpoilageInventoryPage() {
                                 >
                                   {item.expiration_date
                                     ? formatDateOnly(item.expiration_date)
-                                    : "N/A"}
+                                    : "No Expiration Date"}
                                 </td>
                                 <td
                                   className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm"
