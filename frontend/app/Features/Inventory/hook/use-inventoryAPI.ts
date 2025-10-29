@@ -13,7 +13,8 @@ function handleOfflineWriteOperation<T>(
     payload: any;
   }
 ): Promise<T | { message: string }> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
   if (navigator.onLine) {
     return onlineOperation();
   } else {
@@ -34,7 +35,6 @@ function handleOfflineWriteOperation<T>(
   }
 }
 
-
 export interface InventoryItem {
   item_id: string | number;
   item_name: string;
@@ -45,6 +45,7 @@ export interface InventoryItem {
   expiration_date: string | null;
   created_at: string;
   updated_at: string;
+  unit_price?: number;
   // frontend-friendly aliases
   id?: string;
   name: string;
@@ -62,6 +63,7 @@ export type AddInventoryPayload = {
   stock_status: "Out Of Stock" | "Critical" | "Low" | "Normal";
   batch_date: string;
   expiration_date: string | null;
+  unit_price?: number;
 };
 
 export interface SpoilageItem {
@@ -74,41 +76,49 @@ export interface SpoilageItem {
   user_id?: string | number | null;
   created_at: string;
   updated_at: string;
+  unit_price?: number;
 }
 
 export type UpdateInventoryPayload = Partial<AddInventoryPayload>;
 
 export function useInventoryAPI() {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const { offlineReadyFetch } = useOfflineAPI();
   const { queueOfflineAction, getOfflineActions } = useOffline();
   // INVENTORY
-  const getItem = useCallback(async (id: string) => {
-    try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await offlineReadyFetch(
-        `${API_BASE_URL}/api/inventory/${id}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
+  const getItem = useCallback(
+    async (id: string) => {
+      try {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const response = await offlineReadyFetch(
+          `${API_BASE_URL}/api/inventory/${id}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
           },
-        },
-        `inventory-item-${id}`,
-        24
-      );
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      return await response.json();
-    } catch (error: any) {
-      console.error(`Failed to fetch inventory item ${id}:`, error);
-      throw error;
-    }
-  }, [API_BASE_URL, offlineReadyFetch]);
+          `inventory-item-${id}`,
+          24
+        );
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } catch (error: any) {
+        console.error(`Failed to fetch inventory item ${id}:`, error);
+        throw error;
+      }
+    },
+    [API_BASE_URL, offlineReadyFetch]
+  );
 
   const addItem = useCallback(
     async (item: AddInventoryPayload) => {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       if (navigator.onLine) {
         const response = await fetch(`${API_BASE_URL}/api/inventory`, {
           method: "POST",
@@ -118,7 +128,8 @@ export function useInventoryAPI() {
           },
           body: JSON.stringify(item),
         });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } else {
         queueOfflineAction({
@@ -131,7 +142,8 @@ export function useInventoryAPI() {
         return { message: "Action queued for sync when online" };
       }
     },
-    [API_BASE_URL, queueOfflineAction]);
+    [API_BASE_URL, queueOfflineAction]
+  );
 
   const updateItem = useCallback(
     async (id: string | number, item: UpdateInventoryPayload) => {
@@ -142,7 +154,8 @@ export function useInventoryAPI() {
             ? item.expiration_date
             : null,
       };
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       if (navigator.onLine) {
         const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
           method: "PUT",
@@ -152,7 +165,8 @@ export function useInventoryAPI() {
           },
           body: JSON.stringify(cleanedItem),
         });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } else {
         queueOfflineAction({
@@ -165,11 +179,13 @@ export function useInventoryAPI() {
         return { message: "Action queued for sync when online" };
       }
     },
-    [API_BASE_URL, queueOfflineAction]);
+    [API_BASE_URL, queueOfflineAction]
+  );
 
   const deleteItem = useCallback(
     async (id: string | number) => {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       if (navigator.onLine) {
         const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
           method: "DELETE",
@@ -178,7 +194,8 @@ export function useInventoryAPI() {
             ...(token && { Authorization: `Bearer ${token}` }),
           },
         });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } else {
         queueOfflineAction({
@@ -191,11 +208,13 @@ export function useInventoryAPI() {
         return { message: "Action queued for sync when online" };
       }
     },
-    [API_BASE_URL, queueOfflineAction]);
+    [API_BASE_URL, queueOfflineAction]
+  );
 
   const listItems = useCallback(async () => {
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const response = await offlineReadyFetch(
         `${API_BASE_URL}/api/inventory`,
         {
@@ -208,7 +227,8 @@ export function useInventoryAPI() {
         "inventory-list",
         24
       );
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok)
+        throw new Error(`HTTP error! status: ${response.status}`);
       return await response.json();
     } catch (error: any) {
       console.error("Failed to fetch all inventory items:", error);
@@ -217,12 +237,12 @@ export function useInventoryAPI() {
   }, [API_BASE_URL, offlineReadyFetch]);
 
   // INVENTORY TODAY
-  const getTodayItem = useCallback(async (id: string) => {
+  const getTodayItem = useCallback(async (id: string, batch_date: string) => {
     try {
       const token =
         typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const response = await fetch(
-        `${API_BASE_URL}/api/inventory-today/${id}`,
+        `${API_BASE_URL}/api/inventory-today/${id}/${batch_date}`,
         {
           method: "GET",
           headers: {
@@ -238,14 +258,18 @@ export function useInventoryAPI() {
 
       return await response.json();
     } catch (error: any) {
-      console.error(`Failed to fetch today inventory item ${id}:`, error);
+      console.error(
+        `Failed to fetch today inventory item ${id}/${batch_date}:`,
+        error
+      );
       throw error;
     }
   }, []);
 
   const addTodayItem = useCallback(
     async (item: AddInventoryPayload) => {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       if (navigator.onLine) {
         const response = await fetch(`${API_BASE_URL}/api/inventory-today`, {
           method: "POST",
@@ -255,7 +279,8 @@ export function useInventoryAPI() {
           },
           body: JSON.stringify(item),
         });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } else {
         queueOfflineAction({
@@ -268,10 +293,15 @@ export function useInventoryAPI() {
         return { message: "Action queued for sync when online" };
       }
     },
-    [API_BASE_URL, queueOfflineAction]);
+    [API_BASE_URL, queueOfflineAction]
+  );
 
   const updateTodayItem = useCallback(
-    async (id: string | number, item: UpdateInventoryPayload) => {
+    async (
+      id: string | number,
+      item: UpdateInventoryPayload,
+      batch_date: string
+    ) => {
       const cleanedItem = {
         ...item,
         expiration_date:
@@ -287,7 +317,7 @@ export function useInventoryAPI() {
               ? localStorage.getItem("token")
               : null;
           const response = await fetch(
-            `${API_BASE_URL}/api/inventory-today/${id}`,
+            `${API_BASE_URL}/api/inventory-today/${id}/${batch_date}`,
             {
               method: "PUT",
               headers: {
@@ -306,7 +336,7 @@ export function useInventoryAPI() {
         },
         {
           action: "update-today-inventory-item",
-          endpoint: `${API_BASE_URL}/api/inventory-today/${id}`,
+          endpoint: `${API_BASE_URL}/api/inventory-today/${id}/${batch_date}`,
           method: "PUT",
           payload: cleanedItem,
         }
@@ -316,7 +346,7 @@ export function useInventoryAPI() {
   );
 
   const deleteTodayItem = useCallback(
-    async (id: string | number) => {
+    async (id: string | number, batch_date: string) => {
       return handleOfflineWriteOperation(
         async () => {
           const token =
@@ -324,7 +354,7 @@ export function useInventoryAPI() {
               ? localStorage.getItem("token")
               : null;
           const response = await fetch(
-            `${API_BASE_URL}/api/inventory-today/${id}`,
+            `${API_BASE_URL}/api/inventory-today/${id}/${batch_date}`,
             {
               method: "DELETE",
               headers: {
@@ -342,7 +372,7 @@ export function useInventoryAPI() {
         },
         {
           action: "delete-today-inventory-item",
-          endpoint: `${API_BASE_URL}/api/inventory-today/${id}`,
+          endpoint: `${API_BASE_URL}/api/inventory-today/${id}/${batch_date}`,
           method: "DELETE",
           payload: { id },
         }
@@ -375,31 +405,37 @@ export function useInventoryAPI() {
   }, []);
 
   // INVENTORY SURPLUS
-  const getSurplusItem = useCallback(async (id: string | number) => {
-    try {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(
-        `${API_BASE_URL}/api/inventory-surplus/${id}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
+  const getSurplusItem = useCallback(
+    async (id: string | number, batch_date: string) => {
+      try {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const response = await fetch(
+          `${API_BASE_URL}/api/inventory-surplus/${id}/${batch_date}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token && { Authorization: `Bearer ${token}` }),
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-      );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+      } catch (error: any) {
+        console.error(
+          `Failed to fetch surplus inventory item ${id}/${batch_date}:`,
+          error
+        );
+        throw error;
       }
-
-      return await response.json();
-    } catch (error: any) {
-      console.error(`Failed to fetch surplus inventory item ${id}:`, error);
-      throw error;
-    }
-  }, []);
+    },
+    [API_BASE_URL]
+  );
 
   const addSurplusItem = useCallback(
     async (item: AddInventoryPayload) => {
@@ -420,11 +456,9 @@ export function useInventoryAPI() {
               body: JSON.stringify(item),
             }
           );
-
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
-
           return await response.json();
         },
         {
@@ -439,7 +473,11 @@ export function useInventoryAPI() {
   );
 
   const updateSurplusItem = useCallback(
-    async (id: string | number, item: UpdateInventoryPayload) => {
+    async (
+      id: string | number,
+      item: UpdateInventoryPayload,
+      batch_date: string
+    ) => {
       const cleanedItem = {
         ...item,
         expiration_date:
@@ -447,7 +485,6 @@ export function useInventoryAPI() {
             ? item.expiration_date
             : null,
       };
-
       return handleOfflineWriteOperation(
         async () => {
           const token =
@@ -455,7 +492,7 @@ export function useInventoryAPI() {
               ? localStorage.getItem("token")
               : null;
           const response = await fetch(
-            `${API_BASE_URL}/api/inventory-surplus/${id}`,
+            `${API_BASE_URL}/api/inventory-surplus/${id}/${batch_date}`,
             {
               method: "PUT",
               headers: {
@@ -465,26 +502,24 @@ export function useInventoryAPI() {
               body: JSON.stringify(cleanedItem),
             }
           );
-
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
-
           return await response.json();
         },
         {
           action: "update-surplus-inventory-item",
-          endpoint: `${API_BASE_URL}/api/inventory-surplus/${id}`,
+          endpoint: `${API_BASE_URL}/api/inventory-surplus/${id}/${batch_date}`,
           method: "PUT",
           payload: cleanedItem,
         }
       );
     },
-    [handleOfflineWriteOperation]
+    [handleOfflineWriteOperation, API_BASE_URL]
   );
 
   const deleteSurplusItem = useCallback(
-    async (id: string | number) => {
+    async (id: string | number, batch_date: string) => {
       return handleOfflineWriteOperation(
         async () => {
           const token =
@@ -492,7 +527,7 @@ export function useInventoryAPI() {
               ? localStorage.getItem("token")
               : null;
           const response = await fetch(
-            `${API_BASE_URL}/api/inventory-surplus/${id}`,
+            `${API_BASE_URL}/api/inventory-surplus/${id}/${batch_date}`,
             {
               method: "DELETE",
               headers: {
@@ -501,22 +536,20 @@ export function useInventoryAPI() {
               },
             }
           );
-
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
-
           return await response.json();
         },
         {
           action: "delete-surplus-inventory-item",
-          endpoint: `${API_BASE_URL}/api/inventory-surplus/${id}`,
+          endpoint: `${API_BASE_URL}/api/inventory-surplus/${id}/${batch_date}`,
           method: "DELETE",
-          payload: { id },
+          payload: { id, batch_date },
         }
       );
     },
-    [handleOfflineWriteOperation]
+    [handleOfflineWriteOperation, API_BASE_URL]
   );
 
   const listSurplusItems = useCallback(async () => {
@@ -530,19 +563,15 @@ export function useInventoryAPI() {
           ...(token && { Authorization: `Bearer ${token}` }),
         },
       });
-
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
       return await response.json();
     } catch (error: any) {
       console.error("Failed to fetch surplus inventory items:", error);
       throw error;
     }
-  }, []);
-
-  // TRANSFER ENDPOINTS
+  }, [API_BASE_URL]);
 
   const transferToToday = useCallback(
     async (id: string | number, quantity: number) => {
@@ -579,73 +608,6 @@ export function useInventoryAPI() {
       );
     },
     [handleOfflineWriteOperation]
-  );
-
-  const transferToSurplus = useCallback(
-    async (id: string | number, quantity: number) => {
-      return handleOfflineWriteOperation(
-        async () => {
-          const token =
-            typeof window !== "undefined"
-              ? localStorage.getItem("token")
-              : null;
-          const response = await fetch(
-            `${API_BASE_URL}/api/inventory-today/${id}/transfer-to-surplus`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                ...(token && { Authorization: `Bearer ${token}` }),
-              },
-              body: JSON.stringify({ quantity }),
-            }
-          );
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          return await response.json();
-        },
-        {
-          action: "transfer-to-surplus",
-          endpoint: `${API_BASE_URL}/api/inventory-today/${id}/transfer-to-surplus`,
-          method: "POST",
-          payload: { id, quantity },
-        }
-      );
-    },
-    [handleOfflineWriteOperation]
-  );
-
-  const transferSurplusToToday = useCallback(
-    async (id: string | number, quantity: number) => {
-      try {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const response = await fetch(
-          `${API_BASE_URL}/api/inventory-surplus/${id}/transfer-to-today`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-            body: JSON.stringify({ quantity }),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return await response.json();
-      } catch (error: any) {
-        console.error("Failed to transfer surplus to today:", error);
-        throw error;
-      }
-    },
-    []
   );
 
   const listSpoilage = useCallback(async () => {
@@ -808,8 +770,6 @@ export function useInventoryAPI() {
     listSurplusItems,
 
     transferToToday,
-    transferToSurplus,
-    transferSurplusToToday,
 
     listSpoilage,
     transferToSpoilage,

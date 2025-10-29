@@ -2,17 +2,17 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from slowapi.util import get_remote_address
 from slowapi import Limiter
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
+
 from datetime import datetime
 from pydantic import BaseModel
 from app.supabase import postgrest_client, get_db
 from typing import Optional
 from datetime import datetime
-from app.routes.userActivity import UserActivityLog
+from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 
 router = APIRouter()
-
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 
 class SupplierCreate(BaseModel):
     supplier_name: str

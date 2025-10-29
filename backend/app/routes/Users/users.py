@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from app.supabase import supabase, postgrest_client, get_db
-from app.routes.userActivity import UserActivityLog
+from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 
 router = APIRouter()

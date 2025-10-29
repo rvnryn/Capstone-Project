@@ -26,7 +26,8 @@ export interface MenuIngredient {
 }
 
 export function useMenuAPI() {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const { offlineReadyFetch } = useOfflineAPI();
   const { queueOfflineAction, getOfflineActions } = useOffline();
 
@@ -46,10 +47,14 @@ export function useMenuAPI() {
         "menu-list",
         24
       );
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok)
+        throw new Error(`HTTP error! status: ${response.status}`);
       return await response.json();
     } catch (error: any) {
-      console.warn("[fetchMenu] Failed to fetch menu (offline or network error)", error);
+      console.warn(
+        "[fetchMenu] Failed to fetch menu (offline or network error)",
+        error
+      );
       return [];
     }
   }, [API_BASE_URL, offlineReadyFetch]);
@@ -65,7 +70,8 @@ export function useMenuAPI() {
           `${API_BASE_URL}/api/menu/create-with-image-and-ingredients`,
           { method: "POST", headers, body: form }
         );
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } else {
         queueOfflineAction({
@@ -83,7 +89,10 @@ export function useMenuAPI() {
 
   // Update menu (JSON, no image)
   const updateMenu = useCallback(
-    async (menu_id: number, data: Partial<MenuItem> & { ingredients?: MenuIngredient[] }) => {
+    async (
+      menu_id: number,
+      data: Partial<MenuItem> & { ingredients?: MenuIngredient[] }
+    ) => {
       const token = getToken();
       if (navigator.onLine) {
         const response = await fetch(`${API_BASE_URL}/api/menu/${menu_id}`, {
@@ -94,7 +103,8 @@ export function useMenuAPI() {
           },
           body: JSON.stringify(data),
         });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } else {
         queueOfflineAction({
@@ -121,7 +131,8 @@ export function useMenuAPI() {
           `${API_BASE_URL}/api/menu/${menu_id}/update-with-image-and-ingredients`,
           { method: "PATCH", headers, body: form }
         );
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } else {
         queueOfflineAction({
@@ -149,7 +160,8 @@ export function useMenuAPI() {
             ...(token && { Authorization: `Bearer ${token}` }),
           },
         });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } else {
         queueOfflineAction({
@@ -175,14 +187,16 @@ export function useMenuAPI() {
           `menu-item-${menu_id}`,
           24
         );
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } catch (error: any) {
         console.error(`Failed to fetch menu item ${menu_id}:`, error);
         throw error;
       }
     },
-    [API_BASE_URL, offlineReadyFetch]);
+    [API_BASE_URL, offlineReadyFetch]
+  );
 
   // Delete ingredient from menu
   const deleteIngredientFromMenu = useCallback(
@@ -199,7 +213,8 @@ export function useMenuAPI() {
             },
           }
         );
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
         return await response.json();
       } else {
         queueOfflineAction({
@@ -216,35 +231,30 @@ export function useMenuAPI() {
   );
 
   // Recalculate stock status
-  const recalculateStockStatus = useCallback(
-    async () => {
-      const token = getToken();
-      if (navigator.onLine) {
-        const response = await fetch(
-          `${API_BASE_URL}/api/menu/recalc`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-          }
-        );
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        return await response.json();
-      } else {
-        queueOfflineAction({
-          type: "recalculate-menu-stock",
-          endpoint: `${API_BASE_URL}/api/menu/recalc`,
-          method: "POST",
-          payload: {},
-        });
-        toast.info("Action saved offline - will sync when online");
-        return { message: "Action queued for sync when online" };
-      }
-    },
-    [API_BASE_URL, getToken, queueOfflineAction]
-  );
+  const recalculateStockStatus = useCallback(async () => {
+    const token = getToken();
+    if (navigator.onLine) {
+      const response = await fetch(`${API_BASE_URL}/api/menu/recalc`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      if (!response.ok)
+        throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } else {
+      queueOfflineAction({
+        type: "recalculate-menu-stock",
+        endpoint: `${API_BASE_URL}/api/menu/recalc`,
+        method: "POST",
+        payload: {},
+      });
+      toast.info("Action saved offline - will sync when online");
+      return { message: "Action queued for sync when online" };
+    }
+  }, [API_BASE_URL, getToken, queueOfflineAction]);
 
   return {
     fetchMenu,

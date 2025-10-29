@@ -289,9 +289,8 @@ export default function Dashboard() {
 
   // Render Top Selling Items from historical analytics
   const renderTopSelling = (showList: boolean) => {
-    if (!historicalData) return null;
     const count = topItemsCount;
-    const performers = historicalData.top_performers.by_total_sales;
+    const performers = historicalData?.top_performers?.by_total_sales || [];
     // Period label for UI
     const periodLabel =
       filterType === "daily"
@@ -299,6 +298,18 @@ export default function Dashboard() {
         : filterType === "weekly"
         ? "weekly"
         : "monthly";
+    if (!performers.length) {
+      return (
+        <section className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 rounded-xl p-4 mb-6 border border-blue-500/30">
+          <div className="bg-black/40 rounded-lg p-3 flex flex-col items-center justify-center min-h-[120px]">
+            <FaChartBar className="text-blue-300 text-3xl mb-2" />
+            <p className="text-gray-400 text-sm">
+              No sales data available for top selling items.
+            </p>
+          </div>
+        </section>
+      );
+    }
     return (
       <section className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 rounded-xl p-4 mb-6 border border-blue-500/30">
         <div className="bg-black/40 rounded-lg p-3">
@@ -726,44 +737,49 @@ export default function Dashboard() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <section
-                    aria-label="Top Selling Items"
-                    className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl 
+                      aria-label="Top Selling Items"
+                      className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl 
                       p-4 sm:p-6 flex flex-col"
                     >
-                    <header className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                      <div className="flex items-start sm:items-center gap-3 w-full">
-                      <div className="p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
-                        <FaChartBar className="text-yellow-400 text-lg sm:text-xl" />
-                      </div>
-                      <div>
-                        <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-                        Top Selling Items
-                        </h2>
-                        <p className="text-gray-400 text-xs sm:text-sm mt-0.5">
-                        Based on historical analytics
-                        </p>
-                      </div>
-                      </div>
-                      <button
-                      onClick={() =>
-                        (window.location.href = "/Features/Report/Report_Sales")
-                      }
-                      className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black 
+                      <header className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-start sm:items-center gap-3 w-full">
+                          <div className="p-2 bg-yellow-400/20 rounded-lg flex-shrink-0">
+                            <FaChartBar className="text-yellow-400 text-lg sm:text-xl" />
+                          </div>
+                          <div>
+                            <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                              Top Selling Items
+                            </h2>
+                            <p className="text-gray-400 text-xs sm:text-sm mt-0.5">
+                              Based on historical analytics
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() =>
+                            (window.location.href =
+                              "/Features/Report/Report_Sales")
+                          }
+                          className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black 
                         font-semibold text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-lg shadow 
                         transition-all duration-200 w-full sm:w-auto justify-center"
-                      title="Go to Sales Report"
-                      >
-                      <FaChartBar className="text-sm" />
-                      <span className="hidden sm:inline">View Full Report</span>
-                      <span className="inline sm:hidden">Report</span>
-                      </button>
-                    </header>
-                    <div className="w-full sm:w-auto mb-2">
-                      {renderTopItemsCountSelector()}
-                    </div>
-                    <div className="mt-3 sm:mt-4 w-full overflow-x-auto">
-                      <div className="min-w-[220px] sm:min-w-0">{renderTopSelling(showList)}</div>
-                    </div>
+                          title="Go to Sales Report"
+                        >
+                          <FaChartBar className="text-sm" />
+                          <span className="hidden sm:inline">
+                            View Full Report
+                          </span>
+                          <span className="inline sm:hidden">Report</span>
+                        </button>
+                      </header>
+                      <div className="w-full sm:w-auto mb-2">
+                        {renderTopItemsCountSelector()}
+                      </div>
+                      <div className="mt-3 sm:mt-4 w-full overflow-x-auto">
+                        <div className="min-w-[220px] sm:min-w-0">
+                          {renderTopSelling(showList)}
+                        </div>
+                      </div>
                     </section>
 
                     {/* Left: ML Sales Forecast Chart */}

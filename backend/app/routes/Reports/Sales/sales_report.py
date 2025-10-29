@@ -35,7 +35,7 @@ async def get_weekly_sales_forecast(
     """Forecast total sales, or sales for a specific item/category, for the next N weeks using linear regression"""
     try:
         # Build dynamic SQL for filtering
-        filters = ["created_at >= :start_date"]
+        filters = ["sale_date >= :start_date"]
         params = {}
         if item_name:
             filters.append("item_name = :item_name")
@@ -46,8 +46,8 @@ async def get_weekly_sales_forecast(
         where_clause = " AND ".join(filters)
         query = text(
             f"""
-            SELECT DATE_TRUNC('week', created_at::timestamp)::date as week, SUM(total_price) as total_sales
-            FROM order_items
+            SELECT DATE_TRUNC('week', sale_date::timestamp)::date as week, SUM(total_price) as total_sales
+            FROM sales_report
             WHERE {where_clause}
             GROUP BY week
             ORDER BY week
@@ -242,13 +242,12 @@ async def get_sales_summary(
         query = text(
             """
             SELECT 
-                COUNT(DISTINCT order_id) as total_orders,
                 SUM(quantity) as total_items_sold,
                 SUM(total_price) as total_revenue,
                 AVG(total_price) as avg_order_value,
                 COUNT(DISTINCT item_name) as unique_items_sold
-            FROM order_items 
-            WHERE DATE(created_at) BETWEEN DATE(:start_date) AND DATE(:end_date)
+            FROM sales_report 
+            WHERE DATE(sale_date) BETWEEN DATE(:start_date) AND DATE(:end_date)
         """
         )
 
@@ -293,7 +292,7 @@ async def get_sales_summary(
             "total_items_sold": row[1] or 0,
             "total_revenue": float(row[2] or 0),
             "avg_order_value": float(row[3] or 0),
-            "unique_items_sold": row[4] or 0,
+            "unique_items_sold": row[3] or 0,
         }
     except Exception as e:
         import traceback
@@ -331,10 +330,9 @@ async def get_sales_by_item(
                 category,
                 SUM(quantity) as total_quantity,
                 SUM(total_price) as total_revenue,
-                AVG(unit_price) as avg_price,
-                COUNT(DISTINCT order_id) as orders_count
-            FROM order_items 
-            WHERE DATE(created_at) BETWEEN :start_date AND :end_date
+                AVG(unit_price) as avg_price
+            FROM sales_report 
+            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
             GROUP BY item_name, category
             ORDER BY total_revenue DESC
             """
@@ -360,9 +358,7 @@ async def get_sales_by_item(
                     "avg_price": (
                         float(row.avg_price) if row.avg_price is not None else 0.0
                     ),
-                    "orders_count": (
-                        row.orders_count if row.orders_count is not None else 0
-                    ),
+                    # "orders_count" removed: not present in query
                 }
             )
         return {"period": f"{start_date} to {end_date}", "items": items}
@@ -394,9 +390,9 @@ async def get_sales_by_date(
 
         # Different groupings for date formatting
         date_format_map = {
-            "daily": "DATE(created_at)",
-            "weekly": "DATE_TRUNC('week', created_at)::date",
-            "monthly": "DATE_TRUNC('month', created_at)::date",
+            "daily": "DATE(sale_date)",
+            "weekly": "DATE_TRUNC('week', sale_date)::date",
+            "monthly": "DATE_TRUNC('month', sale_date)::date",
         }
 
         date_format = date_format_map.get(grouping, "DATE(created_at)")
@@ -405,11 +401,10 @@ async def get_sales_by_date(
             f"""
             SELECT 
                 {date_format} as period,
-                COUNT(DISTINCT order_id) as orders_count,
                 SUM(quantity) as total_items,
                 SUM(total_price) as total_revenue
-            FROM order_items 
-            WHERE DATE(created_at) BETWEEN :start_date AND :end_date
+            FROM sales_report 
+            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
             GROUP BY {date_format}
             ORDER BY period DESC
         """
@@ -424,9 +419,7 @@ async def get_sales_by_date(
             sales_data.append(
                 {
                     "period": row.period.strftime("%Y-%m-%d") if row.period else "",
-                    "orders_count": (
-                        row.orders_count if row.orders_count is not None else 0
-                    ),
+                    # "orders_count" removed: not present in query
                     "total_items": (
                         row.total_items if row.total_items is not None else 0
                     ),
@@ -468,8 +461,7 @@ async def get_top_performers(
 
         metric_map = {
             "revenue": "SUM(total_price)",
-            "quantity": "SUM(quantity)",
-            "orders": "COUNT(DISTINCT order_id)",
+            "quantity": "SUM(quantity)"
         }
 
         order_by = metric_map.get(metric, "SUM(total_price)")
@@ -481,10 +473,9 @@ async def get_top_performers(
                 category,
                 SUM(quantity) as total_quantity,
                 SUM(total_price) as total_revenue,
-                COUNT(DISTINCT order_id) as orders_count,
                 AVG(unit_price) as avg_price
-            FROM order_items 
-            WHERE DATE(created_at) BETWEEN :start_date AND :end_date
+            FROM sales_report 
+            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
             GROUP BY item_name, category
             ORDER BY {order_by} DESC
             LIMIT :limit
@@ -536,13 +527,12 @@ async def get_hourly_sales(
         query = text(
             """
             SELECT 
-                EXTRACT(HOUR FROM created_at) as hour,
-                COUNT(DISTINCT order_id) as orders_count,
+                EXTRACT(HOUR FROM sale_date) as hour,
                 SUM(quantity) as total_items,
                 SUM(total_price) as total_revenue
-            FROM order_items 
-            WHERE DATE(created_at) = :date
-            GROUP BY EXTRACT(HOUR FROM created_at)
+            FROM sales_report 
+            WHERE DATE(sale_date) = :date
+            GROUP BY EXTRACT(HOUR FROM sale_date)
             ORDER BY hour
         """
         )
@@ -584,12 +574,11 @@ async def get_sales_comparison(
         current_query = text(
             """
             SELECT 
-                COUNT(DISTINCT order_id) as total_orders,
                 SUM(quantity) as total_items,
                 SUM(total_price) as total_revenue,
                 AVG(total_price) as avg_order_value
-            FROM order_items 
-            WHERE DATE(created_at) BETWEEN :start_date AND :end_date
+            FROM sales_report 
+            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
         """
         )
 

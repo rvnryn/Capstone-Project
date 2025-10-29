@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import date
-from ..models.custom_holiday import CustomHoliday
-from ..models.base import Base
+from app.models.custom_holiday import CustomHoliday
+from app.models.base import Base
 from app.supabase import get_db
 from pydantic import BaseModel
 from typing import List, Optional

@@ -11,7 +11,7 @@ import os
 # Debug: Print SUPABASE_URL and supabase client internals
  # ...existing code...
 from app.supabase import postgrest_client
-from app.routes.userActivity import UserActivityLog
+from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 import json
 

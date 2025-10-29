@@ -8,7 +8,7 @@ import asyncio
 import os
 from app.supabase import get_db
 from datetime import datetime
-from app.routes.userActivity import UserActivityLog
+from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()

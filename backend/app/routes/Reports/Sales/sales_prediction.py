@@ -1,9 +1,6 @@
 from fastapi import APIRouter, Query, Depends, Request
 from slowapi.util import get_remote_address
 from slowapi import Limiter
-
-limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from typing import List, Dict, Any
@@ -16,7 +13,7 @@ from sklearn.linear_model import LinearRegression
 import numpy as np
 
 router = APIRouter()
-
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 
 async def get_sales_data(session: AsyncSession, days: int = 90):
     since = datetime.utcnow() - timedelta(days=days)
@@ -24,13 +21,12 @@ async def get_sales_data(session: AsyncSession, days: int = 90):
     query = text(
         """
         SELECT item_name as item,
-               DATE(created_at) as date,
-               SUM(quantity) as sales,
-               COUNT(*) as order_count
-        FROM order_items
-        WHERE created_at >= :since
-        GROUP BY item_name, DATE(created_at)
-        ORDER BY DATE(created_at) DESC, SUM(quantity) DESC
+               DATE(sale_date) as date,
+               SUM(quantity) as sales
+        FROM sales_report
+        WHERE sale_date >= :since
+        GROUP BY item_name, DATE(sale_date)
+        ORDER BY DATE(sale_date) DESC, SUM(quantity) DESC
     """
     )
     result = await session.execute(query, {"since": str(since)})
@@ -45,7 +41,7 @@ async def get_sales_data(session: AsyncSession, days: int = 90):
 
     for row in rows[:10]:  # Print first 10 rows for debugging
         print(
-            f"[DEBUG] Row: {row.item}, {row.date}, {row.sales} sales, {row.order_count} orders"
+            f"[DEBUG] Row: {row.item}, {row.date}, {row.sales} sales"
         )
 
     return [

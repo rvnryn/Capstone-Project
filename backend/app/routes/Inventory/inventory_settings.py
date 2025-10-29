@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, Request
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
-from app.routes.userActivity import UserActivityLog
+from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 from app.supabase import postgrest_client, get_db
 
