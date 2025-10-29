@@ -57,6 +57,8 @@ export default function ViewInventoryItem() {
           batch: data.batch_date,
           category: data.category,
           status: data.stock_status,
+          unit_price:
+            data.unit_price !== undefined ? Number(data.unit_price) : null,
           stock: data.stock_quantity,
           added: data.created_at,
           updated: data.updated_at,
@@ -228,11 +230,6 @@ export default function ViewInventoryItem() {
               <div className="space-y-4 xs:space-y-5 sm:space-y-6 md:space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-3 xs:gap-4 sm:gap-5 md:gap-6 lg:gap-8">
                   <ItemRow
-                    icon={<FiHash className="text-yellow-400" />}
-                    label="Item ID"
-                    value={item.id}
-                  />
-                  <ItemRow
                     icon={<FiTag className="text-blue-400" />}
                     label="Item Name"
                     value={item.name}
@@ -250,6 +247,15 @@ export default function ViewInventoryItem() {
                     }
                   />
                   <ItemRow
+                    icon={<FiTag className="text-green-400" />}
+                    label="Unit Price"
+                    value={
+                      item.unit_price !== undefined && item.unit_price !== null
+                        ? `₱${Number(item.unit_price).toFixed(2)}`
+                        : "-"
+                    }
+                  />
+                  <ItemRow
                     icon={<FiCalendar className="text-orange-400" />}
                     label="Batch Date"
                     value={formatDateOnly(item.batch)}
@@ -257,7 +263,11 @@ export default function ViewInventoryItem() {
                   <ItemRow
                     icon={<FiCalendar className="text-red-400" />}
                     label="Expiration Date"
-                    value={formatDateOnly(item.expiration_date)}
+                    value={
+                      item.expiration_date
+                        ? formatDateOnly(item.expiration_date)
+                        : "No Expiration Date"
+                    }
                   />
                   <ItemRow
                     icon={<FiTrendingUp className="text-cyan-400" />}
@@ -271,15 +281,15 @@ export default function ViewInventoryItem() {
                         : "text-green-400 font-semibold"
                     }
                   />
+                </div>
+
+                {/* Last Updated - Full Width */}
+                <div className="pt-4 border-t border-gray-700/50 space-y-2 xs:space-y-3 sm:space-y-4 md:space-y-6">
                   <ItemRow
                     icon={<FiClock className="text-indigo-400" />}
                     label="Date Added"
                     value={formatDateTime(item.added)}
                   />
-                </div>
-
-                {/* Last Updated - Full Width */}
-                <div className="pt-4 border-t border-gray-700/50">
                   <ItemRow
                     icon={<FiClock className="text-gray-400" />}
                     label="Last Updated"

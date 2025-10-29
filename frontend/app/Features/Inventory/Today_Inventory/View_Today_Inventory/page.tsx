@@ -132,11 +132,11 @@ export default function ViewTodayInventoryItem() {
         <NavigationBar />
         <ResponsiveMain>
           <main
-            className="pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12"
-            aria-label="View Today Inventory main content"
+            className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
+            aria-label="View Today's Inventory main content"
             tabIndex={-1}
           >
-            <div className="max-w-xs xs:max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl 2xl:max-w-4xl mx-auto w-full">
+            <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
               <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl xs:rounded-3xl shadow-2xl border border-gray-800/50 p-3 xs:p-4 sm:p-6 md:p-8 lg:p-12">
                 <div className="flex flex-col items-center justify-center py-6 xs:py-8 sm:py-12 md:py-16">
                   <div className="relative mb-3 xs:mb-4 sm:mb-6">
@@ -250,9 +250,18 @@ export default function ViewTodayInventoryItem() {
               <div className="space-y-4 xs:space-y-5 sm:space-y-6 md:space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-3 xs:gap-4 sm:gap-5 md:gap-6 lg:gap-8">
                   <ItemRow
-                    icon={<FiHash className="text-yellow-400" />}
-                    label="Item ID"
-                    value={item.id}
+                    icon={<FiCalendar className="text-orange-400" />}
+                    label="Batch Date"
+                    value={formatDateOnly(item.batch)}
+                  />
+                  <ItemRow
+                    icon={<FiCalendar className="text-red-400" />}
+                    label="Expiration Date"
+                    value={
+                      item.expiration_date
+                        ? formatDateOnly(item.expiration_date)
+                        : "No Expiration Date"
+                    }
                   />
                   <ItemRow
                     icon={<FiTag className="text-blue-400" />}
@@ -276,19 +285,9 @@ export default function ViewTodayInventoryItem() {
                     label="Unit Price"
                     value={
                       item.unit_price !== undefined && item.unit_price !== null
-                        ? `$${Number(item.unit_price).toFixed(2)}`
+                        ? `₱${Number(item.unit_price).toFixed(2)}`
                         : "-"
                     }
-                  />
-                  <ItemRow
-                    icon={<FiCalendar className="text-orange-400" />}
-                    label="Batch Date"
-                    value={formatDateOnly(item.batch)}
-                  />
-                  <ItemRow
-                    icon={<FiCalendar className="text-red-400" />}
-                    label="Expiration Date"
-                    value={formatDateOnly(item.expiration_date)}
                   />
                   <ItemRow
                     icon={<FiTrendingUp className="text-cyan-400" />}
@@ -304,15 +303,15 @@ export default function ViewTodayInventoryItem() {
                         : "text-white font-semibold"
                     }
                   />
+                </div>
+
+                {/* Last Updated - Full Width */}
+                <div className="pt-4 border-t border-gray-700/50 space-y-2 xs:space-y-3 sm:space-y-4 md:space-y-6">
                   <ItemRow
                     icon={<FiClock className="text-indigo-400" />}
                     label="Procurement date"
                     value={formatDateTime(item.added)}
                   />
-                </div>
-
-                {/* Last Updated - Full Width */}
-                <div className="pt-4 border-t border-gray-700/50">
                   <ItemRow
                     icon={<FiClock className="text-gray-400" />}
                     label="Last Updated"

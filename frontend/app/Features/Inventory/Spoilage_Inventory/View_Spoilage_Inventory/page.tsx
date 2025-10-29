@@ -76,6 +76,7 @@ export default function ViewSpoilageInventoryItem() {
           item_id: item.item_id,
           item_name: item.item_name,
           quantity_spoiled: item.quantity_spoiled,
+          expiration_date: item.expiration_date,
           spoilage_date: item.spoilage_date,
           reason: item.reason,
           user_id: item.user_id,
@@ -248,11 +249,6 @@ export default function ViewSpoilageInventoryItem() {
                     value={item.spoilage_id}
                   />
                   <ItemRow
-                    icon={<FiHash className="text-blue-400" />}
-                    label="Item ID"
-                    value={item.item_id}
-                  />
-                  <ItemRow
                     icon={<FiTag className="text-green-400" />}
                     label="Item Name"
                     value={item.item_name}
@@ -267,8 +263,17 @@ export default function ViewSpoilageInventoryItem() {
                     label="Unit Price"
                     value={
                       item.unit_price !== undefined && item.unit_price !== null
-                        ? `$${item.unit_price.toFixed(2)}`
+                        ? `₱${item.unit_price.toFixed(2)}`
                         : "-"
+                    }
+                  />
+                  <ItemRow
+                    icon={<FiCalendar className="text-red-400" />}
+                    label="Expiration Date"
+                    value={
+                      item.expiration_date
+                        ? formatDateOnly(item.expiration_date)
+                        : "No Expiration Date"
                     }
                   />
                   <ItemRow
@@ -286,11 +291,6 @@ export default function ViewSpoilageInventoryItem() {
                     label="Created At"
                     value={formatDateTime(item.created_at)}
                   />
-                  <ItemRow
-                    icon={<FiClock className="text-gray-400" />}
-                    label="Last Updated"
-                    value={formatDateTime(item.updated_at)}
-                  />
                 </div>
 
                 {/* Action Buttons */}
@@ -304,12 +304,6 @@ export default function ViewSpoilageInventoryItem() {
                       Back to Spoilage Inventory
                     </span>
                     <span className="sm:hidden">Back</span>
-                  </button>
-                  <button
-                    disabled={!isOnline}
-                    title={!isOnline ? "You can use this when online." : ""}
-                  >
-                    Edit
                   </button>
                 </div>
               </div>

@@ -3,9 +3,6 @@ from slowapi.util import get_remote_address
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request
-from slowapi.util import get_remote_address
-from slowapi import Limiter
-from fastapi import Request
 from datetime import datetime, date
 from pydantic import BaseModel
 from app.supabase import postgrest_client, get_db
@@ -170,6 +167,11 @@ class InventoryTodayItemCreate(BaseModel):
 
 
 class TransferRequest(BaseModel):
+    quantity: float
+
+
+class FIFOTransferRequest(BaseModel):
+    item_name: str
     quantity: float
 
 
@@ -510,3 +512,284 @@ async def transfer_to_today_inventory(
     except Exception as e:
         logger.exception("Error during transfer_to_today_inventory")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/inventory/fifo-transfer-to-today")
+async def fifo_transfer_to_today(
+    request: Request,
+    req: FIFOTransferRequest,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
+    """
+    Transfer items to Today's Inventory using FIFO (First-In-First-Out) logic.
+    Priority: Surplus Inventory (oldest first) -> Master Inventory (oldest first)
+
+    This ensures:
+    1. Surplus inventory is used first to minimize waste
+    2. Oldest batches are used first (FIFO)
+    3. Stock is aggregated from multiple sources if needed
+    """
+    try:
+        item_name = req.item_name
+        requested_quantity = req.quantity
+
+        if requested_quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+
+        now = datetime.utcnow().isoformat()
+        threshold = await get_threshold_for_item(item_name)
+
+        remaining_quantity = requested_quantity
+        transfers = []
+
+        # Step 1: Check Surplus Inventory first (FIFO - oldest batch_date first)
+        @run_blocking
+        def _fetch_surplus():
+            return (
+                postgrest_client.table("inventory_surplus")
+                .select("*")
+                .ilike("item_name", item_name)
+                .order("batch_date", desc=False)  # FIFO: oldest first
+                .execute()
+            )
+
+        surplus_response = await _fetch_surplus()
+        surplus_items = surplus_response.data if surplus_response else []
+
+        # Deduct from surplus inventory (FIFO)
+        for surplus_item in surplus_items:
+            if remaining_quantity <= 0:
+                break
+
+            available_qty = float(surplus_item.get("stock_quantity", 0))
+            if available_qty <= 0:
+                continue
+
+            # Determine how much to take from this batch
+            transfer_qty = min(remaining_quantity, available_qty)
+            new_surplus_qty = available_qty - transfer_qty
+
+            # Update or delete from surplus
+            if new_surplus_qty <= 0:
+                @run_blocking
+                def _delete_surplus():
+                    return (
+                        postgrest_client.table("inventory_surplus")
+                        .delete()
+                        .eq("item_id", surplus_item["item_id"])
+                        .eq("batch_date", surplus_item["batch_date"])
+                        .execute()
+                    )
+                await _delete_surplus()
+            else:
+                new_surplus_status = calculate_stock_status(new_surplus_qty, threshold)
+
+                @run_blocking
+                def _update_surplus():
+                    return (
+                        postgrest_client.table("inventory_surplus")
+                        .update({
+                            "stock_quantity": new_surplus_qty,
+                            "stock_status": new_surplus_status,
+                            "updated_at": now,
+                        })
+                        .eq("item_id", surplus_item["item_id"])
+                        .eq("batch_date", surplus_item["batch_date"])
+                        .execute()
+                    )
+                await _update_surplus()
+
+            # Add to today's inventory
+            await _add_to_today_inventory(
+                surplus_item,
+                transfer_qty,
+                threshold,
+                now
+            )
+
+            transfers.append({
+                "source": "surplus",
+                "batch_date": surplus_item["batch_date"],
+                "quantity": transfer_qty,
+                "item_id": surplus_item["item_id"]
+            })
+
+            remaining_quantity -= transfer_qty
+
+        # Step 2: If still need more, check Master Inventory (FIFO - oldest batch_date first)
+        if remaining_quantity > 0:
+            @run_blocking
+            def _fetch_master():
+                return (
+                    postgrest_client.table("inventory")
+                    .select("*")
+                    .ilike("item_name", item_name)
+                    .order("batch_date", desc=False)  # FIFO: oldest first
+                    .execute()
+                )
+
+            master_response = await _fetch_master()
+            master_items = master_response.data if master_response else []
+
+            # Deduct from master inventory (FIFO)
+            for master_item in master_items:
+                if remaining_quantity <= 0:
+                    break
+
+                available_qty = float(master_item.get("stock_quantity", 0))
+                if available_qty <= 0:
+                    continue
+
+                # Determine how much to take from this batch
+                transfer_qty = min(remaining_quantity, available_qty)
+                new_master_qty = available_qty - transfer_qty
+
+                # Update or delete from master
+                if new_master_qty <= 0:
+                    @run_blocking
+                    def _delete_master():
+                        return (
+                            postgrest_client.table("inventory")
+                            .delete()
+                            .eq("item_id", master_item["item_id"])
+                            .execute()
+                        )
+                    await _delete_master()
+                else:
+                    new_master_status = calculate_stock_status(new_master_qty, threshold)
+
+                    @run_blocking
+                    def _update_master():
+                        return (
+                            postgrest_client.table("inventory")
+                            .update({
+                                "stock_quantity": new_master_qty,
+                                "stock_status": new_master_status,
+                                "updated_at": now,
+                            })
+                            .eq("item_id", master_item["item_id"])
+                            .execute()
+                        )
+                    await _update_master()
+
+                # Add to today's inventory
+                await _add_to_today_inventory(
+                    master_item,
+                    transfer_qty,
+                    threshold,
+                    now
+                )
+
+                transfers.append({
+                    "source": "master",
+                    "batch_date": master_item["batch_date"],
+                    "quantity": transfer_qty,
+                    "item_id": master_item["item_id"]
+                })
+
+                remaining_quantity -= transfer_qty
+
+        # Check if we could fulfill the entire request
+        if remaining_quantity > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient stock. Only {requested_quantity - remaining_quantity} available, but {requested_quantity} requested."
+            )
+
+        # Log activity
+        await log_user_activity(
+            db,
+            user,
+            "FIFO transfer to today's inventory",
+            f"Transferred {requested_quantity} of '{item_name}' to Today's Inventory using FIFO (Surplus: {sum(t['quantity'] for t in transfers if t['source'] == 'surplus')}, Master: {sum(t['quantity'] for t in transfers if t['source'] == 'master')})",
+        )
+
+        return {
+            "message": "Item transferred to Today's Inventory using FIFO",
+            "requested_quantity": requested_quantity,
+            "transferred_quantity": requested_quantity - remaining_quantity,
+            "transfers": transfers,
+            "summary": {
+                "from_surplus": sum(t["quantity"] for t in transfers if t["source"] == "surplus"),
+                "from_master": sum(t["quantity"] for t in transfers if t["source"] == "master"),
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error during fifo_transfer_to_today")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+async def _add_to_today_inventory(source_item: dict, quantity: float, threshold: float, timestamp: str):
+    """
+    Helper function to add or update an item in today's inventory.
+    """
+    item_id = source_item["item_id"]
+    batch_date = source_item["batch_date"]
+
+    # Check if this exact item_id and batch_date already exists in today's inventory
+    @run_blocking
+    def _fetch_today():
+        try:
+            return (
+                postgrest_client.table("inventory_today")
+                .select("*")
+                .eq("item_id", item_id)
+                .eq("batch_date", batch_date)
+                .single()
+                .execute()
+            )
+        except APIError as e:
+            if getattr(e, "code", None) == "PGRST116":
+                return None
+            raise
+
+    today_response = await _fetch_today()
+    today_item = today_response.data if today_response else None
+
+    if today_item:
+        # Item exists, update quantity
+        new_qty = float(today_item["stock_quantity"]) + quantity
+        new_status = calculate_stock_status(new_qty, threshold)
+
+        @run_blocking
+        def _update_today():
+            return (
+                postgrest_client.table("inventory_today")
+                .update({
+                    "stock_quantity": new_qty,
+                    "stock_status": new_status,
+                    "updated_at": timestamp,
+                })
+                .eq("item_id", item_id)
+                .eq("batch_date", batch_date)
+                .execute()
+            )
+        await _update_today()
+    else:
+        # Item doesn't exist, insert new record
+        transfer_status = calculate_stock_status(quantity, threshold)
+        payload = {
+            "item_id": source_item["item_id"],
+            "item_name": source_item["item_name"],
+            "batch_date": source_item["batch_date"],
+            "category": source_item.get("category"),
+            "stock_status": transfer_status,
+            "stock_quantity": quantity,
+            "expiration_date": source_item.get("expiration_date"),
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "unit_price": source_item.get("unit_price"),
+        }
+
+        @run_blocking
+        def _insert_today():
+            return (
+                postgrest_client.table("inventory_today")
+                .insert(payload)
+                .execute()
+            )
+        await _insert_today()

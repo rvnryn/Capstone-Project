@@ -5,9 +5,11 @@ from datetime import datetime
 from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 from app.supabase import postgrest_client, get_db
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 router = APIRouter()
-
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 
 class InventorySettingBase(BaseModel):
     name: str
@@ -32,7 +34,7 @@ class InventorySettingOut(InventorySettingBase):
     class Config:
         orm_mode = True
 
-
+@limiter.limit("10/minute")
 @router.get("/inventory-settings", response_model=List[InventorySettingOut])
 def get_inventory_settings(request: Request):
     try:

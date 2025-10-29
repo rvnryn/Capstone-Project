@@ -10,20 +10,15 @@ import {
   FaBoxes,
   FaSort,
   FaChartLine,
-  FaCalendarAlt,
   FaDownload,
   FaFilter,
   FaChartBar,
   FaFileImport,
+  FaMoneyBillWave,
 } from "react-icons/fa";
-import {
-  MdCheckCircle,
-  MdAssessment,
-  MdTrendingUp,
-  MdInsights,
-} from "react-icons/md";
+import { MdCheckCircle, MdTrendingUp, MdInsights } from "react-icons/md";
 import { BiImport, BiExport } from "react-icons/bi";
-import { FiBarChart, FiPieChart, FiActivity, FiUpload } from "react-icons/fi";
+import { FiBarChart, FiUpload } from "react-icons/fi";
 import { TbReportAnalytics } from "react-icons/tb";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import { useSimpleSalesReport } from "./hooks/useSimpleSalesReport";
@@ -31,8 +26,15 @@ import { useSalesAnalytics } from "../../Dashboard/hook/useSalesPrediction";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { saveAs } from "file-saver";
-import { AiOutlineInfoCircle } from "react-icons/ai";
 import { supabase } from "@/app/utils/Server/supabaseClient";
+import { useComprehensiveAnalytics } from "./hooks/useComprehensiveAnalytics";
+import {
+  FaDollarSign,
+  FaExclamationTriangle,
+  FaTrophy,
+  FaLayerGroup,
+} from "react-icons/fa";
+import { MdTrendingDown } from "react-icons/md";
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!;
 const SHEET_RANGE = "Sheet1!A1";
@@ -96,7 +98,6 @@ export default function ReportSales() {
   const [period, setPeriod] = useState("today");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [priceRangeFilter, setPriceRangeFilter] = useState("");
-  const [performanceFilter, setPerformanceFilter] = useState("");
   const [sortConfig, setSortConfig] = useState({
     key: "",
     direction: "asc" as "asc" | "desc",
@@ -113,6 +114,27 @@ export default function ReportSales() {
     start: "",
     end: "",
   });
+
+  // Comprehensive Analytics date range (last 30 days by default)
+  const [analyticsStartDate, setAnalyticsStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 30);
+    return date.toISOString().split("T")[0];
+  });
+  const [analyticsEndDate, setAnalyticsEndDate] = useState(() => {
+    return new Date().toISOString().split("T")[0];
+  });
+
+  // Fetch comprehensive analytics
+  const {
+    analytics,
+    loading: analyticsLoading,
+    error: analyticsError,
+  } = useComprehensiveAnalytics(analyticsStartDate, analyticsEndDate);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Use the sales report hook
   const {
@@ -275,146 +297,6 @@ export default function ReportSales() {
     console.log("[ReportSales] error:", error);
   }, [reportData, error]);
 
-  // ML Weekly Forecast Section
-  type WeeklyForecast = {
-    week_start: string;
-    predicted_sales: number;
-    is_holiday_week: number;
-    holiday_type?: "official" | "custom" | null;
-  };
-  type HistoricalPrediction = {
-    week_start: string;
-    predicted_sales: number;
-    actual_sales: number;
-    is_holiday_week: number;
-    holiday_type?: "official" | "custom" | null;
-  };
-  type SalesReportData = {
-    forecast?: WeeklyForecast[];
-    historicalPredictions?: HistoricalPrediction[];
-    [key: string]: any;
-  };
-  // Holiday type filter state
-  const [holidayTypeFilter, setHolidayTypeFilter] = useState<
-    "" | "official" | "custom" | "none" | "all"
-  >("all");
-  // ...existing code...
-  // Place filteredWeeks after forecast/historicalPredictions are defined
-  const forecast: WeeklyForecast[] =
-    (reportData && Array.isArray((reportData as SalesReportData).forecast)
-      ? (reportData as SalesReportData).forecast
-      : []) || [];
-  const historicalPredictions: HistoricalPrediction[] =
-    (reportData &&
-    Array.isArray((reportData as SalesReportData).historicalPredictions)
-      ? (reportData as SalesReportData).historicalPredictions
-      : []) || [];
-
-  // Filtered weeks for table/chart (must be after forecast/historicalPredictions)
-  const filteredWeeks = useMemo(() => {
-    const allWeeksMap = new Map<string, any>();
-    historicalPredictions.forEach((h) => {
-      allWeeksMap.set(h.week_start, h);
-    });
-    forecast.forEach((f) => {
-      if (!allWeeksMap.has(f.week_start)) {
-        allWeeksMap.set(f.week_start, f);
-      }
-    });
-
-    const allWeeks = Array.from(allWeeksMap.values()).sort((a, b) =>
-      a.week_start.localeCompare(b.week_start)
-    );
-    if (holidayTypeFilter === "all") return allWeeks;
-    if (holidayTypeFilter === "none")
-      return allWeeks.filter((w) => !w.is_holiday_week);
-    return allWeeks.filter((w) => w.holiday_type === holidayTypeFilter);
-  }, [historicalPredictions, forecast, holidayTypeFilter]);
-  // Holiday legend/tooltip
-  const holidayLegend = (
-    <div className="flex items-center gap-4 mt-2 text-xs text-gray-300">
-      <span className="flex items-center gap-1">
-        <span className="inline-block w-3 h-3 rounded-full bg-blue-400 mr-1" />{" "}
-        Official PH Holiday
-      </span>
-      <span className="flex items-center gap-1">
-        <span className="inline-block w-3 h-3 rounded-full bg-pink-400 mr-1" />{" "}
-        Custom Holiday
-      </span>
-      <span className="flex items-center gap-1">
-        <span className="inline-block w-3 h-3 rounded-full bg-gray-500 mr-1" />{" "}
-        Not a Holiday
-      </span>
-    </div>
-  );
-
-  // Merge actual and predicted by week_start
-  const chartData = useMemo(() => {
-    if (!historicalPredictions.length) return null;
-    const allWeeks: string[] = historicalPredictions.map((w) => w.week_start);
-    return {
-      labels: allWeeks,
-      datasets: [
-        {
-          label: "Actual Sales",
-          data: historicalPredictions.map((w) => w.actual_sales),
-          borderColor: "#34d399",
-          backgroundColor: "rgba(52,211,153,0.2)",
-          tension: 0.3,
-          fill: false,
-        },
-        {
-          label: "Predicted Sales (ML)",
-          data: historicalPredictions.map((w) => w.predicted_sales),
-          borderColor: "#facc15",
-          backgroundColor: "rgba(250,204,21,0.2)",
-          borderDash: [6, 4],
-          tension: 0.3,
-          fill: false,
-        },
-      ],
-    };
-  }, [historicalPredictions]);
-
-  // Calculate forecast accuracy (MAPE)
-  const forecastAccuracy = useMemo(() => {
-    if (!historicalPredictions.length) return null;
-    let totalAPE = 0;
-    let count = 0;
-    for (const w of historicalPredictions) {
-      if (w.actual_sales && w.actual_sales > 0) {
-        totalAPE += Math.abs(
-          (w.actual_sales - w.predicted_sales) / w.actual_sales
-        );
-        count++;
-      }
-    }
-    if (count === 0) return null;
-    return 100 - (totalAPE / count) * 100; // Accuracy %
-  }, [historicalPredictions]);
-
-  // Actionable alert: If next week's forecast is much higher/lower than average
-  const actionableAlert = useMemo(() => {
-    if (!forecast.length) return null;
-    const avg =
-      forecast.reduce((sum, w) => sum + w.predicted_sales, 0) / forecast.length;
-    const nextWeek = forecast[forecast.length - 1];
-    if (!nextWeek) return null;
-    if (nextWeek.predicted_sales > avg * 1.2) {
-      return {
-        type: "high",
-        message: `Next week's forecast (₱${nextWeek.predicted_sales.toLocaleString()}) is significantly above average. Consider preparing extra stock or staff.`,
-      };
-    }
-    if (nextWeek.predicted_sales < avg * 0.8) {
-      return {
-        type: "low",
-        message: `Next week's forecast (₱${nextWeek.predicted_sales.toLocaleString()}) is below average. Consider reducing inventory or running promotions.`,
-      };
-    }
-    return null;
-  }, [forecast]);
-
   const categories = [
     "Rice Toppings",
     "Sizzlers",
@@ -468,7 +350,6 @@ export default function ReportSales() {
     setCategoryFilter("");
     setPeriod("today");
     setPriceRangeFilter("");
-    setPerformanceFilter("");
     setSortConfig({ key: "", direction: "asc" });
   }, []);
 
@@ -476,10 +357,6 @@ export default function ReportSales() {
   const clearCategory = useCallback(() => setCategoryFilter(""), []);
   const clearPeriod = useCallback(() => setPeriod("today"), []);
   const clearPriceRangeFilter = useCallback(() => setPriceRangeFilter(""), []);
-  const clearPerformanceFilter = useCallback(
-    () => setPerformanceFilter(""),
-    []
-  );
 
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => ({
@@ -600,45 +477,6 @@ export default function ReportSales() {
         }
       }
 
-      // Performance filter
-      let matchesPerformanceFilter = true;
-      if (performanceFilter) {
-        const quantity = Number(item.quantity) || 0;
-        const revenue = Number(item.totalRevenue) || 0;
-        const avgQuantity =
-          salesData.length > 0
-            ? salesData.reduce(
-                (sum: number, i: (typeof salesData)[0]) => sum + i.quantity,
-                0
-              ) / salesData.length
-            : 0;
-        const avgRevenue =
-          salesData.length > 0
-            ? salesData.reduce(
-                (sum: number, i: (typeof salesData)[0]) => sum + i.totalRevenue,
-                0
-              ) / salesData.length
-            : 0;
-        switch (performanceFilter) {
-          case "top_seller":
-            matchesPerformanceFilter = quantity >= avgQuantity * 1.5;
-            break;
-          case "high_revenue":
-            matchesPerformanceFilter = revenue >= avgRevenue * 1.5;
-            break;
-          case "low_performer":
-            matchesPerformanceFilter =
-              quantity < avgQuantity * 0.5 || revenue < avgRevenue * 0.5;
-            break;
-          case "average":
-            matchesPerformanceFilter =
-              quantity >= avgQuantity * 0.5 && quantity < avgQuantity * 1.5;
-            break;
-          default:
-            matchesPerformanceFilter = true;
-        }
-      }
-
       let matchesDateRange = true;
       if (dateRange.start && dateRange.end && item.report_date) {
         const itemDate = new Date(item.report_date);
@@ -652,7 +490,6 @@ export default function ReportSales() {
         matchesCategory &&
         matchesPeriod &&
         matchesPriceRangeFilter &&
-        matchesPerformanceFilter &&
         matchesDateRange
       );
     });
@@ -662,7 +499,6 @@ export default function ReportSales() {
     categoryFilter,
     period,
     priceRangeFilter,
-    performanceFilter,
     dateRange,
   ]);
 
@@ -693,6 +529,24 @@ export default function ReportSales() {
     return sorted;
   }, [groupedSales, sortConfig]);
 
+  // Pagination calculations
+  const totalItems = sortedSales.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedSales = sortedSales.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchQuery,
+    categoryFilter,
+    period,
+    priceRangeFilter,
+    sortConfig,
+  ]);
+
   // Prepare main sales data for export
   const values = [
     ["Item Name", "Category", "Quantity Sold", "Unit Price", "Total Sales"],
@@ -705,35 +559,10 @@ export default function ReportSales() {
     ]),
   ];
 
-  // Prepare forecast data for export
-  let forecastTableRows = [
-    ...historicalPredictions.map((w: any) => [
-      w.week_start,
-      w.actual_sales,
-      w.predicted_sales,
-      w.is_holiday_week ? "Yes" : "No",
-    ]),
-    ...forecast
-      .filter(
-        (f: any) =>
-          !historicalPredictions.some((h: any) => h.week_start === f.week_start)
-      )
-      .map((f: any) => [
-        f.week_start,
-        "",
-        f.predicted_sales,
-        f.is_holiday_week ? "Yes" : "No",
-      ]),
-  ];
-  // Debug log
-  console.log("[Export] historicalPredictions:", historicalPredictions);
-  console.log("[Export] forecast:", forecast);
-  if (forecastTableRows.length === 0) {
-    forecastTableRows = [["No forecast data available", "", "", ""]];
-  }
+  // Temporary empty forecast data (to be replaced with ML feature)
   const forecastTable = [
     ["Week Start", "Actual Sales", "Predicted Sales", "Is Holiday Week"],
-    ...forecastTableRows,
+    ["No forecast data available", "", "", ""],
   ];
 
   const exportToExcel = async () => {
@@ -971,410 +800,548 @@ export default function ReportSales() {
                       </div>
                     </div>
                   </div>
+                </header>
 
-                  {/* Report Summary Cards */}
-                  <div className="grid grid-cols-1 2xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 xs:gap-2 sm:gap-3 lg:gap-4">
-                    <div className="bg-gradient-to-br from-yellow-500/10 to-yellow-600/10 border border-yellow-500/20 rounded-md xs:rounded-lg sm:rounded-xl p-1.5 xs:p-2 sm:p-3 lg:p-4 responsive-card">
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-yellow-400 text-2xs xs:text-xs sm:text-sm font-medium truncate">
-                            Total Items
-                          </p>
-                          <p
-                            className="text-white text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold truncate"
-                            title={`${sortedSales.length} items`}
-                          >
-                            {sortedSales.length}
-                          </p>
-                        </div>
-                        <FiBarChart className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl flex-shrink-0" />
-                      </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-green-500/10 to-green-600/10 border border-green-500/20 rounded-md xs:rounded-lg sm:rounded-xl p-1.5 xs:p-2 sm:p-3 lg:p-4 responsive-card">
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-green-400 text-2xs xs:text-xs sm:text-sm font-medium truncate">
-                            Sales
-                          </p>
-                          <p
-                            className="text-white text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold truncate"
-                            title={`₱${sortedSales
-                              .reduce(
-                                (sum: any, item: any) =>
-                                  sum + item.totalRevenue,
-                                0
-                              )
-                              .toLocaleString()}`}
-                          >
-                            ₱
-                            {sortedSales
-                              .reduce(
-                                (sum: number, item: (typeof groupedSales)[0]) =>
-                                  sum + item.totalRevenue,
-                                0
-                              )
-                              .toLocaleString()}
-                          </p>
-                        </div>
-                        <MdTrendingUp className="text-green-400 text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl flex-shrink-0" />
-                      </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/10 border border-blue-500/20 rounded-md xs:rounded-lg sm:rounded-xl p-1.5 xs:p-2 sm:p-3 lg:p-4 responsive-card">
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-blue-400 text-2xs xs:text-xs sm:text-sm font-medium truncate">
-                            Quantity
-                          </p>
-                          <p
-                            className="text-white text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold truncate"
-                            title={`${sortedSales
-                              .reduce(
-                                (sum: any, item: any) => sum + item.quantity,
-                                0
-                              )
-                              .toLocaleString()} sold`}
-                          >
-                            {sortedSales
-                              .reduce(
-                                (sum: number, item: (typeof groupedSales)[0]) =>
-                                  sum + item.quantity,
-                                0
-                              )
-                              .toLocaleString()}
-                          </p>
-                        </div>
-                        <FiActivity className="text-blue-400 text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl flex-shrink-0" />
-                      </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/10 border border-purple-500/20 rounded-md xs:rounded-lg sm:rounded-xl p-1.5 xs:p-2 sm:p-3 lg:p-4 responsive-card">
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-purple-400 text-2xs xs:text-xs sm:text-sm font-medium truncate">
-                            Avg Price
-                          </p>
-                          <p
-                            className="text-white text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold truncate"
-                            title={`₱${
-                              sortedSales.length > 0
-                                ? (
-                                    sortedSales.reduce(
-                                      (
-                                        sum: number,
-                                        item: (typeof groupedSales)[0]
-                                      ) => sum + Number(item.unitPrice),
-                                      0
-                                    ) / sortedSales.length
-                                  ).toFixed(2)
-                                : "0.00"
-                            } average`}
-                          >
-                            ₱
-                            {sortedSales.length > 0
-                              ? (
-                                  sortedSales.reduce(
-                                    (sum: any, item: any) =>
-                                      sum + Number(item.unitPrice),
-                                    0
-                                  ) / sortedSales.length
-                                ).toFixed(2)
-                              : "0.00"}
-                          </p>
-                        </div>
-                        <FiPieChart className="text-purple-400 text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl flex-shrink-0" />
-                      </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-red-500/10 to-red-600/10 border border-red-500/20 rounded-md xs:rounded-lg sm:rounded-xl p-1.5 xs:p-2 sm:p-3 lg:p-4 2xs:col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-1 responsive-card">
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-red-400 text-2xs xs:text-xs sm:text-sm font-medium truncate">
-                            Best Seller
-                          </p>
-                          <p
-                            className="text-white text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold truncate"
-                            title={
-                              sortedSales.length > 0
-                                ? sortedSales
-                                    .filter(
-                                      (item: any) =>
-                                        item.quantity ===
-                                        Math.max(
-                                          ...sortedSales.map(
-                                            (i: any) => i.quantity
-                                          )
-                                        )
-                                    )
-                                    .map((item: any) => item.name)
-                                    .join(", ")
-                                : "N/A"
-                            }
-                          >
-                            {sortedSales.length > 0
-                              ? sortedSales
-                                  .filter(
-                                    (item: any) =>
-                                      item.quantity ===
-                                      Math.max(
-                                        ...sortedSales.map(
-                                          (i: any) => i.quantity
-                                        )
-                                      )
-                                  )
-                                  .map(
-                                    (item: any) =>
-                                      item.name.substring(
-                                        0,
-                                        window.innerWidth < 320
-                                          ? 4
-                                          : window.innerWidth < 480
-                                          ? 6
-                                          : 8
-                                      ) + "..."
-                                  )
-                                  .join(", ")
-                              : "N/A"}
-                          </p>
-                        </div>
-                        <MdTrendingUp className="text-red-400 text-sm xs:text-base sm:text-lg md:text-xl lg:text-2xl flex-shrink-0" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Report Metadata */}
-                  <div className="bg-gray-800/20 backdrop-blur-sm rounded-md xs:rounded-lg sm:rounded-xl p-1.5 xs:p-2 sm:p-3 lg:p-4 border border-gray-700/30">
-                    <div className="flex flex-col 2xs:flex-row justify-between items-start 2xs:items-center gap-1.5 xs:gap-2 sm:gap-3 lg:gap-4">
-                      <div className="flex flex-col 2xs:flex-row items-start 2xs:items-center gap-1.5 xs:gap-2 sm:gap-3 lg:gap-4 w-full 2xs:w-auto">
-                        <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 text-gray-300">
-                          <FaCalendarAlt className="text-yellow-400 text-2xs xs:text-xs sm:text-sm flex-shrink-0" />
-                          <span className="text-2xs xs:text-xs sm:text-sm truncate">
-                            Generated: {new Date().toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 text-gray-300">
-                          <MdAssessment className="text-yellow-400 text-2xs xs:text-xs sm:text-sm flex-shrink-0" />
-                          <span className="text-2xs xs:text-xs sm:text-sm truncate">
-                            Sales: {sortedSales.length}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 xs:gap-1.5 sm:gap-2 text-2xs xs:text-xs sm:text-sm text-gray-400 w-full 2xs:w-auto">
-                        <span className="truncate">Updated:</span>
-                        <span className="text-yellow-400 font-medium truncate">
-                          {new Date().toLocaleTimeString()}
+                {/* Unified Sales Summary */}
+                <section className="my-6">
+                  {analyticsLoading ? (
+                    <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-8 border border-gray-700">
+                      <div className="flex items-center justify-center">
+                        <div className="w-8 h-8 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+                        <span className="ml-3 text-gray-400">
+                          Loading analytics...
                         </span>
                       </div>
                     </div>
-                  </div>
-                </header>
-
-                {/* Top Selling Items List (from useHistoricalAnalysis) */}
-                <section aria-label="Top Selling Items" className="mb-6">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 gap-3">
-                    <div className="">
-                      <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-yellow-400 flex items-center gap-2">
-                        <FaChartBar className="text-yellow-400" /> Top Selling
-                        Items
-                      </h3>
-                      <p className="text-gray-400 text-xs">
-                        List of top-selling items (date · name · quantity)
-                      </p>
-                    </div>
-                    <div className="mt-2 sm:mt-0">
-                      {renderTopItemsCountSelector()}
-                    </div>
-                  </div>
-
-                  <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-3 border border-gray-700">
-                    {/* Metric selector removed for historical analytics */}
-                    {!topItems || topItems.length === 0 ? (
-                      <div className="text-center text-gray-400 py-8">
-                        <p className="text-lg font-semibold mb-2">
-                          No sales data available for this period.
+                  ) : analyticsError ? (
+                    <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-8 border border-gray-700">
+                      <div className="text-center text-red-400">
+                        <FaExclamationTriangle className="text-4xl mx-auto mb-3" />
+                        <p className="text-lg font-semibold">
+                          Error loading analytics
                         </p>
-                        <p className="text-sm">
-                          Try adjusting your filters or select a different
-                          period.
+                        <p className="text-sm text-gray-400 mt-2">
+                          {analyticsError}
                         </p>
                       </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm text-left">
-                          <thead>
-                            <tr className="text-gray-300 text-xs">
-                              <th className="px-4 py-2">Item Name</th>
-                              <th className="px-4 py-2">Quantity Sold</th>
-                              <th className="px-4 py-2">Date Range</th>
-                              <th className="px-4 py-2">Rank</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {topItems.map((item: any, idx: number) => (
-                              <tr
-                                key={item.name + idx}
-                                className="border-t border-gray-800"
-                              >
-                                <td className="px-4 py-2 font-medium text-white">
-                                  {item.name}
-                                </td>
-                                <td className="px-4 py-2">{item.quantity}</td>
-                                <td className="px-4 py-2">
-                                  {historicalData?.overview?.analysis_period ||
-                                    "-"}
-                                </td>
-                                <td className="px-4 py-2">{item.rank}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </section>
+                    </div>
+                  ) : analytics ? (
+                    <div className="space-y-6">
+                      {/* KPI Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* Total Revenue */}
+                        <div className="bg-gradient-to-br from-green-900/30 to-green-800/20 rounded-xl p-4 border border-green-700/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <FaMoneyBillWave className="text-green-400 text-2xl" />
+                            <span className="text-xs text-gray-400">
+                              Revenue
+                            </span>
+                          </div>
+                          <div className="text-2xl font-bold text-white">
+                            ₱{analytics.summary.total_revenue.toLocaleString()}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            Gross Margin:{" "}
+                            {analytics.profitability.gross_profit_margin.toFixed(
+                              1
+                            )}
+                            %
+                          </div>
+                        </div>
 
-                <section className="my-8">
-                  <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-yellow-400 mb-4 flex items-center gap-2">
-                    <FaChartLine className="text-yellow-400" />
-                    Weekly Sales Forecast{" "}
-                    <span className="relative group">
-                      <AiOutlineInfoCircle size={18} color="orange" />
-                      <span className="absolute left-6 top-1/2 -translate-y-1/2 z-20 w-max min-w-[220px] bg-black text-orange-200 text-xs rounded-lg px-3 py-2 shadow-lg border border-yellow-500 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 whitespace-nowrap">
-                        Forecasts are estimates only and may not be 100%
-                        accurate.
-                      </span>
-                    </span>
-                  </h3>
-                  {/* Holiday Type Filter */}
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <label className="text-xs text-gray-300 font-medium">
-                      Holiday Type:
-                    </label>
-                    <select
-                      value={holidayTypeFilter}
-                      onChange={(e) =>
-                        setHolidayTypeFilter(e.target.value as any)
-                      }
-                      className="bg-gray-800/60 border border-gray-700 text-white rounded px-2 py-1 text-xs"
-                    >
-                      <option value="all">All</option>
-                      <option value="official">Official PH</option>
-                      <option value="custom">Custom</option>
-                      <option value="none">Not a Holiday</option>
-                    </select>
-                  </div>
-                  {forecast.length === 0 &&
-                  historicalPredictions.length === 0 ? (
-                    <div className="text-center text-gray-400 py-8">
-                      <p className="text-lg font-semibold mb-2">
-                        No forecast data available for this period.
-                      </p>
-                      <p className="text-sm">
-                        Try adjusting your filters or select a different period.
-                      </p>
+                        {/* Net Profit */}
+                        <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/20 rounded-xl p-4 border border-blue-700/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <MdTrendingUp className="text-blue-400 text-2xl" />
+                            <span className="text-xs text-gray-400">
+                              Net Profit
+                            </span>
+                          </div>
+                          <div className="text-2xl font-bold text-white">
+                            ₱{analytics.summary.net_profit.toLocaleString()}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            Net Margin:{" "}
+                            {analytics.profitability.net_profit_margin.toFixed(
+                              1
+                            )}
+                            %
+                          </div>
+                        </div>
+
+                        {/* Total Loss */}
+                        <div className="bg-gradient-to-br from-red-900/30 to-red-800/20 rounded-xl p-4 border border-red-700/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <MdTrendingDown className="text-red-400 text-2xl" />
+                            <span className="text-xs text-gray-400">
+                              Total Loss
+                            </span>
+                          </div>
+                          <div className="text-2xl font-bold text-white">
+                            ₱{analytics.summary.total_loss.toLocaleString()}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            Loss %:{" "}
+                            {analytics.profitability.loss_percentage.toFixed(1)}
+                            %
+                          </div>
+                        </div>
+
+                        {/* Items Sold */}
+                        <div className="bg-gradient-to-br from-purple-900/30 to-purple-800/20 rounded-xl p-4 border border-purple-700/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <FaBoxes className="text-purple-400 text-2xl" />
+                            <span className="text-xs text-gray-400">
+                              Items Sold
+                            </span>
+                          </div>
+                          <div className="text-2xl font-bold text-white">
+                            {analytics.summary.total_items_sold.toLocaleString()}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            Unique: {analytics.summary.unique_items_sold} items
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Financial Breakdown */}
+                      <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-6 border border-gray-700">
+                        <h4 className="text-lg font-bold text-yellow-400 mb-4 flex items-center gap-2">
+                          <FiBarChart className="text-yellow-400" />
+                          Financial Breakdown
+                        </h4>
+                        <div className="space-y-4">
+                          {/* Revenue */}
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm text-gray-300">
+                                Total Revenue
+                              </span>
+                              <span className="text-sm font-semibold text-green-400">
+                                ₱
+                                {analytics.summary.total_revenue.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div
+                                className="bg-gradient-to-r from-green-500 to-green-400 h-2 rounded-full"
+                                style={{ width: "100%" }}
+                              ></div>
+                            </div>
+                          </div>
+
+                          {/* COGS */}
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm text-gray-300">
+                                Cost of Goods Sold (COGS)
+                              </span>
+                              <span className="text-sm font-semibold text-orange-400">
+                                ₱{analytics.summary.total_cogs.toLocaleString()}{" "}
+                                (
+                                {analytics.profitability.cogs_percentage.toFixed(
+                                  1
+                                )}
+                                %)
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div
+                                className="bg-gradient-to-r from-orange-500 to-orange-400 h-2 rounded-full"
+                                style={{
+                                  width: `${analytics.profitability.cogs_percentage}%`,
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+
+                          {/* Loss */}
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm text-gray-300">
+                                Total Loss (Spoilage)
+                              </span>
+                              <span className="text-sm font-semibold text-red-400">
+                                ₱{analytics.summary.total_loss.toLocaleString()}{" "}
+                                (
+                                {analytics.profitability.loss_percentage.toFixed(
+                                  1
+                                )}
+                                %)
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div
+                                className="bg-gradient-to-r from-red-500 to-red-400 h-2 rounded-full"
+                                style={{
+                                  width: `${analytics.profitability.loss_percentage}%`,
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+
+                          {/* Gross Profit */}
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm text-gray-300">
+                                Gross Profit
+                              </span>
+                              <span className="text-sm font-semibold text-blue-400">
+                                ₱
+                                {analytics.summary.gross_profit.toLocaleString()}{" "}
+                                (
+                                {analytics.profitability.gross_profit_margin.toFixed(
+                                  1
+                                )}
+                                %)
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div
+                                className="bg-gradient-to-r from-blue-500 to-blue-400 h-2 rounded-full"
+                                style={{
+                                  width: `${analytics.profitability.gross_profit_margin}%`,
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+
+                          {/* Net Profit */}
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm text-gray-300">
+                                Net Profit
+                              </span>
+                              <span className="text-sm font-semibold text-cyan-400">
+                                ₱{analytics.summary.net_profit.toLocaleString()}{" "}
+                                (
+                                {analytics.profitability.net_profit_margin.toFixed(
+                                  1
+                                )}
+                                %)
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                              <div
+                                className="bg-gradient-to-r from-cyan-500 to-cyan-400 h-2 rounded-full"
+                                style={{
+                                  width: `${analytics.profitability.net_profit_margin}%`,
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Loss/Spoilage Analysis */}
+                      <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-6 border border-gray-700">
+                        <h4 className="text-lg font-bold text-yellow-400 mb-4 flex items-center gap-2">
+                          <FaExclamationTriangle className="text-red-400" />
+                          Loss & Spoilage Analysis
+                        </h4>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                          <div className="bg-red-900/20 rounded-lg p-4 border border-red-700/30">
+                            <div className="text-sm text-gray-400 mb-1">
+                              Total Spoilage Cost
+                            </div>
+                            <div className="text-xl font-bold text-red-400">
+                              ₱
+                              {analytics.loss_analysis.total_spoilage_cost.toLocaleString()}
+                            </div>
+                          </div>
+                          <div className="bg-red-900/20 rounded-lg p-4 border border-red-700/30">
+                            <div className="text-sm text-gray-400 mb-1">
+                              Quantity Spoiled
+                            </div>
+                            <div className="text-xl font-bold text-red-400">
+                              {analytics.loss_analysis.total_quantity_spoiled.toLocaleString()}
+                            </div>
+                          </div>
+                          <div className="bg-red-900/20 rounded-lg p-4 border border-red-700/30">
+                            <div className="text-sm text-gray-400 mb-1">
+                              Incidents
+                            </div>
+                            <div className="text-xl font-bold text-red-400">
+                              {analytics.loss_analysis.total_incidents}
+                            </div>
+                          </div>
+                        </div>
+
+                        {analytics.loss_analysis.spoilage_items.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead>
+                                <tr className="text-gray-300 text-xs border-b border-gray-700">
+                                  <th className="px-4 py-2 text-left">
+                                    Item Name
+                                  </th>
+                                  <th className="px-4 py-2 text-left">
+                                    Category
+                                  </th>
+                                  <th className="px-4 py-2 text-right">
+                                    Qty Spoiled
+                                  </th>
+                                  <th className="px-4 py-2 text-right">Cost</th>
+                                  <th className="px-4 py-2 text-right">
+                                    Incidents
+                                  </th>
+                                  <th className="px-4 py-2 text-left">
+                                    Reasons
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {analytics.loss_analysis.spoilage_items
+                                  .slice(0, 5)
+                                  .map((item, idx) => (
+                                    <tr
+                                      key={idx}
+                                      className="border-b border-gray-800 hover:bg-gray-800/30"
+                                    >
+                                      <td className="px-4 py-3 text-white">
+                                        {item.item_name}
+                                      </td>
+                                      <td className="px-4 py-3 text-gray-300">
+                                        {item.category}
+                                      </td>
+                                      <td className="px-4 py-3 text-right text-red-400">
+                                        {item.total_spoiled}
+                                      </td>
+                                      <td className="px-4 py-3 text-right text-red-400">
+                                        ₱{item.total_cost.toLocaleString()}
+                                      </td>
+                                      <td className="px-4 py-3 text-right text-gray-300">
+                                        {item.incidents}
+                                      </td>
+                                      <td className="px-4 py-3 text-gray-400 text-xs">
+                                        {item.reasons || "N/A"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="text-center text-gray-400 py-4">
+                            <p>No spoilage data for this period</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Top Performers & Category Breakdown */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Top Performers */}
+                        <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-6 border border-gray-700">
+                          <h4 className="text-lg font-bold text-yellow-400 mb-4 flex items-center gap-2">
+                            <FaTrophy className="text-yellow-400" />
+                            Top Performers
+                          </h4>
+                          {analytics.top_performers.length > 0 ? (
+                            <div className="space-y-3">
+                              {analytics.top_performers
+                                .slice(0, 5)
+                                .map((item, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center gap-3 bg-gray-800/30 rounded-lg p-3"
+                                  >
+                                    <div
+                                      className={`flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${
+                                        idx === 0
+                                          ? "bg-yellow-400 text-black"
+                                          : idx === 1
+                                          ? "bg-gray-300 text-black"
+                                          : idx === 2
+                                          ? "bg-orange-400 text-black"
+                                          : "bg-gray-700 text-gray-300"
+                                      }`}
+                                    >
+                                      {idx + 1}
+                                    </div>
+                                    <div className="flex-1">
+                                      <div className="text-white font-semibold">
+                                        {item.item_name}
+                                      </div>
+                                      <div className="text-xs text-gray-400">
+                                        {item.category}
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-green-400 font-semibold">
+                                        ₱{item.total_revenue.toLocaleString()}
+                                      </div>
+                                      <div className="text-xs text-gray-400">
+                                        {item.total_quantity_sold} sold
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          ) : (
+                            <div className="text-center text-gray-400 py-4">
+                              <p>No sales data available</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Category Breakdown */}
+                        <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-6 border border-gray-700">
+                          <h4 className="text-lg font-bold text-yellow-400 mb-4 flex items-center gap-2">
+                            <FaLayerGroup className="text-yellow-400" />
+                            Category Performance
+                          </h4>
+                          {analytics.category_breakdown.length > 0 ? (
+                            <div className="space-y-3">
+                              {analytics.category_breakdown.map((cat, idx) => (
+                                <div
+                                  key={idx}
+                                  className="bg-gray-800/30 rounded-lg p-3"
+                                >
+                                  <div className="flex justify-between items-center mb-2">
+                                    <span className="text-white font-semibold">
+                                      {cat.category}
+                                    </span>
+                                    <span className="text-green-400 font-semibold">
+                                      ₱{cat.total_revenue.toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-xs text-gray-400 mb-1">
+                                    <span>
+                                      {cat.total_quantity} items •{" "}
+                                      {cat.unique_items} unique
+                                    </span>
+                                    <span>
+                                      {cat.revenue_percentage.toFixed(1)}% of
+                                      total
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-gray-700 rounded-full h-1.5">
+                                    <div
+                                      className="bg-gradient-to-r from-yellow-500 to-yellow-400 h-1.5 rounded-full"
+                                      style={{
+                                        width: `${cat.revenue_percentage}%`,
+                                      }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center text-gray-400 py-4">
+                              <p>No category data available</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Daily Trend */}
+                      <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-6 border border-gray-700">
+                        <h4 className="text-lg font-bold text-yellow-400 mb-4 flex items-center gap-2">
+                          <FaChartLine className="text-yellow-400" />
+                          Daily Sales Trend (Last 7 Days)
+                        </h4>
+                        {analytics.daily_trend.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <div className="flex gap-2 min-w-max">
+                              {analytics.daily_trend.map((day, idx) => {
+                                const maxRevenue = Math.max(
+                                  ...analytics.daily_trend.map(
+                                    (d) => d.total_revenue
+                                  )
+                                );
+                                const heightPercent =
+                                  (day.total_revenue / maxRevenue) * 100;
+                                return (
+                                  <div
+                                    key={idx}
+                                    className="flex flex-col items-center gap-2 flex-1 min-w-[80px]"
+                                  >
+                                    <div className="text-xs text-gray-400 font-semibold">
+                                      {new Date(day.date).toLocaleDateString(
+                                        "en-US",
+                                        { month: "short", day: "numeric" }
+                                      )}
+                                    </div>
+                                    <div className="relative w-full h-32 bg-gray-800/30 rounded-t-lg flex items-end justify-center">
+                                      <div
+                                        className="w-full bg-gradient-to-t from-yellow-500 to-yellow-400 rounded-t-lg transition-all duration-300 hover:from-yellow-400 hover:to-yellow-300"
+                                        style={{ height: `${heightPercent}%` }}
+                                      ></div>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-green-400 font-semibold text-sm">
+                                        ₱{day.total_revenue.toLocaleString()}
+                                      </div>
+                                      <div className="text-gray-400 text-xs">
+                                        {day.total_items} items
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center text-gray-400 py-4">
+                            <p>No daily trend data available</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Summary Statistics */}
+                      <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-6 border border-gray-700">
+                        <h4 className="text-lg font-bold text-yellow-400 mb-4 flex items-center gap-2">
+                          <MdInsights className="text-yellow-400" />
+                          Period Summary
+                        </h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-white">
+                              {analytics.summary.total_transactions}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Total Transactions
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-white">
+                              ₱{analytics.summary.avg_unit_price.toFixed(2)}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Avg Unit Price
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-white">
+                              {analytics.summary.unique_items_sold}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Unique Items
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-white">
+                              {analytics.loss_analysis.unique_items_spoiled}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Items Spoiled
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ) : (
-                    <>
-                      <div className="overflow-x-auto">
-                        <table className="table-auto w-full text-sm text-left border-collapse min-w-[400px] bg-gray-900/60 rounded-lg">
-                          <thead>
-                            <tr>
-                              <th className="px-4 py-2 text-yellow-400">
-                                Week Start
-                              </th>
-                              <th className="px-4 py-2 text-yellow-400">
-                                Predicted Sales
-                              </th>
-                              <th className="px-4 py-2 text-green-400">
-                                Actual Sales
-                              </th>
-                              <th className="px-4 py-2 text-blue-400">
-                                Holiday?
-                              </th>
-                              <th className="px-4 py-2 text-pink-400">Type</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredWeeks.map((row) => (
-                              <tr
-                                key={row.week_start}
-                                className="border-b border-gray-800"
-                              >
-                                <td className="px-4 py-2 font-mono">
-                                  {row.week_start}
-                                </td>
-                                <td className="px-4 py-2 text-yellow-200 font-semibold">
-                                  ₱{row.predicted_sales.toLocaleString()}
-                                </td>
-                                <td className="px-4 py-2 text-green-300 font-semibold">
-                                  {row.actual_sales !== null &&
-                                  row.actual_sales !== undefined ? (
-                                    `₱${row.actual_sales.toLocaleString()}`
-                                  ) : (
-                                    <span className="text-gray-500">N/A</span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-2 text-center">
-                                  {row.is_holiday_week ? (
-                                    row.holiday_type === "official" ? (
-                                      <span
-                                        className="inline-flex items-center gap-1 text-blue-400 font-bold"
-                                        title="Official PH Holiday"
-                                      >
-                                        <span className="inline-block w-3 h-3 rounded-full bg-blue-400 mr-1" />
-                                        Yes
-                                      </span>
-                                    ) : row.holiday_type === "custom" ? (
-                                      <span
-                                        className="inline-flex items-center gap-1 text-pink-400 font-bold"
-                                        title="Custom Holiday"
-                                      >
-                                        <span className="inline-block w-3 h-3 rounded-full bg-pink-400 mr-1" />
-                                        Yes
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center gap-1 text-blue-400 font-bold">
-                                        Yes
-                                      </span>
-                                    )
-                                  ) : (
-                                    <span
-                                      className="inline-flex items-center gap-1 text-gray-500 font-normal"
-                                      title="Not a holiday"
-                                    >
-                                      <span className="inline-block w-3 h-3 rounded-full bg-gray-500 mr-1" />
-                                      No
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-2 text-center">
-                                  {row.holiday_type === "official" && (
-                                    <span className="text-blue-400">
-                                      Official
-                                    </span>
-                                  )}
-                                  {row.holiday_type === "custom" && (
-                                    <span className="text-pink-400">
-                                      Custom
-                                    </span>
-                                  )}
-                                  {!row.is_holiday_week && (
-                                    <span className="text-gray-500">-</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {holidayLegend}
+                    <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-8 border border-gray-700">
+                      <div className="text-center text-gray-400">
+                        <p className="text-lg font-semibold mb-2">
+                          No analytics data available
+                        </p>
+                        <p className="text-sm">
+                          Select a date range to view comprehensive analytics
+                        </p>
                       </div>
-                      <p className="text-xs text-gray-400 mt-2">
-                        * Forecast includes seasonality, official Philippine
-                        holidays, and custom holidays/events for improved
-                        accuracy.
-                      </p>
-                    </>
+                    </div>
                   )}
                 </section>
 
@@ -1495,23 +1462,6 @@ export default function ReportSales() {
 
                       <div>
                         <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
-                          Performance
-                        </label>
-                        <select
-                          value={performanceFilter}
-                          onChange={(e) => setPerformanceFilter(e.target.value)}
-                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-xs xs:text-sm transition-all"
-                        >
-                          <option value="">All Performance</option>
-                          <option value="top_seller">Top Sellers</option>
-                          <option value="high_revenue">High Sales</option>
-                          <option value="average">Average Performance</option>
-                          <option value="low_performer">Low Performers</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
                           Date Range
                         </label>
                         <div className="flex gap-2">
@@ -1546,7 +1496,6 @@ export default function ReportSales() {
                     {(searchQuery ||
                       categoryFilter ||
                       priceRangeFilter ||
-                      performanceFilter ||
                       period !== "today" ||
                       sortConfig.key !== "") && (
                       <div className="mt-3 xs:mt-4 pt-3 xs:pt-4 border-t border-gray-700/30">
@@ -1571,7 +1520,6 @@ export default function ReportSales() {
                         {!searchQuery &&
                         !categoryFilter &&
                         !priceRangeFilter &&
-                        !performanceFilter &&
                         period === "today" &&
                         sortConfig.key === "" ? (
                           <span className="text-gray-500 italic">None</span>
@@ -1633,21 +1581,6 @@ export default function ReportSales() {
                                 </button>
                               </div>
                             )}
-                            {performanceFilter && (
-                              <div className="flex items-center gap-1 bg-orange-500/20 text-orange-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-orange-500/30 max-w-full">
-                                <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
-                                  Performance:{" "}
-                                  {performanceFilter.replace("_", " ")}
-                                </span>
-                                <button
-                                  onClick={clearPerformanceFilter}
-                                  className="text-orange-300 hover:text-white transition-colors ml-1 flex-shrink-0"
-                                  title="Clear performance filter"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            )}
                             {sortConfig.key !== "" && (
                               <div className="flex items-center gap-1 bg-gray-500/20 text-gray-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-gray-500/30 max-w-full">
                                 <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
@@ -1688,8 +1621,8 @@ export default function ReportSales() {
                           </p>
                         </div>
                       ) : (
-                        sortedSales.map(
-                          (item: (typeof sortedSales)[0], index: number) => (
+                        paginatedSales.map(
+                          (item: (typeof paginatedSales)[0], index: number) => (
                             <div
                               key={`${item.name}-${index}`}
                               className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded p-1.5 border border-gray-700/30 fold-compact"
@@ -1730,8 +1663,8 @@ export default function ReportSales() {
                           </p>
                         </div>
                       ) : (
-                        sortedSales.map(
-                          (item: (typeof sortedSales)[0], index: number) => (
+                        paginatedSales.map(
+                          (item: (typeof paginatedSales)[0], index: number) => (
                             <div
                               key={`${item.name}-${index}`}
                               className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded-lg p-2 border border-gray-700/30 xs-compact"
@@ -1821,8 +1754,8 @@ export default function ReportSales() {
                           </p>
                         </div>
                       ) : (
-                        sortedSales.map(
-                          (item: (typeof sortedSales)[0], index: number) => (
+                        paginatedSales.map(
+                          (item: (typeof paginatedSales)[0], index: number) => (
                             <div
                               key={`${item.name}-${index}`}
                               className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-lg xs:rounded-xl p-2 xs:p-3 border border-gray-700/30 hover:border-yellow-500/30 transition-all duration-200 touch-manipulation responsive-card"
@@ -1863,6 +1796,43 @@ export default function ReportSales() {
                           )
                         )
                       )}
+                    </div>
+                  </div>
+
+                  {/* Results Summary */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 px-2">
+                    <div className="text-sm text-gray-400">
+                      Showing{" "}
+                      <span className="text-white font-semibold">
+                        {startIndex + 1}
+                      </span>{" "}
+                      to{" "}
+                      <span className="text-white font-semibold">
+                        {Math.min(endIndex, totalItems)}
+                      </span>{" "}
+                      of{" "}
+                      <span className="text-white font-semibold">
+                        {totalItems}
+                      </span>{" "}
+                      results
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-gray-400">Show:</label>
+                      <select
+                        value={itemsPerPage}
+                        onChange={(e) => {
+                          setItemsPerPage(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-1.5 text-sm focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                      <span className="text-sm text-gray-400">per page</span>
                     </div>
                   </div>
 
@@ -1918,7 +1888,7 @@ export default function ReportSales() {
                         </tr>
                       </thead>
                       <tbody>
-                        {sortedSales.length === 0 ? (
+                        {paginatedSales.length === 0 ? (
                           <tr>
                             <td
                               colSpan={5}
@@ -1938,8 +1908,11 @@ export default function ReportSales() {
                             </td>
                           </tr>
                         ) : (
-                          sortedSales.map(
-                            (item: (typeof sortedSales)[0], index: number) => (
+                          paginatedSales.map(
+                            (
+                              item: (typeof paginatedSales)[0],
+                              index: number
+                            ) => (
                               <tr
                                 key={`${item.name}-${index}`}
                                 className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
@@ -2035,8 +2008,11 @@ export default function ReportSales() {
                             </td>
                           </tr>
                         ) : (
-                          sortedSales.map(
-                            (item: (typeof sortedSales)[0], index: number) => (
+                          paginatedSales.map(
+                            (
+                              item: (typeof paginatedSales)[0],
+                              index: number
+                            ) => (
                               <tr
                                 key={`${item.name}-${index}`}
                                 className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
@@ -2204,6 +2180,123 @@ export default function ReportSales() {
                       )
                     )}
                   </div>
+
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
+                      {/* Page Info */}
+                      <div className="text-sm text-gray-400">
+                        Page{" "}
+                        <span className="text-white font-semibold">
+                          {currentPage}
+                        </span>{" "}
+                        of{" "}
+                        <span className="text-white font-semibold">
+                          {totalPages}
+                        </span>
+                      </div>
+
+                      {/* Pagination Buttons */}
+                      <div className="flex items-center gap-2">
+                        {/* First Page */}
+                        <button
+                          onClick={() => setCurrentPage(1)}
+                          disabled={currentPage === 1}
+                          className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                          title="First Page"
+                        >
+                          &#171;
+                        </button>
+
+                        {/* Previous Page */}
+                        <button
+                          onClick={() =>
+                            setCurrentPage((prev) => Math.max(1, prev - 1))
+                          }
+                          disabled={currentPage === 1}
+                          className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                          title="Previous Page"
+                        >
+                          &#8249;
+                        </button>
+
+                        {/* Page Numbers */}
+                        <div className="flex items-center gap-1">
+                          {Array.from(
+                            { length: Math.min(5, totalPages) },
+                            (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) {
+                                pageNum = i + 1;
+                              } else if (currentPage <= 3) {
+                                pageNum = i + 1;
+                              } else if (currentPage >= totalPages - 2) {
+                                pageNum = totalPages - 4 + i;
+                              } else {
+                                pageNum = currentPage - 2 + i;
+                              }
+
+                              return (
+                                <button
+                                  key={pageNum}
+                                  onClick={() => setCurrentPage(pageNum)}
+                                  className={`px-3 py-2 rounded-lg border transition-all ${
+                                    currentPage === pageNum
+                                      ? "bg-yellow-500 border-yellow-500 text-black font-semibold"
+                                      : "bg-gray-800 border-gray-600 text-white hover:bg-gray-700"
+                                  }`}
+                                >
+                                  {pageNum}
+                                </button>
+                              );
+                            }
+                          )}
+                        </div>
+
+                        {/* Next Page */}
+                        <button
+                          onClick={() =>
+                            setCurrentPage((prev) =>
+                              Math.min(totalPages, prev + 1)
+                            )
+                          }
+                          disabled={currentPage === totalPages}
+                          className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                          title="Next Page"
+                        >
+                          &#8250;
+                        </button>
+
+                        {/* Last Page */}
+                        <button
+                          onClick={() => setCurrentPage(totalPages)}
+                          disabled={currentPage === totalPages}
+                          className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                          title="Last Page"
+                        >
+                          &#187;
+                        </button>
+                      </div>
+
+                      {/* Jump to Page */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-400">Go to:</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={totalPages}
+                          value={currentPage}
+                          onChange={(e) => {
+                            const page = Number(e.target.value);
+                            if (page >= 1 && page <= totalPages) {
+                              setCurrentPage(page);
+                            }
+                          }}
+                          className="w-16 px-2 py-1.5 bg-gray-800 border border-gray-600 text-white rounded-lg text-sm focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </section>
 

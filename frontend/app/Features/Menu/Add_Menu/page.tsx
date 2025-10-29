@@ -39,6 +39,7 @@ export default function AddMenuPage() {
 
   // Try to restore cached form data if offline
   const [formData, setFormData] = useState({
+    itemcode: "",
     dish_name: "",
     category: "",
     price: "",
@@ -98,14 +99,26 @@ export default function AddMenuPage() {
   const capitalizeWords = (str: string) =>
     str.replace(/\b\w/g, (char) => char.toUpperCase());
 
+  function normalizeItemCode(value: string) {
+    // Remove all non-alphanumeric characters, convert to uppercase
+    return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  }
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value } = e.target;
       setIsDirty(true);
       setFormData((prev) => {
+        let newValue = value;
+        if (name === "dish_name") {
+          newValue = capitalizeWords(value);
+        }
+        if (name === "itemcode") {
+          newValue = normalizeItemCode(value);
+        }
         const updated = {
           ...prev,
-          [name]: name === "dish_name" ? capitalizeWords(value) : value,
+          [name]: newValue,
         };
         // Cache on every change
         localStorage.setItem(
@@ -192,6 +205,7 @@ export default function AddMenuPage() {
     }
 
     if (
+      !formData.itemcode ||
       !formData.dish_name ||
       !formData.category ||
       !formData.price ||
@@ -214,6 +228,7 @@ export default function AddMenuPage() {
 
       // Step: Create menu item with image and ingredients
       const form = new FormData();
+      form.append("itemcode", formData.itemcode);
       form.append("dish_name", formData.dish_name);
       form.append("category", formData.category);
       form.append("price", formData.price);
@@ -224,7 +239,13 @@ export default function AddMenuPage() {
       await addMenuWithImageAndIngredients(form);
 
       setShowSuccessMessage(true);
-      setFormData({ dish_name: "", category: "", price: "", description: "" });
+      setFormData({
+        itemcode: "",
+        dish_name: "",
+        category: "",
+        price: "",
+        description: "",
+      });
       setSelectedImage(null);
       setPreviewUrl(null);
       setIsDirty(false);
@@ -239,6 +260,7 @@ export default function AddMenuPage() {
 
   const handleCancel = () => {
     if (
+      formData.itemcode ||
       formData.dish_name ||
       formData.category ||
       formData.price ||
@@ -349,6 +371,25 @@ export default function AddMenuPage() {
               >
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8">
                   <div className="space-y-4">
+                    <div className="group">
+                      <label
+                        htmlFor="itemcode"
+                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                      >
+                        Item Code
+                        <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="itemcode"
+                        name="itemcode"
+                        required
+                        value={formData.itemcode}
+                        onChange={handleChange}
+                        placeholder="Enter item code..."
+                        className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                      />
+                    </div>
                     <div className="group">
                       <label
                         htmlFor="dish_name"
@@ -499,11 +540,19 @@ export default function AddMenuPage() {
                           disabled={itemNamesLoading}
                         >
                           <option value="">Select Ingredient</option>
-                          {items.map((item) => (
-                            <option key={item.item_name} value={item.item_name}>
-                              {item.item_name}
-                            </option>
-                          ))}
+                          {items
+                            .filter(
+                              (item) =>
+                                item.category !== "Seasonings & Condiments"
+                            )
+                            .map((item) => (
+                              <option
+                                key={item.item_name}
+                                value={item.item_name}
+                              >
+                                {item.item_name}
+                              </option>
+                            ))}
                         </select>
                         <input
                           type="number"

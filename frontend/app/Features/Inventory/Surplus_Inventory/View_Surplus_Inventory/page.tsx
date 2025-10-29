@@ -38,10 +38,11 @@ export default function ViewSurplusInventoryItem() {
   const [unit, setUnit] = useState<string>("");
 
   const itemId = searchParams.get("id");
+  const batchDate = searchParams.get("batch_date");
 
   useEffect(() => {
     const fetchAll = async () => {
-      if (!itemId) {
+      if (!itemId || !batchDate) {
         router.push(routes.surplus_inventory);
         return;
       }
@@ -49,7 +50,7 @@ export default function ViewSurplusInventoryItem() {
         const token =
           typeof window !== "undefined" ? localStorage.getItem("token") : null;
         const [responseData, settingsData] = await Promise.all([
-          fetch(`/api/inventory-surplus/${itemId}`, {
+          fetch(`/api/inventory-surplus/${itemId}/${batchDate}`, {
             method: "GET",
             headers: {
               "Content-Type": "application/json",
@@ -93,7 +94,7 @@ export default function ViewSurplusInventoryItem() {
       }
     };
     fetchAll();
-  }, [itemId, router, fetchSettings]);
+  }, [itemId, batchDate, router, fetchSettings]);
 
   const formatDateOnly = (input: string | null): string => {
     if (!input) return "-";
@@ -164,7 +165,7 @@ export default function ViewSurplusInventoryItem() {
         <ResponsiveMain>
           <main
             className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
-            aria-label="View Surplus Inventory main content"
+            aria-label="View Today's Inventory main content"
             tabIndex={-1}
           >
             <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
@@ -204,11 +205,11 @@ export default function ViewSurplusInventoryItem() {
       <NavigationBar />
       <ResponsiveMain>
         <main
-          className="pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-3 xs:px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12"
+          className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
           aria-label="View Surplus Inventory main content"
           tabIndex={-1}
         >
-          <div className="max-w-sm xs:max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-4xl mx-auto w-full">
+          <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl xs:rounded-3xl shadow-2xl border border-gray-800/50 p-4 xs:p-6 sm:p-8 md:p-10 lg:p-12">
               {/* Enhanced Header */}
               <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
@@ -244,9 +245,18 @@ export default function ViewSurplusInventoryItem() {
               <div className="space-y-4 xs:space-y-5 sm:space-y-6 md:space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-3 xs:gap-4 sm:gap-5 md:gap-6 lg:gap-8">
                   <ItemRow
-                    icon={<FiHash className="text-yellow-400" />}
-                    label="Item ID"
-                    value={item.id}
+                    icon={<FiCalendar className="text-orange-400" />}
+                    label="Batch Date"
+                    value={formatDateOnly(item.batch)}
+                  />
+                  <ItemRow
+                    icon={<FiCalendar className="text-red-400" />}
+                    label="Expiration Date"
+                    value={
+                      item.expiration_date
+                        ? formatDateOnly(item.expiration_date)
+                        : "No Expiration Date"
+                    }
                   />
                   <ItemRow
                     icon={<FiTag className="text-blue-400" />}
@@ -270,19 +280,9 @@ export default function ViewSurplusInventoryItem() {
                     label="Unit Price"
                     value={
                       item.unit_price !== undefined && item.unit_price !== null
-                        ? `$${Number(item.unit_price).toFixed(2)}`
+                        ? `₱${Number(item.unit_price).toFixed(2)}`
                         : "-"
                     }
-                  />
-                  <ItemRow
-                    icon={<FiCalendar className="text-orange-400" />}
-                    label="Batch Date"
-                    value={formatDateOnly(item.batch)}
-                  />
-                  <ItemRow
-                    icon={<FiCalendar className="text-red-400" />}
-                    label="Expiration Date"
-                    value={formatDateOnly(item.expiration_date)}
                   />
                   <ItemRow
                     icon={<FiTrendingUp className="text-cyan-400" />}
@@ -298,15 +298,15 @@ export default function ViewSurplusInventoryItem() {
                         : "text-green-400 font-semibold"
                     }
                   />
+                </div>
+
+                {/* Last Updated - Full Width */}
+                <div className="pt-4 border-t border-gray-700/50 space-y-2 xs:space-y-3 sm:space-y-4 md:space-y-6">
                   <ItemRow
                     icon={<FiClock className="text-indigo-400" />}
                     label="Procurement date"
                     value={formatDateTime(item.added)}
                   />
-                </div>
-
-                {/* Last Updated - Full Width */}
-                <div className="pt-4 border-t border-gray-700/50">
                   <ItemRow
                     icon={<FiClock className="text-gray-400" />}
                     label="Last Updated"

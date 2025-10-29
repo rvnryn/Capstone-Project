@@ -51,6 +51,7 @@ export default function AddInventoryItem() {
     name: "",
     category: "",
     stock: 0,
+    unit_price: "",
     expiration_date: "",
   });
 
@@ -266,6 +267,7 @@ export default function AddInventoryItem() {
         category: formData.category,
         stock_quantity: formData.stock,
         stock_status: stockStatus,
+        unit_price: Number(formData.unit_price),
         batch_date: batchDate,
         expiration_date:
           hasExpiration && formData.expiration_date
@@ -274,7 +276,13 @@ export default function AddInventoryItem() {
       });
 
       setShowSuccessMessage(true);
-      setFormData({ name: "", category: "", stock: 0, expiration_date: "" });
+      setFormData({
+        name: "",
+        category: "",
+        stock: 0,
+        unit_price: "",
+        expiration_date: "",
+      });
       setIsDirty(false);
       setIsSubmitted(false);
 
@@ -524,6 +532,26 @@ export default function AddInventoryItem() {
                         {errors.stock}
                       </span>
                     )}
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="unit_price"
+                      className="block font-semibold text-gray-200 mb-1"
+                    >
+                      Unit Price
+                    </label>
+                    <input
+                      id="unit_price"
+                      name="unit_price"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={formData.unit_price}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 rounded-lg border-2 border-gray-700 bg-gray-900 text-white placeholder-gray-500 focus:outline-none transition-all duration-300"
+                      placeholder="Enter unit price"
+                      required
+                    />
                   </div>
                   {/* Expiration Date Field */}
                   <div>

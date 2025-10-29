@@ -13,12 +13,18 @@ export const routes = {
     `/Features/Inventory/Master_Inventory/Update_Inventory?id=${id}`,
   ViewInventory: (id: number | string) =>
     `/Features/Inventory/Master_Inventory/View_Inventory?id=${id}`,
-  UpdateTodayInventory: (id: number | string) =>
-    `/Features/Inventory/Today_Inventory/Update_Today_Inventory?id=${id}`,
-  ViewTodayInventory: (id: number | string) =>
-    `/Features/Inventory/Today_Inventory/View_Today_Inventory?id=${id}`,
-  ViewSurplusInventory: (id: number | string) =>
-    `/Features/Inventory/Surplus_Inventory/View_Surplus_Inventory?id=${id}`,
+  UpdateTodayInventory: (id: number | string, batch_date?: string) =>
+    `/Features/Inventory/Today_Inventory/Update_Today_Inventory?id=${id}${
+      batch_date ? `&batch_date=${batch_date}` : ""
+    }`,
+  ViewTodayInventory: (id: number | string, batch_date?: string) =>
+    `/Features/Inventory/Today_Inventory/View_Today_Inventory?id=${id}${
+      batch_date ? `&batch_date=${batch_date}` : ""
+    }`,
+  ViewSurplusInventory: (id: number | string, batch_date?: string) =>
+    `/Features/Inventory/Surplus_Inventory/View_Surplus_Inventory?id=${id}${
+      batch_date ? `&batch_date=${batch_date}` : ""
+    }`,
   ViewSpoilageInventory: (id: number | string) =>
     `/Features/Inventory/Spoilage_Inventory/View_Spoilage_Inventory?id=${id}`,
   report: "/Features/Report",
