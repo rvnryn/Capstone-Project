@@ -45,7 +45,7 @@ def log_user_activity(db, user, action_type, description):
 
 async def wait_until_6am():
     now = datetime.now()
-    today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=2, minutes=48)
+    today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=15, minutes=34)
     if now >= today_6am:
         today_6am += timedelta(days=1)
     seconds_until_6am = (today_6am - now).total_seconds()
@@ -53,7 +53,7 @@ async def wait_until_6am():
 
 async def wait_until_10pm():
     now = datetime.now()
-    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=2, minutes=38)
+    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=15, minutes=32)
     if now >= today_10pm:
         today_10pm += timedelta(days=1)
     seconds_until_10pm = (today_10pm - now).total_seconds()
