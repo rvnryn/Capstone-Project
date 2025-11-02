@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Request, Body
 from datetime import datetime
 from typing import Optional
+from pydantic import BaseModel, Field, validator
+
+from postgrest import APIError
 # Import shared helpers from master_inventory
 from app.routes.Inventory.master_inventory import (
 	run_blocking,
@@ -13,17 +16,59 @@ from app.routes.Inventory.master_inventory import (
 	limiter,
 	logger,
 )
-from pydantic import BaseModel
 from app.routes.Inventory.master_inventory import repeat_every
+from app.routes.General.notification import create_notification  # Import notification function
 
 router = APIRouter()
 
 class SpoilageRequest(BaseModel):
-	quantity: float
-	reason: Optional[str] = None
-	unit_price: Optional[float] = None
+	"""Spoilage transfer request with comprehensive validation"""
+	quantity: float = Field(
+		...,
+		gt=0,
+		description="Spoilage quantity (must be > 0)"
+	)
+	reason: Optional[str] = Field(
+		None,
+		max_length=500,
+		description="Reason for spoilage (max 500 characters)"
+	)
+	unit_cost: Optional[float] = Field(
+		None,
+		ge=0,
+		description="Unit cost in pesos (must be >= 0)"
+	)
 
-def log_user_activity(db, user, action_type, description):
+	@validator('quantity')
+	def validate_quantity(cls, v):
+		if v <= 0:
+			raise ValueError('Spoilage quantity must be greater than 0')
+		if v > 1000000:
+			raise ValueError('Spoilage quantity exceeds maximum allowed (1,000,000)')
+		return v
+
+	@validator('reason')
+	def validate_reason(cls, v):
+		"""Trim whitespace and validate reason"""
+		if v is not None:
+			v = v.strip()
+			if len(v) == 0:
+				return None  # Empty reason becomes None
+			if len(v) > 500:
+				raise ValueError('Reason cannot exceed 500 characters')
+		return v
+
+	@validator('unit_cost')
+	def validate_unit_cost(cls, v):
+		"""Validate unit cost range"""
+		if v is not None:
+			if v < 0:
+				raise ValueError('Unit cost cannot be negative')
+			if v > 1000000:
+				raise ValueError('Unit cost exceeds maximum allowed (₱1,000,000)')
+		return v
+
+async def log_user_activity(db, user, action_type, description):
     try:
         user_row = getattr(user, "user_row", user)
         new_activity = UserActivityLog(
@@ -36,8 +81,8 @@ def log_user_activity(db, user, action_type, description):
             role=user_row.get("user_role"),
         )
         db.add(new_activity)
-        db.flush()
-        db.commit()
+        await db.flush()
+        await db.commit()
     except Exception as e:
         logger.warning(f"Failed to record user activity ({action_type}): {e}")
 		
@@ -85,7 +130,14 @@ async def transfer_to_spoilage(
 				.single()
 				.execute()
 			)
-		response = await _fetch()
+		try:
+			response = await _fetch()
+			if not response.data:
+				raise HTTPException(status_code=404, detail="Inventory item not found for spoilage transfer")
+		except APIError as e:
+			if getattr(e, "code", None) == "PGRST116":
+				raise HTTPException(status_code=404, detail="Inventory item not found for spoilage transfer")
+			raise
 		item = response.data
 		if not item:
 			raise HTTPException(status_code=404, detail="Item not found in inventory")
@@ -106,7 +158,7 @@ async def transfer_to_spoilage(
 			"category": item.get("category"),
 			"created_at": now,
 			"updated_at": now,
-			"unit_price": item.get("unit_price"),
+			"unit_cost": item.get("unit_cost", 0.00),
 		}
 		# Ensure spoilage_id is never set in the insert payload
 		if "spoilage_id" in spoilage_payload:
@@ -156,10 +208,27 @@ async def transfer_to_spoilage(
 			"transfer inventory to spoilage",
 			f"Transferred {spoil_quantity} of Id {item['item_id']} | item {item['item_name']} (Batch {batch_date}) to Spoilage. Reason: {req.reason or 'N/A'}",
 		)
+
+		# Create notification for spoilage transfer
+		try:
+			user_row = getattr(user, "user_row", user)
+			user_id = user_row.get("user_id") if isinstance(user_row, dict) else getattr(user_row, "user_id", None)
+			if user_id:
+				create_notification(
+					user_id=user_id,
+					type="transfer",
+					message=f"Spoilage: {spoil_quantity} units of {item['item_name']} transferred to spoilage. Reason: {req.reason or 'N/A'}"
+				)
+		except Exception as e:
+			logger.warning(f"Failed to create spoilage notification: {e}")
+
 		return {
 			"message": "Item transferred to Spoilage",
 			"data": spoilage_response.data,
 		}
+	except HTTPException as he:
+		# Re-raise HTTPException so FastAPI returns correct status
+		raise he
 	except Exception as e:
 		logger.exception("Error during transfer_to_spoilage")
 		raise HTTPException(status_code=500, detail="Internal server error")

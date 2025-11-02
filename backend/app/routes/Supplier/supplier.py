@@ -120,10 +120,7 @@ async def update_supplier(
 ):
     try:
         update_data = supplier.dict(exclude_unset=True)
-        # If address is present, move it to "Address"
-        if "address" in update_data:
-            update_data["address"] = update_data["address"]
-            update_data.pop("address")
+        # No need to pop address
         update_data["updated_at"] = datetime.utcnow().isoformat()
         response = (
             postgrest_client.table("suppliers")

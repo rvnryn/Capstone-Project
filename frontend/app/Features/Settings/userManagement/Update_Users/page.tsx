@@ -234,7 +234,42 @@ export default function EditUser() {
     }
 
     try {
-      // Explicitly construct payload without user_id
+      // 1. FIRST check if email or username changed and validate with backend
+      const emailChanged = formData.email !== initialSettings?.email;
+      const usernameChanged = formData.username !== initialSettings?.username;
+
+      if (emailChanged || usernameChanged) {
+        const token = localStorage.getItem("token");
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+        // Build validation payload with ONLY the fields that changed
+        const validationPayload: any = {};
+        if (emailChanged) {
+          validationPayload.email = formData.email;
+        }
+        if (usernameChanged) {
+          validationPayload.username = formData.username;
+        }
+
+        // Validate with backend BEFORE attempting update
+        const validationResponse = await fetch(`${API_BASE_URL}/api/users/validate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(validationPayload),
+        });
+
+        if (!validationResponse.ok) {
+          const validationError = await validationResponse.json();
+          setErrorMessage(validationError.detail || "Validation failed.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      // 2. Only proceed with update if validation passed (or nothing changed)
       const payload: any = {
         name: formData.name,
         username: formData.username,
@@ -246,8 +281,10 @@ export default function EditUser() {
       await updateUser(userId, payload);
       setShowSuccessMessage(true);
       router.push(routes.user_management_settings);
-    } catch {
-      setErrorMessage("Failed to update the user. Please try again.");
+    } catch (error: any) {
+      // Show specific error message from backend
+      const errorMessage = error?.message || error?.detail || error?.toString() || "Failed to update the user. Please try again.";
+      setErrorMessage(errorMessage);
       setIsSubmitting(false);
     }
   };
@@ -851,13 +888,20 @@ export default function EditUser() {
                 className="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-800 text-white mb-2"
                 placeholder="Enter new password"
               />
-              <input
-                type="password"
-                value={reEnterPassword}
-                onChange={(e) => setReEnterPassword(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-800 text-white mb-2"
-                placeholder="Re-enter new password"
-              />
+              {/* Only show confirm password field when changing another user's password */}
+              {!(
+                currentUser &&
+                currentUser.auth_id &&
+                String(currentUser.auth_id) === String(formData?.auth_id)
+              ) && (
+                <input
+                  type="password"
+                  value={reEnterPassword}
+                  onChange={(e) => setReEnterPassword(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-800 text-white mb-2"
+                  placeholder="Re-enter new password"
+                />
+              )}
               {passwordError && (
                 <p className="text-red-400 text-sm">{passwordError}</p>
               )}
@@ -865,13 +909,37 @@ export default function EditUser() {
                 <button
                   type="button"
                   onClick={async () => {
+                    // Password validation rules
                     if (!newPassword || newPassword.length < 6) {
                       setPasswordError(
                         "Password must be at least 6 characters."
                       );
                       return;
                     }
-                    if (newPassword !== reEnterPassword) {
+                    if (!/[A-Z]/.test(newPassword)) {
+                      setPasswordError(
+                        "Password must contain at least one uppercase letter."
+                      );
+                      return;
+                    }
+                    if (!/[a-z]/.test(newPassword)) {
+                      setPasswordError(
+                        "Password must contain at least one lowercase letter."
+                      );
+                      return;
+                    }
+                    if (!/[0-9]/.test(newPassword)) {
+                      setPasswordError(
+                        "Password must contain at least one digit."
+                      );
+                      return;
+                    }
+                    // Only check password match for other users (not own account)
+                    const isOwnAccount =
+                      currentUser &&
+                      currentUser.auth_id &&
+                      String(currentUser.auth_id) === String(formData?.auth_id);
+                    if (!isOwnAccount && newPassword !== reEnterPassword) {
                       setPasswordError("Passwords do not match.");
                       return;
                     }

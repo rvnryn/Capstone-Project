@@ -44,12 +44,14 @@ from .routes.Reports.Sales import(
     salesCalculation,
     salesimport,
 )
-from .routes.Reports.Inventory import inventory_log
+from .routes.Reports.Inventory import inventory_log, inventory_analytics
 from .routes.Reports.UserActivity import userActivity
 
 from .routes.backup_restore import (
     backup,
-    restore
+    restore,
+    restore_FIXED,
+    restore_BACKUP
 )
 from app.routes.backup_restore.backup import load_and_schedule
 from .routes.Menu import menu
@@ -58,6 +60,21 @@ from app.supabase import SessionLocal
 from slowapi.middleware import SlowAPIMiddleware
 
 app = FastAPI()
+
+import logging
+import traceback
+
+logger = logging.getLogger("uvicorn.error")
+
+@app.middleware("http")
+async def log_exceptions(request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        logger.error(f"❌ Exception: {e}")
+        traceback.print_exc()
+        raise
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -91,9 +108,15 @@ print("Scheduler started and job added")
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     print("Validation error:", exc.errors())
+    # Only include serializable error details
+    errors = exc.errors()
+    # Remove any non-serializable context (e.g., ValueError objects)
+    for error in errors:
+        if "ctx" in error and "error" in error["ctx"]:
+            error["ctx"]["error"] = str(error["ctx"]["error"])
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors(), "body": exc.body},
+        content={"detail": errors, "body": exc.body},
     )
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -117,15 +140,18 @@ routers = [
     spoilage_inventory.router, 
     menu.router,
     supplier.router, 
-    notification.router, 
-    users.router, 
-    inventory_settings.router, 
+    notification.router,
+    users.router,
+    inventory_settings.router,
     restore.router,
-    backup.router, 
-    inventory_log.router, 
-    userActivity.router, 
+    restore_FIXED.router,
+    restore_BACKUP.router,
+    backup.router,
+    inventory_log.router,
+    inventory_analytics.router,
+    userActivity.router,
     custom_holiday.router,
-    ph_holidays.router, 
+    ph_holidays.router,
     AutomationTransferring.router
 ]
 for router in routers:

@@ -9,6 +9,8 @@ import { useUsersAPI } from "./hook/use-user";
 import type { User } from "./hook/use-user";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { FiRefreshCw } from "react-icons/fi";
+import Pagination from "@/app/components/Pagination";
+import { TableLoading, EmptyState } from "@/app/components/LoadingStates";
 
 const columns = [
   { key: "user_id", label: "ID" },
@@ -42,6 +44,9 @@ export default function UserManagement() {
   const [reEnterPassword, setReEnterPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // Offline/online detection
   const [isOffline, setIsOffline] = useState(false);
@@ -127,6 +132,18 @@ export default function UserManagement() {
     }
     setFilteredUsers(sortedUsers);
   }, [users, sortConfig]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortConfig]);
 
   const confirmDelete = async () => {
     if (itemToDelete !== null) {
@@ -298,20 +315,16 @@ export default function UserManagement() {
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td
-                            colSpan={columns.length}
-                            className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-8 xs:py-10 sm:py-12 md:py-14 lg:py-16 text-center"
-                          >
-                            <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                              <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                              <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                                Loading users...
-                              </div>
-                            </div>
+                          <td colSpan={columns.length}>
+                            <TableLoading
+                              rows={itemsPerPage}
+                              columns={columns.length}
+                              message="Loading users..."
+                            />
                           </td>
                         </tr>
-                      ) : filteredUsers.length > 0 ? (
-                        filteredUsers.map((user, index) => (
+                      ) : paginatedUsers.length > 0 ? (
+                        paginatedUsers.map((user, index) => (
                           <tr
                             key={user.user_id}
                             className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
@@ -400,26 +413,29 @@ export default function UserManagement() {
                         ))
                       ) : (
                         <tr>
-                          <td
-                            colSpan={columns.length}
-                            className="px-4 xl:px-6 py-12 xl:py-16 text-center"
-                          >
-                            <div className="flex flex-col items-center gap-4">
-                              <FaUsers className="text-6xl text-gray-600" />
-                              <div>
-                                <h2 className="text-gray-400 font-medium mb-2">
-                                  No users found
-                                </h2>
-                                <p className="text-gray-500 text-sm">
-                                  Try adjusting your search or filter criteria
-                                </p>
-                              </div>
-                            </div>
+                          <td colSpan={columns.length}>
+                            <EmptyState
+                              icon={<FaUsers className="text-6xl" />}
+                              title="No users found"
+                              message="Try adjusting your search or filter criteria"
+                            />
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
+
+                  {/* Pagination */}
+                  {filteredUsers.length > 0 && (
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                      itemsPerPage={itemsPerPage}
+                      totalItems={filteredUsers.length}
+                      onItemsPerPageChange={setItemsPerPage}
+                    />
+                  )}
                 </div>
               </section>
             </article>

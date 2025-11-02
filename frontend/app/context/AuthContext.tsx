@@ -54,6 +54,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [role, setRole] = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [tokenRefreshInterval, setTokenRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   // Persistent session: load from localStorage if available
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -107,7 +108,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
             backendRole = data.role;
           }
         } catch (err) {
-          console.error("[AuthProvider] Failed to fetch /api/auth/session:", err);
+          // Silently fall back to Supabase user data if backend is unavailable
+          // This is normal during initial page load or backend restart
+          console.log("[AuthProvider] Backend unavailable, using Supabase session");
         }
         // Merge backend user, cached user, and Supabase user
         let mergedUser = session.data.session.user;
@@ -264,6 +267,115 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       listener?.subscription.unsubscribe();
     };
   }, []);
+
+  // Automatic Token Refresh - runs every 45 minutes
+  useEffect(() => {
+    // Clear any existing interval
+    if (tokenRefreshInterval) {
+      clearInterval(tokenRefreshInterval);
+    }
+
+    // Only set up auto-refresh if user is logged in
+    if (user && !loading) {
+      console.log("[AuthProvider] Setting up automatic token refresh (every 45 minutes)");
+
+      // Refresh token every 45 minutes (before the 1-hour expiry)
+      const interval = setInterval(async () => {
+        console.log("[AuthProvider] Auto-refreshing token...");
+        try {
+          const { data, error } = await supabase.auth.refreshSession();
+
+          if (error) {
+            console.error("[AuthProvider] Auto-refresh failed:", error);
+            // If refresh fails, try to get session
+            await refreshSession();
+            return;
+          }
+
+          if (data.session) {
+            console.log("[AuthProvider] Token auto-refreshed successfully");
+            // Update token in localStorage
+            if (typeof window !== "undefined") {
+              localStorage.setItem("token", data.session.access_token);
+            }
+            // Update user state with new session
+            await refreshSession();
+          }
+        } catch (err) {
+          console.error("[AuthProvider] Auto-refresh error:", err);
+          // Fallback: try manual refresh
+          await refreshSession();
+        }
+      }, 45 * 60 * 1000); // 45 minutes in milliseconds
+
+      setTokenRefreshInterval(interval);
+
+      // Cleanup on unmount or when user logs out
+      return () => {
+        if (interval) {
+          clearInterval(interval);
+          console.log("[AuthProvider] Cleared automatic token refresh");
+        }
+      };
+    }
+
+    // Cleanup function
+    return () => {
+      if (tokenRefreshInterval) {
+        clearInterval(tokenRefreshInterval);
+      }
+    };
+  }, [user, loading]); // Re-run when user or loading state changes
+
+  // Refresh token when user returns to the tab (window focus)
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === "visible" && user && !loading) {
+        console.log("[AuthProvider] Tab focused - checking token validity...");
+
+        // Check if token is close to expiry or already expired
+        const session = await supabase.auth.getSession();
+
+        if (session.data.session?.expires_at) {
+          const expiresAt = session.data.session.expires_at * 1000;
+          const now = Date.now();
+          const timeUntilExpiry = expiresAt - now;
+
+          // If token expires in less than 5 minutes, refresh it
+          if (timeUntilExpiry < 5 * 60 * 1000) {
+            console.log("[AuthProvider] Token expiring soon, refreshing...");
+            try {
+              const { data, error } = await supabase.auth.refreshSession();
+
+              if (error) {
+                console.error("[AuthProvider] Focus refresh failed:", error);
+                await refreshSession();
+                return;
+              }
+
+              if (data.session) {
+                console.log("[AuthProvider] Token refreshed on focus");
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("token", data.session.access_token);
+                }
+                await refreshSession();
+              }
+            } catch (err) {
+              console.error("[AuthProvider] Focus refresh error:", err);
+            }
+          }
+        }
+      }
+    };
+
+    // Add event listener
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [user, loading]);
 
   return (
     <AuthContext.Provider value={{ user, role, loading, refreshSession }}>

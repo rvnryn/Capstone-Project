@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
+import Pagination from "@/app/components/Pagination";
 import {
   FaEdit,
   FaTrash,
@@ -34,6 +35,7 @@ import { useInventoryAPI } from "../hook/use-inventoryAPI";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { InventorySetting } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
+import { TableLoading, EmptyState } from "@/app/components/LoadingStates";
 
 type InventoryItem = {
   id: number;
@@ -46,6 +48,7 @@ type InventoryItem = {
   expires?: string | Date;
   expiration_date?: string;
   unit_price?: number | null;
+  unit_cost?: number | null;
   [key: string]: unknown;
 };
 
@@ -157,6 +160,8 @@ export default function TodayInventoryPage() {
   const [itemToTransfer, setItemToTransfer] = useState<InventoryItem | null>(
     null
   );
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   const { deleteTodayItem } = useInventoryAPI();
 
   useEffect(() => {
@@ -433,6 +438,19 @@ export default function TodayInventoryPage() {
     });
   }, [filtered, sortConfig]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return sortedData.slice(startIndex, endIndex);
+  }, [sortedData, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, selectedBatchDate, sortConfig]);
+
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => {
       // If clicking the same column, toggle direction
@@ -478,7 +496,8 @@ export default function TodayInventoryPage() {
     { key: "category", label: "Category" },
     { key: "status", label: "Status" },
     { key: "stock", label: "Stock" },
-    { key: "unit_price", label: "Unit Price" },
+    { key: "unit_cost", label: "Unit Cost" },
+    { key: "total_value", label: "Total Value" },
     { key: "added", label: "Procurement date" },
     { key: "expires", label: "Expiration Date" },
     { key: "actions", label: "Actions" },
@@ -718,13 +737,10 @@ export default function TodayInventoryPage() {
                       {isLoading || isFetching ? (
                         offlineError ? (
                           <tr>
-                            <td
-                              colSpan={9}
-                              className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-8 xs:py-10 sm:py-12 md:py-14 lg:py-16 text-center"
-                            >
-                              <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                                <MdWarning className="text-yellow-400 text-3xl mx-auto" />
-                                <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                            <td colSpan={10} className="text-center">
+                              <div className="flex flex-col items-center gap-4 py-12">
+                                <MdWarning className="text-yellow-400 text-5xl" />
+                                <div className="text-yellow-400 text-lg font-medium">
                                   {offlineError}
                                 </div>
                               </div>
@@ -732,21 +748,17 @@ export default function TodayInventoryPage() {
                           </tr>
                         ) : (
                           <tr>
-                            <td
-                              colSpan={9}
-                              className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-8 xs:py-10 sm:py-12 md:py-14 lg:py-16 text-center"
-                            >
-                              <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                                <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                                <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                                  Loading inventory data...
-                                </div>
-                              </div>
+                            <td colSpan={10} className="text-center">
+                              <TableLoading
+                                rows={itemsPerPage}
+                                columns={10}
+                                message="Loading inventory data..."
+                              />
                             </td>
                           </tr>
                         )
                       ) : sortedData.length > 0 ? (
-                        sortedData.map((item: InventoryItem, index) => (
+                        paginatedData.map((item: InventoryItem, index) => (
                           <tr
                             key={
                               item.id ??
@@ -762,7 +774,7 @@ export default function TodayInventoryPage() {
                             }}
                           >
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
-                              {index + 1}
+                              {(currentPage - 1) * itemsPerPage + index + 1}
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap">
                               <div className="flex items-center gap-1 xs:gap-2 sm:gap-3">
@@ -800,10 +812,17 @@ export default function TodayInventoryPage() {
                                 {item.stock}
                               </span>
                             </td>
-                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-green-300 text-xs xs:text-sm">
-                              {item.unit_price !== undefined &&
-                              item.unit_price !== null
-                                ? `₱${Number(item.unit_price).toFixed(2)}`
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-blue-300 text-xs xs:text-sm">
+                              {item.unit_cost !== undefined &&
+                              item.unit_cost !== null
+                                ? `₱${Number(item.unit_cost).toFixed(2)}`
+                                : "-"}
+                            </td>
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-purple-300 text-xs xs:text-sm font-semibold">
+                              {item.unit_cost !== undefined &&
+                              item.unit_cost !== null &&
+                              item.stock !== undefined
+                                ? `₱${(Number(item.unit_cost) * Number(item.stock)).toFixed(2)}`
                                 : "-"}
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm">
@@ -857,26 +876,29 @@ export default function TodayInventoryPage() {
                         ))
                       ) : (
                         <tr>
-                          <td
-                            colSpan={9}
-                            className="px-4 xl:px-6 py-12 xl:py-16 text-center"
-                          >
-                            <div className="flex flex-col items-center gap-4">
-                              <MdInventory className="text-6xl text-gray-600" />
-                              <div>
-                                <h3 className="text-gray-400 font-medium mb-2">
-                                  No items found
-                                </h3>
-                                <p className="text-gray-500 text-sm">
-                                  Try adjusting your search or filter criteria
-                                </p>
-                              </div>
-                            </div>
+                          <td colSpan={10}>
+                            <EmptyState
+                              icon={<MdInventory className="text-6xl" />}
+                              title="No items found"
+                              message="Try adjusting your search or filter criteria"
+                            />
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
+
+                  {/* Pagination */}
+                  {sortedData.length > 0 && (
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                      itemsPerPage={itemsPerPage}
+                      totalItems={sortedData.length}
+                      onItemsPerPageChange={setItemsPerPage}
+                    />
+                  )}
                 </div>
               </section>
             </article>

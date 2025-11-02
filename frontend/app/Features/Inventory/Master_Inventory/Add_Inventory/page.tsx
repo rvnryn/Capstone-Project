@@ -33,6 +33,7 @@ import {
 
 const CATEGORY_OPTIONS = [
   "Meats",
+  "Seafood",
   "Vegetables & Fruits",
   "Dairy & Eggs",
   "Seasonings & Condiments",
@@ -51,7 +52,7 @@ export default function AddInventoryItem() {
     name: "",
     category: "",
     stock: 0,
-    unit_price: "",
+    unit_cost: "",
     expiration_date: "",
   });
 
@@ -267,7 +268,7 @@ export default function AddInventoryItem() {
         category: formData.category,
         stock_quantity: formData.stock,
         stock_status: stockStatus,
-        unit_price: Number(formData.unit_price),
+        unit_cost: Number(formData.unit_cost) || 0,
         batch_date: batchDate,
         expiration_date:
           hasExpiration && formData.expiration_date
@@ -280,7 +281,7 @@ export default function AddInventoryItem() {
         name: "",
         category: "",
         stock: 0,
-        unit_price: "",
+        unit_cost: "",
         expiration_date: "",
       });
       setIsDirty(false);
@@ -533,24 +534,24 @@ export default function AddInventoryItem() {
                       </span>
                     )}
                   </div>
+                  {/* Unit Cost Field */}
                   <div>
                     <label
-                      htmlFor="unit_price"
+                      htmlFor="unit_cost"
                       className="block font-semibold text-gray-200 mb-1"
                     >
-                      Unit Price
+                      Unit Cost
                     </label>
                     <input
-                      id="unit_price"
-                      name="unit_price"
+                      id="unit_cost"
+                      name="unit_cost"
                       type="number"
                       min={0}
                       step="0.01"
-                      value={formData.unit_price}
+                      value={formData.unit_cost}
                       onChange={handleChange}
                       className="w-full px-4 py-3 rounded-lg border-2 border-gray-700 bg-gray-900 text-white placeholder-gray-500 focus:outline-none transition-all duration-300"
-                      placeholder="Enter unit price"
-                      required
+                      placeholder="Enter unit cost"
                     />
                   </div>
                   {/* Expiration Date Field */}

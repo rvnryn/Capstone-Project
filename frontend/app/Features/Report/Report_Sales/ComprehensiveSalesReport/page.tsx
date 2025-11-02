@@ -262,7 +262,7 @@ export default function ComprehensiveSalesReport() {
                     Total Revenue
                   </p>
                   <p className="text-2xl font-bold">
-                    {formatCurrency(summary.total_revenue)}
+                    c{formatCurrency(summary.total_revenue)}
                   </p>
                 </div>
               </div>
@@ -517,7 +517,6 @@ export default function ComprehensiveSalesReport() {
             {/* Top Performers */}
             <div className="bg-white p-6 rounded-2xl shadow-lg border border-green-100">
               <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                <FaTrophy className="text-yellow-500" />
                 Top Performing Items
               </h2>
 
@@ -576,72 +575,9 @@ export default function ComprehensiveSalesReport() {
             </div>
           </div>
 
-          {/* Section 5: Category Breakdown */}
-          <div className="bg-white p-6 rounded-2xl shadow-lg border border-purple-100">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <FaLayerGroup className="text-purple-600" />
-              Category Performance
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {category_breakdown.map((cat, index) => (
-                <div
-                  key={index}
-                  className="bg-gradient-to-br from-purple-50 to-blue-50 p-5 rounded-xl border-2 border-purple-200 hover:shadow-lg transition-all"
-                >
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="font-bold text-gray-800 text-lg">
-                        {cat.category}
-                      </h3>
-                      <p className="text-xs text-gray-600">
-                        {cat.unique_items} items
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-purple-600">
-                        {cat.revenue_percentage.toFixed(1)}%
-                      </p>
-                      <p className="text-xs text-gray-500">of revenue</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Revenue:</span>
-                      <span className="font-semibold text-gray-800">
-                        {formatCurrency(cat.total_revenue)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Quantity:</span>
-                      <span className="font-semibold text-gray-800">
-                        {formatNumber(cat.total_quantity)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Avg Price:</span>
-                      <span className="font-semibold text-gray-800">
-                        {formatCurrency(cat.avg_price)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
-                    <div
-                      className="bg-gradient-to-r from-purple-400 to-purple-600 h-2 rounded-full"
-                      style={{ width: `${cat.revenue_percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* Section 6: Daily Trend */}
           <div className="bg-white p-6 rounded-2xl shadow-lg border border-blue-100">
             <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <FaCalendarAlt className="text-blue-600" />
               Daily Sales Trend (Last 7 Days)
             </h2>
 

@@ -7,7 +7,7 @@ import NavigationBar from "@/app/components/navigation/navigation";
 import { useMenuAPI } from "../hook/use-menu";
 import { routes } from "@/app/routes/routes";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
-import { FaUtensils } from "react-icons/fa";
+import { FaUtensils, FaTrash } from "react-icons/fa";
 import { MdCancel, MdSave } from "react-icons/md";
 import {
   FiAlertCircle,
@@ -521,103 +521,140 @@ export default function AddMenuPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-gray-300 mb-2 font-medium text-lg">
+                  <label className="block text-yellow-300 mb-4 font-semibold text-lg">
                     Ingredients
                   </label>
-                  <div className="space-y-2">
-                    {ingredients.map((ing, idx) => (
-                      <div
-                        key={idx}
-                        className="flex flex-row items-center gap-2 bg-gray-900 rounded-lg px-3 py-2 border border-gray-700 w-full"
-                        style={{ minWidth: 0 }}
-                      >
-                        <select
-                          value={ing.name}
-                          onChange={(e) =>
-                            handleIngredientChange(idx, "name", e.target.value)
-                          }
-                          className="flex-1 min-w-0 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
-                          disabled={itemNamesLoading}
+                  <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl">
+                    <div className="space-y-3">
+                      {ingredients.map((ing, idx) => (
+                        <div
+                          key={idx}
+                          className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end bg-gray-800/50 rounded-xl p-4 border border-gray-700/30 hover:border-yellow-400/30 transition-all"
                         >
-                          <option value="">Select Ingredient</option>
-                          {items
-                            .filter(
-                              (item) =>
-                                item.category !== "Seasonings & Condiments"
-                            )
-                            .map((item) => (
-                              <option
-                                key={item.item_name}
-                                value={item.item_name}
-                              >
-                                {item.item_name}
-                              </option>
-                            ))}
-                        </select>
-                        <input
-                          type="number"
-                          min={0}
-                          step={1}
-                          placeholder="Qty"
-                          value={ing.quantity}
-                          onChange={(e) =>
-                            handleIngredientChange(
-                              idx,
-                              "quantity",
-                              e.target.value
-                            )
-                          }
-                          className="w-20 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                        />
-                        <select
-                          value={ing.measurement}
-                          onChange={(e) =>
-                            handleIngredientChange(
-                              idx,
-                              "measurement",
-                              e.target.value
-                            )
-                          }
-                          className="w-24 bg-gray-800 text-white rounded-lg px-2 py-2 border border-gray-600 focus:border-yellow-400 focus:outline-none transition text-xs xs:text-sm sm:text-base"
-                        >
-                          <option value="g">g</option>
-                          <option value="kg">kg</option>
-                          <option value="ml">ml</option>
-                          <option value="l">L</option>
-                          <option value="pcs">pcs</option>
-                          <option value="tbsp">tbsp</option>
-                          <option value="tsp">tsp</option>
-                          <option value="cup">cup</option>
-                          <option value="oz">oz</option>
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => removeIngredient(idx)}
-                          className="text-red-400 hover:text-red-200 font-semibold px-3 py-2 transition rounded-lg focus:outline-none text-xs xs:text-sm sm:text-base"
-                          aria-label="Remove ingredient"
-                          disabled={ingredients.length < 1}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
+                          {/* Ingredient Name */}
+                          <div className="sm:col-span-5">
+                            <label className="block mb-2 text-sm font-medium text-yellow-300">
+                              Ingredient Name *
+                            </label>
+                            <select
+                              value={ing.name}
+                              onChange={(e) =>
+                                handleIngredientChange(
+                                  idx,
+                                  "name",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                              disabled={itemNamesLoading}
+                            >
+                              <option value="">Select Ingredient</option>
+                              {items
+                                .filter(
+                                  (item) =>
+                                    item.category !== "Seasonings & Condiments"
+                                )
+                                .map((item) => (
+                                  <option
+                                    key={item.item_name}
+                                    value={item.item_name}
+                                  >
+                                    {item.item_name}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+
+                          {/* Quantity */}
+                          <div className="sm:col-span-3">
+                            <label className="block mb-2 text-sm font-medium text-yellow-300">
+                              Quantity *
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              placeholder="0"
+                              value={ing.quantity}
+                              onChange={(e) =>
+                                handleIngredientChange(
+                                  idx,
+                                  "quantity",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                            />
+                          </div>
+
+                          {/* Unit */}
+                          <div className="sm:col-span-3">
+                            <label className="block mb-2 text-sm font-medium text-yellow-300">
+                              Unit *
+                            </label>
+                            <select
+                              value={ing.measurement}
+                              onChange={(e) =>
+                                handleIngredientChange(
+                                  idx,
+                                  "measurement",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                            >
+                              <option value="g">g</option>
+                              <option value="kg">kg</option>
+                              <option value="ml">ml</option>
+                              <option value="l">L</option>
+                              <option value="pcs">pcs</option>
+                              <option value="tbsp">tbsp</option>
+                              <option value="tsp">tsp</option>
+                              <option value="cup">cup</option>
+                              <option value="oz">oz</option>
+                            </select>
+                          </div>
+
+                          {/* Remove Button */}
+                          <div className="sm:col-span-1 flex items-end">
+                            <button
+                              type="button"
+                              onClick={() => removeIngredient(idx)}
+                              className="w-full sm:w-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-400/50 px-4 py-3 rounded-lg font-medium transition-all duration-300 flex items-center justify-center gap-2"
+                              aria-label="Remove ingredient"
+                              disabled={ingredients.length < 1}
+                            >
+                              <FaTrash className="w-4 h-4" />
+                              <span className="sm:hidden">Remove</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
                     <button
                       type="button"
                       onClick={addIngredient}
-                      className="mt-3 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-2 rounded-lg font-semibold shadow transition focus:outline-none"
+                      className="mt-4 w-full sm:w-auto bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-yellow-400/50 transition-all duration-300 flex items-center justify-center gap-2"
                     >
-                      + Add Ingredient
+                      <span className="text-xl">+</span>
+                      Add Ingredient
                     </button>
-                    <p className="text-gray-400 text-xs mt-2">
-                      Tip: Add all ingredients with their amounts. You can
-                      remove or edit any ingredient before saving.
+
+                    <p className="text-gray-400 text-xs mt-4 flex items-start gap-2">
+                      <span className="text-yellow-400 mt-0.5">💡</span>
+                      <span>
+                        Tip: Add all ingredients with their amounts. You can
+                        remove or edit any ingredient before saving.
+                      </span>
                     </p>
                   </div>
                   {error && (
-                    <div className="bg-red-100 border border-red-300 text-red-700 px-4 py-2 rounded text-sm mt-2">
-                      {error}
+                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm mt-4 flex items-center gap-2">
+                      <FiAlertTriangle className="w-5 h-5 flex-shrink-0" />
+                      <span>{error}</span>
                     </div>
                   )}
                 </div>

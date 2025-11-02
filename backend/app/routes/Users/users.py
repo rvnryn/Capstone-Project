@@ -1,17 +1,36 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Body
 import os
 from slowapi.util import get_remote_address
 from slowapi import Limiter
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator, EmailStr
 from typing import Optional, List
 from datetime import datetime
 from app.supabase import supabase, postgrest_client, get_db
 from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from app.utils.rbac import require_role
+from enum import Enum
+import re
 
 router = APIRouter()
+
+
+# ===========================
+# ENUMS FOR VALIDATION
+# ===========================
+
+class UserRoleEnum(str, Enum):
+    OWNER = "Owner"
+    GENERAL_MANAGER = "General Manager"
+    STORE_MANAGER = "Store Manager"
+    ASSISTANT_STORE_MANAGER = "Assistant Store Manager"
+
+
+class UserStatusEnum(str, Enum):
+    """User account status"""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
 
 
 class User(BaseModel):
@@ -28,20 +47,134 @@ class User(BaseModel):
 
 
 class UserCreate(BaseModel):
-    name: str
-    username: str
-    email: str
-    user_role: str
-    status: Optional[str] = "active"
+    """User creation with comprehensive validation"""
+    auth_id: Optional[str] = Field(
+        None,
+        description="Supabase Auth ID (optional, will be updated later if not provided)"
+    )
+    name: str = Field(
+        ...,
+        min_length=2,
+        max_length=100,
+        description="Full name (2-100 characters)"
+    )
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=50,
+        description="Username (3-50 characters, alphanumeric, underscore, hyphen)"
+    )
+    email: EmailStr = Field(
+        ...,
+        description="Valid email address"
+    )
+    user_role: UserRoleEnum = Field(
+        ...,
+        description="User role from predefined list"
+    )
+    status: Optional[UserStatusEnum] = Field(
+        default=UserStatusEnum.ACTIVE,
+        description="User account status"
+    )
+
+    @validator('name')
+    def validate_name(cls, v):
+        """Ensure name doesn't contain only whitespace"""
+        if not v or not v.strip():
+            raise ValueError('Name cannot be empty or only whitespace')
+        # Basic sanitization - allow letters, spaces, hyphens, apostrophes
+        if not re.match(r"^[a-zA-Z\s'-]+$", v.strip()):
+            raise ValueError('Name can only contain letters, spaces, hyphens, and apostrophes')
+        return v.strip()
+
+    @validator('username')
+    def validate_username(cls, v):
+        """Validate username format"""
+        if not v or not v.strip():
+            raise ValueError('Username cannot be empty')
+        v = v.strip()
+        # Alphanumeric, underscore, hyphen only
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
+        if len(v) < 3:
+            raise ValueError('Username must be at least 3 characters')
+        if len(v) > 50:
+            raise ValueError('Username cannot exceed 50 characters')
+        return v
 
 
 class UserUpdate(BaseModel):
-    name: str
-    username: str
-    email: str
-    user_role: str
-    status: str
-    password: str | None = None
+    """User update with comprehensive validation"""
+    name: str = Field(
+        ...,
+        min_length=2,
+        max_length=100,
+        description="Full name (2-100 characters)"
+    )
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=50,
+        description="Username (3-50 characters)"
+    )
+    email: EmailStr = Field(
+        ...,
+        description="Valid email address"
+    )
+    user_role: UserRoleEnum = Field(
+        ...,
+        description="User role from predefined list"
+    )
+    status: UserStatusEnum = Field(
+        ...,
+        description="User account status"
+    )
+    password: Optional[str] = Field(
+        None,
+        min_length=8,
+        max_length=100,
+        description="New password (8-100 characters, optional)"
+    )
+
+    @validator('name')
+    def validate_name(cls, v):
+        """Ensure name doesn't contain only whitespace"""
+        if not v or not v.strip():
+            raise ValueError('Name cannot be empty or only whitespace')
+        if not re.match(r"^[a-zA-Z\s'-]+$", v.strip()):
+            raise ValueError('Name can only contain letters, spaces, hyphens, and apostrophes')
+        return v.strip()
+
+    @validator('username')
+    def validate_username(cls, v):
+        """Validate username format"""
+        if not v or not v.strip():
+            raise ValueError('Username cannot be empty')
+        v = v.strip()
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
+        if len(v) < 3:
+            raise ValueError('Username must be at least 3 characters')
+        if len(v) > 50:
+            raise ValueError('Username cannot exceed 50 characters')
+        return v
+
+    @validator('password')
+    def validate_password(cls, v):
+        """Validate password strength if provided"""
+        if v is not None:
+            if len(v) < 8:
+                raise ValueError('Password must be at least 8 characters')
+            if len(v) > 100:
+                raise ValueError('Password is too long')
+            # Password strength requirements
+            if not re.search(r'[A-Z]', v):
+                raise ValueError('Password must contain at least one uppercase letter')
+            if not re.search(r'[a-z]', v):
+                raise ValueError('Password must contain at least one lowercase letter')
+            if not re.search(r'[0-9]', v):
+                raise ValueError('Password must contain at least one number')
+        return v
 
 
 @limiter.limit("10/minute")
@@ -102,6 +235,49 @@ def get_user(request: Request, user_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/users/validate")
+async def validate_user_data(
+    email: Optional[str] = Body(None),
+    username: Optional[str] = Body(None),
+    user_access=Depends(require_role("Owner")),
+):
+    """Validate email and username before creating/updating user"""
+    try:
+        # Check if email provided and already exists
+        if email:
+            existing_email = (
+                postgrest_client.table("users")
+                .select("email")
+                .eq("email", email)
+                .execute()
+            )
+            if existing_email.data and len(existing_email.data) > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Email '{email}' is already in use. Please use a different email."
+                )
+
+        # Check if username provided and already exists
+        if username:
+            existing_username = (
+                postgrest_client.table("users")
+                .select("username")
+                .eq("username", username)
+                .execute()
+            )
+            if existing_username.data and len(existing_username.data) > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Username '{username}' is already taken. Please choose a different username."
+                )
+
+        return {"valid": True, "message": "Validation passed"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/users", response_model=User)
 async def create_user(
     user: UserCreate,
@@ -109,6 +285,32 @@ async def create_user(
     db=Depends(get_db),
 ):
     try:
+        # Check if email already exists
+        existing_email = (
+            postgrest_client.table("users")
+            .select("email")
+            .eq("email", user.email)
+            .execute()
+        )
+        if existing_email.data and len(existing_email.data) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Email '{user.email}' is already in use. Please use a different email."
+            )
+
+        # Check if username already exists
+        existing_username = (
+            postgrest_client.table("users")
+            .select("username")
+            .eq("username", user.username)
+            .execute()
+        )
+        if existing_username.data and len(existing_username.data) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Username '{user.username}' is already taken. Please choose a different username."
+            )
+
         now = datetime.utcnow().isoformat()
         payload = user.dict()
         payload["created_at"] = now
@@ -118,14 +320,16 @@ async def create_user(
             raise HTTPException(status_code=400, detail="User creation failed")
         try:
             user_row = getattr(user_access, "user_row", user_access)
+            # Use the new user's info for description, but owner's info for who performed the action
+            new_user_data = response.data[0]
             new_activity = UserActivityLog(
-                user_id=user_row.get("user_id"),
+                user_id=user_row.get("user_id"),  # Who performed the action (Owner)
                 action_type="add user",
-                description=f"Added user: (Name: {user.name} | Role: {user.user_role})",
+                description=f"Added user: (Name: {new_user_data.get('name')} | Role: {new_user_data.get('user_role')})",  # NEW user's info
                 activity_date=datetime.utcnow(),
                 report_date=datetime.utcnow(),
-                user_name=user_row.get("name"),
-                role=user_row.get("user_role"),
+                user_name=user_row.get("name"),  # Owner's name
+                role=user_row.get("user_role"),  # Owner's role
             )
             db.add(new_activity)
             await db.flush()
@@ -149,7 +353,7 @@ async def update_user(
 
         current_user_resp = (
             postgrest_client.table("users")
-            .select("auth_id, email")
+            .select("auth_id, email, username")
             .eq("user_id", user_id)
             .single()
             .execute()
@@ -157,6 +361,37 @@ async def update_user(
         current_user = current_user_resp.data if current_user_resp.data else None
         auth_id = current_user.get("auth_id") if current_user else None
         old_email = current_user.get("email") if current_user else None
+        old_username = current_user.get("username") if current_user else None
+
+        # Check if new email is different and already exists for another user
+        if user.email and user.email != old_email:
+            existing_email = (
+                postgrest_client.table("users")
+                .select("user_id")
+                .eq("email", user.email)
+                .neq("user_id", user_id)
+                .execute()
+            )
+            if existing_email.data and len(existing_email.data) > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Email '{user.email}' is already in use by another user. Please use a different email."
+                )
+
+        # Check if new username is different and already exists for another user
+        if user.username and user.username != old_username:
+            existing_username = (
+                postgrest_client.table("users")
+                .select("user_id")
+                .eq("username", user.username)
+                .neq("user_id", user_id)
+                .execute()
+            )
+            if existing_username.data and len(existing_username.data) > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Username '{user.username}' is already taken by another user. Please choose a different username."
+                )
 
         update_data = user.dict(exclude_unset=True)
         print("Update payload:", update_data)  # Add this line
@@ -174,17 +409,19 @@ async def update_user(
                 print(f"Updated auth email for user {auth_id} to {new_email}")
             except Exception as e:
                 print(f"Failed to update auth email: {e}")
-
+                
         try:
             user_row = getattr(user_access, "user_row", user_access)
+            # Use the updated user's info for description, but owner's info for who performed the action
+            updated_user_data = response.data[0]
             new_activity = UserActivityLog(
-                user_id=user_row.get("user_id"),
+                user_id=user_row.get("user_id"),  # Who performed the action (Owner)
                 action_type="update user",
-                description=f"Updated user: (Name: {user.name} | Role: {user.user_role})",
+                description=f"Updated user: (Name: {updated_user_data.get('name')} | Role: {updated_user_data.get('user_role')})",  # Updated user's info
                 activity_date=datetime.utcnow(),
                 report_date=datetime.utcnow(),
-                user_name=user_row.get("name"),
-                role=user_row.get("user_role"),
+                user_name=user_row.get("name"),  # Owner's name
+                role=user_row.get("user_role"),  # Owner's role
             )
             db.add(new_activity)
             await db.flush()
@@ -264,9 +501,59 @@ async def delete_user(
 
 # Password change request with admin password confirmation
 class PasswordChangeRequest(BaseModel):
-    auth_id: str
-    new_password: str
-    admin_password: str
+    """Password change request with comprehensive validation"""
+    auth_id: str = Field(
+        ...,
+        min_length=10,
+        max_length=100,
+        description="Supabase auth ID"
+    )
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        max_length=100,
+        description="New password (8-100 characters, must meet strength requirements)"
+    )
+    admin_password: Optional[str] = Field(
+        None,
+        min_length=6,
+        max_length=100,
+        description="Admin password for confirmation (optional for own password change)"
+    )
+
+    @validator('auth_id')
+    def validate_auth_id(cls, v):
+        """Ensure auth_id is not empty"""
+        if not v or not v.strip():
+            raise ValueError('Auth ID cannot be empty')
+        return v.strip()
+
+    @validator('new_password')
+    def validate_new_password(cls, v):
+        """Validate new password strength"""
+        if not v or len(v) < 8:
+            raise ValueError('New password must be at least 8 characters')
+        if len(v) > 100:
+            raise ValueError('Password is too long')
+
+        # Password strength requirements
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'[0-9]', v):
+            raise ValueError('Password must contain at least one number')
+
+        return v
+
+    @validator('admin_password')
+    def validate_admin_password(cls, v):
+        """Ensure admin password is not empty when provided"""
+        if v is not None and v != "":
+            if not v.strip():
+                raise ValueError('Admin password cannot be empty')
+            return v.strip()
+        return v
 
 
 
@@ -321,6 +608,13 @@ async def change_user_password(
                 raise
 
     if not is_self:
+        # When changing another user's password, admin_password is required
+        if not request.admin_password:
+            raise HTTPException(
+                status_code=400,
+                detail="Admin password is required when changing another user's password."
+            )
+
         # Rate limit: 3 attempts per 10 minutes per admin
         now = datetime.utcnow().timestamp()
         attempts = _admin_pw_attempts[admin_email]

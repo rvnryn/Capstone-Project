@@ -126,7 +126,11 @@ export function useUsersAPI() {
         },
         body: JSON.stringify(data),
       });
-      if (!response.ok) throw new Error("Failed to create user");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || errorData.message || "Failed to create user";
+        throw new Error(errorMessage);
+      }
       return response.json();
     } else {
       queueOfflineAction({
@@ -151,7 +155,11 @@ export function useUsersAPI() {
           },
           body: JSON.stringify(user),
         });
-        if (!response.ok) throw new Error("Failed to update user");
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMessage = errorData.detail || errorData.message || "Failed to update user";
+          throw new Error(errorMessage);
+        }
         return response.json();
       } else {
         queueOfflineAction({

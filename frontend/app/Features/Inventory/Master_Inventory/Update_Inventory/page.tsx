@@ -89,7 +89,7 @@ export default function EditInventoryItem() {
           batch: data.batch_date,
           category: data.category,
           stock: data.stock_quantity,
-          unit_price: data.unit_price || "",
+          unit_cost: data.unit_cost || "",
           status: data.stock_status,
           added: new Date(data.created_at),
           expiration_date: data.expiration_date?.split("T")[0] || "",
@@ -210,7 +210,7 @@ export default function EditInventoryItem() {
         category: formData.category,
         batch_date: formData.batch,
         stock_quantity: formData.stock,
-        unit_price: Number(formData.unit_price),
+        unit_cost: Number(formData.unit_cost) || 0,
         expiration_date: formData.expiration_date || null,
       });
 
@@ -584,30 +584,27 @@ export default function EditInventoryItem() {
 
                     <div className="group">
                       <label
-                        htmlFor="unit_price"
+                        htmlFor="unit_cost"
                         className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base"
                       >
-                        <FiTag className="text-yellow-400" />
-                        Unit Price
-                        <span className="text-red-400">*</span>
+                        <FiTag className="text-blue-400" />
+                        Unit Cost
                       </label>
                       <div className="relative max-w-md">
                         <input
                           type="number"
-                          id="unit_price"
-                          name="unit_price"
-                          required
+                          id="unit_cost"
+                          name="unit_cost"
                           min={0}
                           step="0.01"
-                          value={formData.unit_price}
+                          value={formData.unit_cost}
                           onChange={handleChange}
-                          onFocus={() => handleFocus("unit_price")}
+                          onFocus={() => handleFocus("unit_cost")}
                           onBlur={handleBlur}
                           placeholder="0.00"
-                          className="w-full pl-7 bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                          className="w-full pl-7 bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-blue-400/70"
                           inputMode="decimal"
                           pattern="[0-9.]*"
-                          disabled
                         />
                       </div>
                     </div>

@@ -4,12 +4,14 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request
 from datetime import datetime, date
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
+from enum import Enum
 from app.supabase import postgrest_client, get_db
 from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 from typing import Optional, List
 from app.routes.Menu.menu import recalculate_stock_status
+from app.routes.General.notification import create_notification  # Import notification function
 import asyncio
 import time
 import logging
@@ -126,15 +128,109 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 router = APIRouter()
 
 
+# ===========================
+# ENUMS FOR VALIDATION
+# ===========================
+
+class CategoryEnum(str, Enum):
+    """Standardized inventory categories"""
+    MEATS = "Meats"
+    SEAFOOD = "Seafood"
+    VEGETABLES_FRUITS = "Vegetables & Fruits"
+    DAIRY_EGGS = "Dairy & Eggs"
+    SEASONINGS = "Seasonings & Condiments"
+    RICE_NOODLES = "Rice & Noodles"
+    COOKING_OILS = "Cooking Oils"
+    BEVERAGE = "Beverage"
+
+
+class StockStatusEnum(str, Enum):
+    """Standardized stock status values"""
+    NORMAL = "Normal"
+    LOW = "Low"
+    CRITICAL = "Critical"
+    OUT_OF_STOCK = "Out Of Stock"
+    HIGH = "High"
+
+
+# ===========================
+# PYDANTIC MODELS WITH VALIDATION
+# ===========================
+
 # Base model used for adding
 class InventoryItemCreate(BaseModel):
-    item_name: str
+    item_name: str = Field(
+        ...,
+        min_length=2,
+        max_length=100,
+        description="Item name (2-100 characters)"
+    )
     batch_date: date | None = None
-    category: str
-    stock_status: str = "Normal"
-    stock_quantity: float
+    category: CategoryEnum = Field(
+        ...,
+        description="Item category from predefined list"
+    )
+    stock_status: StockStatusEnum = Field(
+        default=StockStatusEnum.NORMAL,
+        description="Current stock status"
+    )
+    stock_quantity: float = Field(
+        ...,
+        ge=0,
+        description="Stock quantity (must be >= 0)"
+    )
     expiration_date: date | None = None
-    unit_price: Optional[float] = None
+    unit_cost: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Unit cost in pesos (must be >= 0)"
+    )
+
+    @validator('item_name')
+    def validate_item_name(cls, v):
+        """Ensure item name doesn't contain only whitespace"""
+        if not v or not v.strip():
+            raise ValueError('Item name cannot be empty or only whitespace')
+        return v.strip()
+
+    @validator('expiration_date')
+    def validate_expiration_date(cls, v, values):
+        """Ensure expiration date is not in the past"""
+        if v and v < date.today():
+            raise ValueError('Expiration date cannot be in the past')
+
+        # If batch_date exists, expiration must be after batch date
+        if v and 'batch_date' in values and values['batch_date']:
+            if v < values['batch_date']:
+                raise ValueError('Expiration date must be after batch date')
+
+        return v
+
+    @validator('batch_date')
+    def validate_batch_date(cls, v):
+        """Batch date should not be in the future"""
+        if v and v > date.today():
+            raise ValueError('Batch date cannot be in the future')
+        return v
+
+    @validator('stock_quantity')
+    def validate_stock_quantity(cls, v):
+        """Additional validation for stock quantity"""
+        if v < 0:
+            raise ValueError('Stock quantity cannot be negative')
+        if v > 1000000:  # Reasonable upper limit
+            raise ValueError('Stock quantity exceeds maximum allowed (1,000,000)')
+        return v
+
+    @validator('unit_cost')
+    def validate_unit_cost(cls, v):
+        """Validate unit cost range"""
+        if v is not None:
+            if v < 0:
+                raise ValueError('Unit cost cannot be negative')
+            if v > 1000000:  # Reasonable upper limit (1M pesos per unit)
+                raise ValueError('Unit cost exceeds maximum allowed (₱1,000,000)')
+        return v
 
 
 # Full model used for update/view
@@ -145,57 +241,194 @@ class InventoryItem(InventoryItemCreate):
 
 
 class InventoryItemUpdate(BaseModel):
-    item_name: Optional[str] = None
+    """Update model - all fields optional but must follow same validation rules when provided"""
+    item_name: Optional[str] = Field(
+        None,
+        min_length=2,
+        max_length=100,
+        description="Item name (2-100 characters)"
+    )
     batch_date: Optional[date] = None
-    category: Optional[str] = None
-    stock_status: Optional[str] = None
-    stock_quantity: Optional[float] = None
+    category: Optional[CategoryEnum] = Field(
+        None,
+        description="Item category from predefined list"
+    )
+    stock_status: Optional[StockStatusEnum] = Field(
+        None,
+        description="Current stock status"
+    )
+    stock_quantity: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Stock quantity (must be >= 0)"
+    )
     expiration_date: Optional[date] = None
-    unit_price: Optional[float] = None
+    unit_cost: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Unit cost in pesos (must be >= 0)"
+    )
+
+    @validator('item_name')
+    def validate_item_name(cls, v):
+        """Ensure item name doesn't contain only whitespace"""
+        if v is not None:
+            if not v.strip():
+                raise ValueError('Item name cannot be empty or only whitespace')
+            return v.strip()
+        return v
+
+    @validator('expiration_date')
+    def validate_expiration_date(cls, v, values):
+        """Ensure expiration date is not in the past"""
+        if v is not None:
+            if v < date.today():
+                raise ValueError('Expiration date cannot be in the past')
+
+            # If batch_date exists, expiration must be after batch date
+            if 'batch_date' in values and values['batch_date']:
+                if v < values['batch_date']:
+                    raise ValueError('Expiration date must be after batch date')
+
+        return v
+
+    @validator('batch_date')
+    def validate_batch_date(cls, v):
+        """Batch date should not be in the future"""
+        if v is not None and v > date.today():
+            raise ValueError('Batch date cannot be in the future')
+        return v
+
+    @validator('stock_quantity')
+    def validate_stock_quantity(cls, v):
+        """Additional validation for stock quantity"""
+        if v is not None:
+            if v < 0:
+                raise ValueError('Stock quantity cannot be negative')
+            if v > 1000000:
+                raise ValueError('Stock quantity exceeds maximum allowed (1,000,000)')
+        return v
+
+    @validator('unit_cost')
+    def validate_unit_cost(cls, v):
+        """Validate unit cost range"""
+        if v is not None:
+            if v < 0:
+                raise ValueError('Unit cost cannot be negative')
+            if v > 1000000:
+                raise ValueError('Unit cost exceeds maximum allowed (₱1,000,000)')
+        return v
 
 
 class InventoryTodayItemCreate(BaseModel):
+    """Today's inventory - similar validation rules"""
     item_id: int
-    item_name: str
+    item_name: str = Field(
+        ...,
+        min_length=2,
+        max_length=100,
+        description="Item name (2-100 characters)"
+    )
     batch_date: date | None = None
-    category: str
-    stock_status: str = "Normal"
-    stock_quantity: float
+    category: CategoryEnum = Field(
+        ...,
+        description="Item category from predefined list"
+    )
+    stock_status: StockStatusEnum = Field(
+        default=StockStatusEnum.NORMAL,
+        description="Current stock status"
+    )
+    stock_quantity: float = Field(
+        ...,
+        ge=0,
+        description="Stock quantity (must be >= 0)"
+    )
     expiration_date: date | None = None
+    unit_cost: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Unit cost in pesos (must be >= 0)"
+    )
     created_at: str
     updated_at: str
 
+    @validator('item_name')
+    def validate_item_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Item name cannot be empty or only whitespace')
+        return v.strip()
+
+    @validator('expiration_date')
+    def validate_expiration_date(cls, v, values):
+        if v and v < date.today():
+            raise ValueError('Expiration date cannot be in the past')
+        if v and 'batch_date' in values and values['batch_date']:
+            if v < values['batch_date']:
+                raise ValueError('Expiration date must be after batch date')
+        return v
+
 
 class TransferRequest(BaseModel):
-    quantity: float
+    """Transfer quantity validation"""
+    quantity: float = Field(
+        ...,
+        gt=0,
+        description="Transfer quantity (must be > 0)"
+    )
+
+    @validator('quantity')
+    def validate_quantity(cls, v):
+        if v <= 0:
+            raise ValueError('Transfer quantity must be greater than 0')
+        if v > 1000000:
+            raise ValueError('Transfer quantity exceeds maximum allowed (1,000,000)')
+        return v
 
 
 class FIFOTransferRequest(BaseModel):
-    item_name: str
-    quantity: float
+    """FIFO transfer with item name and quantity"""
+    item_name: str = Field(
+        ...,
+        min_length=2,
+        max_length=100,
+        description="Item name to transfer"
+    )
+    quantity: float = Field(
+        ...,
+        gt=0,
+        description="Transfer quantity (must be > 0)"
+    )
+
+    @validator('item_name')
+    def validate_item_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Item name cannot be empty or only whitespace')
+        return v.strip()
+
+    @validator('quantity')
+    def validate_quantity(cls, v):
+        if v <= 0:
+            raise ValueError('Transfer quantity must be greater than 0')
+        if v > 1000000:
+            raise ValueError('Transfer quantity exceeds maximum allowed (1,000,000)')
+        return v
 
 
 @router.get("/inventory")
-async def list_inventory(
-    request: Request, skip: int = Query(0, ge=0), limit: int = Query(20, le=100)
-):
+async def list_inventory(request: Request):
     try:
-
         @run_blocking
         def _fetch():
             return (
                 postgrest_client.table("inventory")
                 .select("*")
-                .range(skip, skip + limit - 1)
                 .execute()
             )
-
         items = await _fetch()
         return items.data
     except Exception as e:
         logger.exception("Error listing inventory")
         raise HTTPException(status_code=500, detail="Internal server error")
-
 
 @limiter.limit("10/minute")
 @router.get("/inventory/{item_id}")
@@ -239,7 +472,7 @@ async def add_inventory_item(
             **item_dict,
             "created_at": now,
             "updated_at": now,
-                "unit_price": item.unit_price,
+            "unit_cost": item.unit_cost if item.unit_cost is not None else 0.00,
         }
 
         @run_blocking
@@ -455,7 +688,7 @@ async def transfer_to_today_inventory(
                 "expiration_date": item.get("expiration_date"),
                 "created_at": now,
                 "updated_at": now,
-                    "unit_price": item.get("unit_price"),
+                "unit_cost": item.get("unit_cost", 0.00),
             }
 
             @run_blocking
@@ -505,6 +738,20 @@ async def transfer_to_today_inventory(
             "transfer inventory to today's inventory",
             f"Transferred {transfer_quantity} of Id {item['item_id']} | item {item['item_name']} to Today's Inventory",
         )
+
+        # Create notification for transfer
+        try:
+            user_row = getattr(user, "user_row", user)
+            user_id = user_row.get("user_id") if isinstance(user_row, dict) else getattr(user_row, "user_id", None)
+            if user_id:
+                create_notification(
+                    user_id=user_id,
+                    type="transfer",
+                    message=f"Transferred {transfer_quantity} units of {item['item_name']} to Today's Inventory"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to create transfer notification: {e}")
+
         return {
             "message": "Item transferred to Today's Inventory",
             "data": insert_response.data,
@@ -705,6 +952,21 @@ async def fifo_transfer_to_today(
             f"Transferred {requested_quantity} of '{item_name}' to Today's Inventory using FIFO (Surplus: {sum(t['quantity'] for t in transfers if t['source'] == 'surplus')}, Master: {sum(t['quantity'] for t in transfers if t['source'] == 'master')})",
         )
 
+        # Create notification for FIFO transfer
+        try:
+            user_row = getattr(user, "user_row", user)
+            user_id = user_row.get("user_id") if isinstance(user_row, dict) else getattr(user_row, "user_id", None)
+            if user_id:
+                surplus_qty = sum(t["quantity"] for t in transfers if t["source"] == "surplus")
+                master_qty = sum(t["quantity"] for t in transfers if t["source"] == "master")
+                create_notification(
+                    user_id=user_id,
+                    type="transfer",
+                    message=f"FIFO Transfer: {requested_quantity} units of {item_name} (Surplus: {surplus_qty}, Master: {master_qty})"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to create FIFO transfer notification: {e}")
+
         return {
             "message": "Item transferred to Today's Inventory using FIFO",
             "requested_quantity": requested_quantity,
@@ -782,7 +1044,7 @@ async def _add_to_today_inventory(source_item: dict, quantity: float, threshold:
             "expiration_date": source_item.get("expiration_date"),
             "created_at": timestamp,
             "updated_at": timestamp,
-            "unit_price": source_item.get("unit_price"),
+            "unit_cost": source_item.get("unit_cost", 0.00),
         }
 
         @run_blocking

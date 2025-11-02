@@ -1,8 +1,10 @@
 import asyncio
 from fastapi import APIRouter, HTTPException, Depends, Request, Body
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Optional
 from fastapi_utils.tasks import repeat_every
+from pydantic import BaseModel, Field, validator
+from enum import Enum
 
 
 from app.routes.Inventory.master_inventory import (
@@ -15,25 +17,84 @@ from app.routes.Inventory.master_inventory import (
     require_role,
     limiter,
     logger,
+    CategoryEnum,
+    StockStatusEnum,
 )
-
-from pydantic import BaseModel
 
 router = APIRouter()
 
 
 class TransferRequest(BaseModel):
-    quantity: float
+    """Transfer quantity validation"""
+    quantity: float = Field(
+        ...,
+        gt=0,
+        description="Transfer quantity (must be > 0)"
+    )
+
+    @validator('quantity')
+    def validate_quantity(cls, v):
+        if v <= 0:
+            raise ValueError('Transfer quantity must be greater than 0')
+        if v > 1000000:
+            raise ValueError('Transfer quantity exceeds maximum allowed (1,000,000)')
+        return v
 
 
 class SurplusItemCreate(BaseModel):
-    item_name: str
+    """Surplus inventory creation with comprehensive validation"""
+    item_name: str = Field(
+        ...,
+        min_length=2,
+        max_length=100,
+        description="Item name (2-100 characters)"
+    )
     batch_date: Optional[str] = None
-    category: str
-    stock_status: str = "Normal"
-    stock_quantity: float
+    category: CategoryEnum = Field(
+        ...,
+        description="Item category from predefined list"
+    )
+    stock_status: StockStatusEnum = Field(
+        default=StockStatusEnum.NORMAL,
+        description="Current stock status"
+    )
+    stock_quantity: float = Field(
+        ...,
+        ge=0,
+        description="Stock quantity (must be >= 0)"
+    )
     expiration_date: Optional[str] = None
-    unit_price: Optional[float] = None
+    unit_cost: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Unit cost in pesos (must be >= 0)"
+    )
+
+    @validator('item_name')
+    def validate_item_name(cls, v):
+        """Ensure item name doesn't contain only whitespace"""
+        if not v or not v.strip():
+            raise ValueError('Item name cannot be empty or only whitespace')
+        return v.strip()
+
+    @validator('stock_quantity')
+    def validate_stock_quantity(cls, v):
+        """Additional validation for stock quantity"""
+        if v < 0:
+            raise ValueError('Stock quantity cannot be negative')
+        if v > 1000000:
+            raise ValueError('Stock quantity exceeds maximum allowed (1,000,000)')
+        return v
+
+    @validator('unit_cost')
+    def validate_unit_cost(cls, v):
+        """Validate unit cost range"""
+        if v is not None:
+            if v < 0:
+                raise ValueError('Unit cost cannot be negative')
+            if v > 1000000:
+                raise ValueError('Unit cost exceeds maximum allowed (₱1,000,000)')
+        return v
 
 
 def log_user_activity(db, user, action_type, description):
@@ -165,7 +226,7 @@ async def add_surplus_item(
             **item_dict,
             "created_at": now,
             "updated_at": now,
-            "unit_price": item.unit_price,
+            "unit_cost": item.unit_cost if item.unit_cost is not None else 0.00,
         }
 
         @run_blocking

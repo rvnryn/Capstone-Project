@@ -32,6 +32,8 @@ import { useInventoryAPI } from "../hook/use-inventoryAPI";
 import { usePWA, useOfflineQueue } from "@/app/hooks/usePWA";
 import { PWAStatusBar } from "@/app/components/PWA/PWAStatus";
 import { useOfflineDataManager } from "@/app/hooks/useOfflineDataManager";
+import Pagination from "@/app/components/Pagination";
+import { TableLoading, EmptyState } from "@/app/components/LoadingStates";
 
 type InventoryItem = {
   id: number;
@@ -142,6 +144,11 @@ export default function InventoryPage() {
   );
   const [spoilageQuantity, setSpoilageQuantity] = useState<number | "">("");
   const [spoilageReason, setSpoilageReason] = useState<string>("");
+  const [customSpoilageReason, setCustomSpoilageReason] = useState<string>("");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   const router = useRouter();
 
@@ -213,7 +220,7 @@ export default function InventoryPage() {
               ...item,
               id: item.item_id,
               name: setting?.name || item.item_name, // Use settings name if available
-              batch: item.created_at,
+              batch: item.batch_date,
               category: item.category,
               stock: stockQty,
               status,
@@ -267,7 +274,7 @@ export default function InventoryPage() {
                     ...item,
                     id: item.item_id,
                     name: setting?.name || item.item_name,
-                    batch: item.created_at,
+                    batch: item.batch_date,
                     category: item.category,
                     stock: stockQty,
                     status,
@@ -293,7 +300,7 @@ export default function InventoryPage() {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchOnMount: true,
-    refetchInterval: 5000, // Poll every 5 seconds for real-time updates
+    refetchInterval: 1000 * 60 * 1, // Poll every 5 seconds for real-time updates
     refetchIntervalInBackground: false, // Only poll when tab is active
   });
 
@@ -381,14 +388,16 @@ export default function InventoryPage() {
   const spoilageMutation = useMutation({
     mutationFn: async ({
       id,
+      batch,
       quantity,
       reason,
     }: {
       id: number;
+      batch: string;
       quantity: number;
       reason?: string;
     }) => {
-      await transferToSpoilage(id, quantity, reason);
+      await transferToSpoilage(id, batch, quantity, reason);
     },
     onMutate: async ({ id }) => {
       await queryClient.cancelQueries({ queryKey: ["masterInventory"] });
@@ -499,7 +508,9 @@ export default function InventoryPage() {
     return inventoryData
       .filter(
         (item) =>
-          (!selectedCategory || item.category === selectedCategory) &&
+          (!selectedCategory ||
+            item.category?.toLowerCase().trim() ===
+              selectedCategory.toLowerCase().trim()) &&
           (!selectedBatchDate ||
             formatDateOnly(item.batch) === selectedBatchDate) &&
           (!searchQuery ||
@@ -571,6 +582,19 @@ export default function InventoryPage() {
     });
   }, [filtered, sortConfig]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return sortedData.slice(startIndex, endIndex);
+  }, [sortedData, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, selectedBatchDate, sortConfig]);
+
   const requestSort = (key: string) => {
     setSortConfig((prev) => ({
       key,
@@ -583,8 +607,10 @@ export default function InventoryPage() {
 
     const spoilageData = {
       id: itemToSpoilage.id,
+      batch: itemToSpoilage.batch,
       quantity: Number(spoilageQuantity),
-      reason: spoilageReason,
+      reason:
+        spoilageReason === "Others" ? customSpoilageReason : spoilageReason,
     };
 
     if (isOnline) {
@@ -672,7 +698,8 @@ export default function InventoryPage() {
     { key: "category", label: "Category" },
     { key: "status", label: "Status" },
     { key: "stock", label: "Stock" },
-    { key: "unit_price", label: "Unit Price" },
+    { key: "unit_cost", label: "Unit Cost" },
+    { key: "total_value", label: "Total Value" },
     { key: "added", label: "Added Date" },
     { key: "expires", label: "Expiration Date" },
     { key: "actions", label: "Actions" },
@@ -687,6 +714,12 @@ export default function InventoryPage() {
     }
   }, [transferSuccess]);
 
+  useEffect(() => {
+    console.log(
+      "Mapped inventoryData:",
+      inventoryData.map((i) => i.category)
+    );
+  }, [inventoryData]);
   return (
     <section className="text-white font-poppins">
       <NavigationBar
@@ -729,8 +762,14 @@ export default function InventoryPage() {
                       onClick={handleRefresh}
                       className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
                     >
-                      <FiRefreshCw className={`text-xs xs:text-sm ${isFetching ? 'animate-spin' : ''}`} />
-                      <span className="sm:inline">{isFetching ? 'Syncing...' : 'Refresh'}</span>
+                      <FiRefreshCw
+                        className={`text-xs xs:text-sm ${
+                          isFetching ? "animate-spin" : ""
+                        }`}
+                      />
+                      <span className="sm:inline">
+                        {isFetching ? "Syncing..." : "Refresh"}
+                      </span>
                     </button>
 
                     {["Owner", "General Manager", "Store Manager"].includes(
@@ -923,6 +962,7 @@ export default function InventoryPage() {
                       >
                         <option value="">All Categories</option>
                         <option>Meats</option>
+                        <option>Seafood</option>
                         <option>Vegetables & Fruits</option>
                         <option>Dairy & Eggs</option>
                         <option>Seasonings & Condiments</option>
@@ -1010,32 +1050,20 @@ export default function InventoryPage() {
                     <tbody>
                       {isLoading || isFetching ? (
                         <tr>
-                          <td
-                            colSpan={9}
-                            className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-10 xs:py-12 sm:py-16 md:py-20 lg:py-24 text-center bg-yellow-900/10 animate-pulse"
-                            aria-busy="true"
-                            aria-live="polite"
-                          >
-                            <div className="flex flex-col items-center gap-3 sm:gap-5">
-                              <div className="relative">
-                                <div className="absolute inset-0 w-full h-full rounded-full bg-yellow-400/20 blur-lg"></div>
-                                <div className="relative w-12 h-12 sm:w-16 sm:h-16 border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                              </div>
-                              <div className="text-yellow-300 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
-                                {isOnline
+                          <td colSpan={11} className="text-center">
+                            <TableLoading
+                              rows={itemsPerPage}
+                              columns={11}
+                              message={
+                                isOnline
                                   ? "Refreshing inventory data..."
-                                  : "Loading from offline cache..."}
-                              </div>
-                              {!isOnline && (
-                                <div className="text-gray-400 text-xs sm:text-sm">
-                                  Data may not be current
-                                </div>
-                              )}
-                            </div>
+                                  : "Loading from offline cache..."
+                              }
+                            />
                           </td>
                         </tr>
-                      ) : sortedData.length > 0 ? (
-                        sortedData.map((item: any, index) => (
+                      ) : paginatedData.length > 0 ? (
+                        paginatedData.map((item: any, index) => (
                           <tr
                             key={
                               item.id ??
@@ -1051,7 +1079,7 @@ export default function InventoryPage() {
                             }}
                           >
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
-                              {index + 1}
+                              {(currentPage - 1) * itemsPerPage + index + 1}
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap">
                               <div className="flex items-center gap-1 xs:gap-2 sm:gap-3">
@@ -1094,10 +1122,19 @@ export default function InventoryPage() {
                                 )}
                               </span>
                             </td>
-                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-green-300 text-xs xs:text-sm">
-                              {item.unit_price !== undefined &&
-                              item.unit_price !== null
-                                ? `₱${Number(item.unit_price).toFixed(2)}`
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-blue-300 text-xs xs:text-sm">
+                              {item.unit_cost !== undefined &&
+                              item.unit_cost !== null
+                                ? `₱${Number(item.unit_cost).toFixed(2)}`
+                                : "-"}
+                            </td>
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-purple-300 text-xs xs:text-sm font-semibold">
+                              {item.unit_cost !== undefined &&
+                              item.unit_cost !== null &&
+                              item.stock !== undefined
+                                ? `₱${(
+                                    Number(item.unit_cost) * Number(item.stock)
+                                  ).toFixed(2)}`
                                 : "-"}
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm">
@@ -1178,26 +1215,29 @@ export default function InventoryPage() {
                         ))
                       ) : (
                         <tr>
-                          <td
-                            colSpan={9}
-                            className="px-4 xl:px-6 py-12 xl:py-16 text-center"
-                          >
-                            <div className="flex flex-col items-center gap-4">
-                              <MdInventory className="text-6xl text-gray-600" />
-                              <div>
-                                <h2 className="text-gray-400 font-medium mb-2">
-                                  No items found
-                                </h2>
-                                <p className="text-gray-500 text-sm">
-                                  Try adjusting your search or filter criteria
-                                </p>
-                              </div>
-                            </div>
+                          <td colSpan={10}>
+                            <EmptyState
+                              icon={<MdInventory className="text-6xl" />}
+                              title="No items found"
+                              message="Try adjusting your search or filter criteria"
+                            />
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
+
+                  {/* Pagination */}
+                  {sortedData.length > 0 && (
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                      itemsPerPage={itemsPerPage}
+                      totalItems={sortedData.length}
+                      onItemsPerPageChange={setItemsPerPage}
+                    />
+                  )}
                 </div>
               </section>
             </article>
@@ -1428,17 +1468,34 @@ export default function InventoryPage() {
                   className="block text-gray-300 font-medium text-xs xs:text-sm sm:text-base mt-2"
                   htmlFor="spoilage-reason"
                 >
-                  Reason (optional)
+                  Reason <span className="text-red-400">*</span>
                 </label>
-                <input
+                <select
                   id="spoilage-reason"
-                  type="text"
                   value={spoilageReason}
                   onChange={(e) => setSpoilageReason(e.target.value)}
-                  placeholder="e.g. Expired, Damaged, etc."
-                  className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
+                  className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20 transition-all text-xs xs:text-sm sm:text-base"
                   aria-label="Spoilage reason"
-                />
+                >
+                  <option value="">Select reason</option>
+                  <option value="Quality Degradation">
+                    Quality Degradation
+                  </option>
+                  <option value="Pest Infestation">Pest Infestation</option>
+                  <option value="Spillage">Spillage</option>
+                  <option value="Contaminated">Contaminated</option>
+                  <option value="Others">Others</option>
+                </select>
+                {spoilageReason === "Others" && (
+                  <input
+                    type="text"
+                    value={customSpoilageReason}
+                    onChange={(e) => setCustomSpoilageReason(e.target.value)}
+                    placeholder="Please specify reason"
+                    className="w-full mt-2 px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
+                    aria-label="Specify other spoilage reason"
+                  />
+                )}
               </div>
               <div className="flex flex-col sm:flex-row justify-center gap-2 xs:gap-3 sm:gap-4 pt-1 xs:pt-2">
                 <button

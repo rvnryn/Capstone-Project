@@ -14,6 +14,7 @@ import { ToastContainer } from "react-toastify";
 import React, { useEffect } from "react";
 import { GlobalLoadingProvider } from "@/app/context/GlobalLoadingContext";
 import { GlobalLoadingOverlay } from "@/app/components/GlobalLoadingOverlay";
+import OfflineFallback from "@/app/components/OfflineFallback";
 // @ts-ignore - missing type declarations for CSS side-effect import
 import "react-toastify/dist/ReactToastify.css";
 
@@ -97,6 +98,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <GlobalLoadingProvider>
         <AuthProvider>
           <OfflineProvider>
+            <OfflineFallback />
             <DataPreloader />
             <PagePreloader />
             <OfflineStatusBar />

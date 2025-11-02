@@ -45,6 +45,7 @@ import {
 } from "react-icons/md";
 import { HiSparkles } from "react-icons/hi";
 import { GiBiohazard } from "react-icons/gi";
+import Pagination from "@/app/components/Pagination";
 
 import {
   Tabs,
@@ -150,6 +151,14 @@ export default function Dashboard() {
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
+  // Pagination state for Expired Items
+  const [expiredPage, setExpiredPage] = useState(1);
+  const [expiredItemsPerPage, setExpiredItemsPerPage] = useState(25);
+
+  // Pagination state for Expiring Soon Items
+  const [expiringPage, setExpiringPage] = useState(1);
+  const [expiringItemsPerPage, setExpiringItemsPerPage] = useState(25);
+
   // Open add modal
   const handleAddHoliday = (date: string) => {
     setModalEdit(null);
@@ -198,6 +207,20 @@ export default function Dashboard() {
     item_id: string | number;
     [key: string]: any;
   };
+
+  // Pagination calculations for expired items
+  const expiredTotalPages = Math.ceil(expiredItem.length / expiredItemsPerPage);
+  const paginatedExpiredItems = expiredItem.slice(
+    (expiredPage - 1) * expiredItemsPerPage,
+    expiredPage * expiredItemsPerPage
+  );
+
+  // Pagination calculations for expiring items
+  const expiringTotalPages = Math.ceil(expiringIngredients.length / expiringItemsPerPage);
+  const paginatedExpiringItems = expiringIngredients.slice(
+    (expiringPage - 1) * expiringItemsPerPage,
+    expiringPage * expiringItemsPerPage
+  );
 
   const renderTopItemsCountSelector = () => (
     <div className="flex flex-wrap items-center gap-2">
@@ -1260,7 +1283,7 @@ export default function Dashboard() {
                               </td>
                             </tr>
                           ) : (
-                            expired.data.map(
+                            paginatedExpiredItems.map(
                               (
                                 item: {
                                   id?: string | number;
@@ -1318,6 +1341,18 @@ export default function Dashboard() {
                           )}
                         </tbody>
                       </table>
+
+                      {/* Pagination for Expired Items */}
+                      {expiredItem.length > 0 && (
+                        <Pagination
+                          currentPage={expiredPage}
+                          totalPages={expiredTotalPages}
+                          onPageChange={setExpiredPage}
+                          itemsPerPage={expiredItemsPerPage}
+                          totalItems={expiredItem.length}
+                          onItemsPerPageChange={setExpiredItemsPerPage}
+                        />
+                      )}
                     </div>
                   </section>
 
@@ -1380,7 +1415,7 @@ export default function Dashboard() {
                               </td>
                             </tr>
                           ) : (
-                            expiring.data?.map(
+                            paginatedExpiringItems?.map(
                               (
                                 item: {
                                   id?: string | number;
@@ -1452,6 +1487,18 @@ export default function Dashboard() {
                           )}
                         </tbody>
                       </table>
+
+                      {/* Pagination for Expiring Items */}
+                      {expiringIngredients.length > 0 && (
+                        <Pagination
+                          currentPage={expiringPage}
+                          totalPages={expiringTotalPages}
+                          onPageChange={setExpiringPage}
+                          itemsPerPage={expiringItemsPerPage}
+                          totalItems={expiringIngredients.length}
+                          onItemsPerPageChange={setExpiringItemsPerPage}
+                        />
+                      )}
                     </div>
                   </section>
                 </div>

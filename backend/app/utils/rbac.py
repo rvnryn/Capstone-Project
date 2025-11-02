@@ -45,11 +45,21 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
                     "email": user.email
                 }
 
+    except jwt.ExpiredSignatureError:
+        print("[RBAC] Token has expired")
+        raise HTTPException(
+            status_code=401,
+            detail="Session expired. Please log in again.",
+            headers={"X-Session-Expired": "true"}
+        )
+    except jwt.InvalidTokenError as e:
+        print(f"[RBAC] Invalid token: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid token")
     except Exception as e:
         import traceback
         print("[RBAC] Exception during authentication:", str(e))
         traceback.print_exc()
-        raise HTTPException(status_code=401, detail="Invalid authentication")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
 def require_role(*roles):
     def role_checker(user=Depends(get_current_user)):

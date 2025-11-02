@@ -55,44 +55,78 @@ interface ComprehensiveAnalytics {
   }>;
 }
 
-export function useComprehensiveAnalytics(startDate: string, endDate: string) {
-  const [analytics, setAnalytics] = useState<ComprehensiveAnalytics | null>(null);
+export function useComprehensiveAnalytics(
+  startDate: string,
+  endDate: string,
+  autoRefreshInterval: number = 0
+) {
+  const [analytics, setAnalytics] = useState<ComprehensiveAnalytics | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const fetchAnalytics = async (isBackgroundRefresh = false) => {
+    // Only show loading on initial fetch, not on background refresh
+    if (!isBackgroundRefresh) {
+      setLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
+    setError(null);
+
+    try {
+      const token = localStorage.getItem("token");
+      const apiBaseUrl =
+        process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+      const response = await fetch(
+        `${apiBaseUrl}/api/comprehensive-sales-analytics?start_date=${startDate}&end_date=${endDate}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch analytics");
+      }
+
+      const data = await response.json();
+      setAnalytics(data);
+      setLastUpdated(new Date());
+    } catch (err: any) {
+      setError(err.message || "Error loading analytics");
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     if (!startDate || !endDate) return;
 
-    const fetchAnalytics = async () => {
-      setLoading(true);
-      setError(null);
+    // Initial fetch
+    fetchAnalytics(false);
 
-      try {
-        const token = localStorage.getItem("token");
-        const response = await fetch(
-          `http://localhost:8000/api/comprehensive-sales-analytics?start_date=${startDate}&end_date=${endDate}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+    // Setup auto-refresh if interval is provided
+    if (autoRefreshInterval > 0) {
+      const intervalId = setInterval(() => {
+        fetchAnalytics(true); // Background refresh - keeps old data visible
+      }, autoRefreshInterval);
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch analytics");
-        }
+      return () => clearInterval(intervalId);
+    }
+  }, [startDate, endDate, autoRefreshInterval]);
 
-        const data = await response.json();
-        setAnalytics(data);
-      } catch (err: any) {
-        setError(err.message || "Error loading analytics");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAnalytics();
-  }, [startDate, endDate]);
-
-  return { analytics, loading, error };
+  return {
+    analytics,
+    loading,
+    isRefreshing,
+    error,
+    lastUpdated,
+    refetch: () => fetchAnalytics(false),
+  };
 }

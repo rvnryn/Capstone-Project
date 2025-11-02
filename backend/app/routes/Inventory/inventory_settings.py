@@ -1,28 +1,77 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Request
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
 from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from app.utils.rbac import require_role
 from app.supabase import postgrest_client, get_db
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from app.routes.Inventory.master_inventory import CategoryEnum
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 
 class InventorySettingBase(BaseModel):
-    name: str
-    default_unit: Optional[str] = None
-    low_stock_threshold: Optional[int] = None
-    category: Optional[str] = None
+    """Inventory settings with comprehensive validation"""
+    name: str = Field(
+        ...,
+        min_length=2,
+        max_length=100,
+        description="Ingredient name (2-100 characters)"
+    )
+    default_unit: Optional[str] = Field(
+        None,
+        max_length=20,
+        description="Default unit (e.g., kg, pcs, L)"
+    )
+    low_stock_threshold: Optional[int] = Field(
+        None,
+        ge=0,
+        le=100000,
+        description="Low stock threshold (0-100,000)"
+    )
+    category: Optional[CategoryEnum] = Field(
+        None,
+        description="Ingredient category from predefined list"
+    )
+
+    @validator('name')
+    def validate_name(cls, v):
+        """Ensure name doesn't contain only whitespace"""
+        if not v or not v.strip():
+            raise ValueError('Name cannot be empty or only whitespace')
+        return v.strip()
+
+    @validator('default_unit')
+    def validate_default_unit(cls, v):
+        """Validate and sanitize default unit"""
+        if v is not None:
+            v = v.strip()
+            if len(v) == 0:
+                return None
+            if len(v) > 20:
+                raise ValueError('Default unit cannot exceed 20 characters')
+        return v
+
+    @validator('low_stock_threshold')
+    def validate_low_stock_threshold(cls, v):
+        """Validate threshold range"""
+        if v is not None:
+            if v < 0:
+                raise ValueError('Low stock threshold cannot be negative')
+            if v > 100000:
+                raise ValueError('Low stock threshold exceeds maximum (100,000)')
+        return v
 
 
 class InventorySettingCreate(InventorySettingBase):
+    """Create inventory setting"""
     pass
 
 
 class InventorySettingUpdate(InventorySettingBase):
+    """Update inventory setting"""
     pass
 
 

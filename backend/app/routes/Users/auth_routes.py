@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from slowapi.util import get_remote_address
 from slowapi import Limiter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator, EmailStr
 from app.services.auth_service import login_user
 import httpx
 import asyncio
@@ -10,14 +10,59 @@ from app.supabase import get_db
 from datetime import datetime
 from app.routes.Reports.UserActivity.userActivity import UserActivityLog
 from sqlalchemy.ext.asyncio import AsyncSession
+import re
 
 router = APIRouter()
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    """Login request with comprehensive validation"""
+    email: str = Field(
+        ...,
+        min_length=3,
+        max_length=100,
+        description="Email or username (3-100 characters)"
+    )
+    password: str = Field(
+        ...,
+        min_length=6,
+        max_length=100,
+        description="Password (6-100 characters)"
+    )
+
+    @validator('email')
+    def validate_email_or_username(cls, v):
+        """Validate email format or username"""
+        if not v or not v.strip():
+            raise ValueError('Email/username cannot be empty')
+
+        v = v.strip()
+
+        # If it contains @, validate as email
+        if '@' in v:
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_pattern, v):
+                raise ValueError('Invalid email format')
+        else:
+            # Validate as username (alphanumeric, underscore, hyphen)
+            if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+                raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
+            if len(v) < 3:
+                raise ValueError('Username must be at least 3 characters')
+
+        return v
+
+    @validator('password')
+    def validate_password(cls, v):
+        """Ensure password is not empty/whitespace"""
+        if not v or not v.strip():
+            raise ValueError('Password cannot be empty')
+        if len(v) < 6:
+            raise ValueError('Password must be at least 6 characters')
+        if len(v) > 100:
+            raise ValueError('Password is too long')
+        return v
 
 
 @limiter.limit("10/minute")
@@ -36,6 +81,21 @@ async def login(
             result = await db.execute(stmt)
             user = result.scalar_one_or_none()
             if not user:
+                # Log failed login attempt - username not found
+                try:
+                    failed_activity = UserActivityLog(
+                        user_id=None,
+                        action_type="failed login",
+                        description=f"Failed login attempt: Username '{identifier}' not found",
+                        activity_date=datetime.utcnow(),
+                        report_date=datetime.utcnow(),
+                        user_name="Unknown",
+                        role=None,
+                    )
+                    db.add(failed_activity)
+                    await db.commit()
+                except Exception as e:
+                    print(f"Failed to log failed login attempt: {e}")
                 raise HTTPException(status_code=404, detail="Username not found")
             identifier = user.email
             user_row = {
@@ -50,6 +110,21 @@ async def login(
             result = await db.execute(stmt)
             user = result.scalar_one_or_none()
             if not user:
+                # Log failed login attempt - email not found
+                try:
+                    failed_activity = UserActivityLog(
+                        user_id=None,
+                        action_type="failed login",
+                        description=f"Failed login attempt: Email '{identifier}' not found",
+                        activity_date=datetime.utcnow(),
+                        report_date=datetime.utcnow(),
+                        user_name="Unknown",
+                        role=None,
+                    )
+                    db.add(failed_activity)
+                    await db.commit()
+                except Exception as e:
+                    print(f"Failed to log failed login attempt: {e}")
                 raise HTTPException(status_code=404, detail="Email not found")
             user_row = {
                 "user_id": user.user_id,
@@ -69,6 +144,21 @@ async def login(
 
         result = await login_user(identifier, login_req.password)
         if not result or "user" not in result:
+            # Log failed login attempt - invalid password
+            try:
+                failed_activity = UserActivityLog(
+                    user_id=user_row.get("user_id"),
+                    action_type="failed login",
+                    description=f"Failed login attempt: Invalid password for user '{user_row.get('name')}' (email: {identifier})",
+                    activity_date=datetime.utcnow(),
+                    report_date=datetime.utcnow(),
+                    user_name=user_row.get("name"),
+                    role=user_row.get("user_role"),
+                )
+                db.add(failed_activity)
+                await db.commit()
+            except Exception as e:
+                print(f"Failed to log failed login attempt: {e}")
             raise HTTPException(status_code=401, detail="Invalid login credentials")
 
         supabase_user_id = result.get("user", {}).get("id") or result.get("user_id")
@@ -133,6 +223,8 @@ async def get_session(request: Request, db=Depends(get_db)):
 
     # Validate token with Supabase
     SUPABASE_URL = os.getenv("SUPABASE_URL")
+    if SUPABASE_URL and not SUPABASE_URL.startswith("http"):
+        SUPABASE_URL = "https://" + SUPABASE_URL
     SUPABASE_API_KEY = os.getenv("SUPABASE_KEY")
     url = f"{SUPABASE_URL}/auth/v1/user"
     headers = {
@@ -212,6 +304,8 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
 
     # Validate token with Supabase
     SUPABASE_URL = os.getenv("SUPABASE_URL")
+    if SUPABASE_URL and not SUPABASE_URL.startswith("http"):
+        SUPABASE_URL = "https://" + SUPABASE_URL
     SUPABASE_API_KEY = os.getenv("SUPABASE_KEY")
     url = f"{SUPABASE_URL}/auth/v1/user"
     headers = {
