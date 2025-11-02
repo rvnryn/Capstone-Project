@@ -161,10 +161,17 @@ for router in routers:
 @app.on_event("startup")
 async def schedule_backup_jobs():
     print("Starting backup job scheduling...")
-    async with SessionLocal() as session:
-        print("Session started for backup scheduling")
-        await load_and_schedule(session)
-    print("Backup job scheduling complete")
+    try:
+        async with SessionLocal() as session:
+            print("Session started for backup scheduling")
+            await load_and_schedule(session)
+        print("Backup job scheduling complete")
+    except Exception as e:
+        import traceback
+        print(f"[Startup Error] {e}")
+        traceback.print_exc()
+        # Optionally, re-raise to crash the app if desired
+        raise
 
 
 @app.get("/health")
