@@ -233,6 +233,240 @@ async def transfer_to_spoilage(
 		logger.exception("Error during transfer_to_spoilage")
 		raise HTTPException(status_code=500, detail="Internal server error")
 
+# Transfer from Today Inventory
+@limiter.limit("10/minute")
+@router.post("/inventory-today/{item_id}/{batch_date}/transfer-to-spoilage")
+async def transfer_today_to_spoilage(
+	request: Request,
+	item_id: int,
+	batch_date: str,
+	req: SpoilageRequest = Body(...),
+	user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+	db=Depends(get_db),
+):
+	try:
+		@run_blocking
+		def _fetch():
+			return (
+				postgrest_client.table("inventory_today")
+				.select("*")
+				.eq("item_id", item_id)
+				.eq("batch_date", batch_date)
+				.single()
+				.execute()
+			)
+		try:
+			response = await _fetch()
+			if not response.data:
+				raise HTTPException(status_code=404, detail="Today Inventory item not found for spoilage transfer")
+		except APIError as e:
+			if getattr(e, "code", None) == "PGRST116":
+				raise HTTPException(status_code=404, detail="Today Inventory item not found for spoilage transfer")
+			raise
+		item = response.data
+		if not item:
+			raise HTTPException(status_code=404, detail="Item not found in today inventory")
+		spoil_quantity = req.quantity
+		if spoil_quantity <= 0 or spoil_quantity > item["stock_quantity"]:
+			raise HTTPException(status_code=400, detail="Invalid spoilage quantity")
+		now = datetime.utcnow().isoformat()
+		spoilage_payload = {
+			"item_id": item["item_id"],
+			"item_name": item["item_name"],
+			"quantity_spoiled": spoil_quantity,
+			"spoilage_date": now[:10],
+			"reason": req.reason,
+			"user_id": getattr(user, "user_row", user).get("user_id"),
+			"batch_date": batch_date,
+			"expiration_date": item.get("expiration_date"),
+			"category": item.get("category"),
+			"created_at": now,
+			"updated_at": now,
+			"unit_cost": item.get("unit_cost", 0.00),
+		}
+		if "spoilage_id" in spoilage_payload:
+			del spoilage_payload["spoilage_id"]
+		@run_blocking
+		def _insert_spoilage():
+			return (
+				postgrest_client.table("inventory_spoilage").insert(spoilage_payload).execute()
+			)
+		spoilage_response = await _insert_spoilage()
+		new_stock = item["stock_quantity"] - spoil_quantity
+		if spoil_quantity >= item["stock_quantity"] or new_stock <= 0:
+			@run_blocking
+			def _delete_item():
+				return (
+					postgrest_client.table("inventory_today")
+					.delete()
+					.eq("item_id", item_id)
+					.eq("batch_date", batch_date)
+					.execute()
+				)
+			await _delete_item()
+		else:
+			threshold = await get_threshold_for_item(item["item_name"])
+			new_status = calculate_stock_status(new_stock, threshold)
+			@run_blocking
+			def _update():
+				return (
+					postgrest_client.table("inventory_today")
+					.update(
+						{
+							"stock_quantity": new_stock,
+							"stock_status": new_status,
+							"updated_at": now,
+						}
+					)
+					.eq("item_id", item_id)
+					.eq("batch_date", batch_date)
+					.execute()
+				)
+			await _update()
+		await log_user_activity(
+			db,
+			user,
+			"transfer today inventory to spoilage",
+			f"Transferred {spoil_quantity} of Id {item['item_id']} | item {item['item_name']} (Batch {batch_date}) to Spoilage. Reason: {req.reason or 'N/A'}",
+		)
+		try:
+			user_row = getattr(user, "user_row", user)
+			user_id = user_row.get("user_id") if isinstance(user_row, dict) else getattr(user_row, "user_id", None)
+			if user_id:
+				create_notification(
+					user_id=user_id,
+					type="transfer",
+					message=f"Spoilage: {spoil_quantity} units of {item['item_name']} transferred to spoilage. Reason: {req.reason or 'N/A'}"
+				)
+		except Exception as e:
+			logger.warning(f"Failed to create spoilage notification: {e}")
+		return {
+			"message": "Today Inventory item transferred to Spoilage",
+			"data": spoilage_response.data,
+		}
+	except HTTPException as he:
+		raise he
+	except Exception as e:
+		logger.exception("Error during transfer_today_to_spoilage")
+		raise HTTPException(status_code=500, detail="Internal server error")
+
+# Transfer from Surplus Inventory
+@limiter.limit("10/minute")
+@router.post("/inventory-surplus/{item_id}/{batch_date}/transfer-to-spoilage")
+async def transfer_surplus_to_spoilage(
+	request: Request,
+	item_id: int,
+	batch_date: str,
+	req: SpoilageRequest = Body(...),
+	user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+	db=Depends(get_db),
+):
+	try:
+		@run_blocking
+		def _fetch():
+			return (
+				postgrest_client.table("inventory_surplus")
+				.select("*")
+				.eq("item_id", item_id)
+				.eq("batch_date", batch_date)
+				.single()
+				.execute()
+			)
+		try:
+			response = await _fetch()
+			if not response.data:
+				raise HTTPException(status_code=404, detail="Surplus Inventory item not found for spoilage transfer")
+		except APIError as e:
+			if getattr(e, "code", None) == "PGRST116":
+				raise HTTPException(status_code=404, detail="Surplus Inventory item not found for spoilage transfer")
+			raise
+		item = response.data
+		if not item:
+			raise HTTPException(status_code=404, detail="Item not found in surplus inventory")
+		spoil_quantity = req.quantity
+		if spoil_quantity <= 0 or spoil_quantity > item["stock_quantity"]:
+			raise HTTPException(status_code=400, detail="Invalid spoilage quantity")
+		now = datetime.utcnow().isoformat()
+		spoilage_payload = {
+			"item_id": item["item_id"],
+			"item_name": item["item_name"],
+			"quantity_spoiled": spoil_quantity,
+			"spoilage_date": now[:10],
+			"reason": req.reason,
+			"user_id": getattr(user, "user_row", user).get("user_id"),
+			"batch_date": batch_date,
+			"expiration_date": item.get("expiration_date"),
+			"category": item.get("category"),
+			"created_at": now,
+			"updated_at": now,
+			"unit_cost": item.get("unit_cost", 0.00),
+		}
+		if "spoilage_id" in spoilage_payload:
+			del spoilage_payload["spoilage_id"]
+		@run_blocking
+		def _insert_spoilage():
+			return (
+				postgrest_client.table("inventory_spoilage").insert(spoilage_payload).execute()
+			)
+		spoilage_response = await _insert_spoilage()
+		new_stock = item["stock_quantity"] - spoil_quantity
+		if spoil_quantity >= item["stock_quantity"] or new_stock <= 0:
+			@run_blocking
+			def _delete_item():
+				return (
+					postgrest_client.table("inventory_surplus")
+					.delete()
+					.eq("item_id", item_id)
+					.eq("batch_date", batch_date)
+					.execute()
+				)
+			await _delete_item()
+		else:
+			threshold = await get_threshold_for_item(item["item_name"])
+			new_status = calculate_stock_status(new_stock, threshold)
+			@run_blocking
+			def _update():
+				return (
+					postgrest_client.table("inventory_surplus")
+					.update(
+						{
+							"stock_quantity": new_stock,
+							"stock_status": new_status,
+							"updated_at": now,
+						}
+					)
+					.eq("item_id", item_id)
+					.eq("batch_date", batch_date)
+					.execute()
+				)
+			await _update()
+		await log_user_activity(
+			db,
+			user,
+			"transfer surplus inventory to spoilage",
+			f"Transferred {spoil_quantity} of Id {item['item_id']} | item {item['item_name']} (Batch {batch_date}) to Spoilage. Reason: {req.reason or 'N/A'}",
+		)
+		try:
+			user_row = getattr(user, "user_row", user)
+			user_id = user_row.get("user_id") if isinstance(user_row, dict) else getattr(user_row, "user_id", None)
+			if user_id:
+				create_notification(
+					user_id=user_id,
+					type="transfer",
+					message=f"Spoilage: {spoil_quantity} units of {item['item_name']} transferred to spoilage. Reason: {req.reason or 'N/A'}"
+				)
+		except Exception as e:
+			logger.warning(f"Failed to create spoilage notification: {e}")
+		return {
+			"message": "Surplus Inventory item transferred to Spoilage",
+			"data": spoilage_response.data,
+		}
+	except HTTPException as he:
+		raise he
+	except Exception as e:
+		logger.exception("Error during transfer_surplus_to_spoilage")
+		raise HTTPException(status_code=500, detail="Internal server error")
+
 @limiter.limit("10/minute")
 @router.delete("/inventory-spoilage/{spoilage_id}")
 async def delete_spoilage_item(

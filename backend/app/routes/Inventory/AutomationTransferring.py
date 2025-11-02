@@ -294,7 +294,7 @@ async def wait_until_6am():
 
 async def wait_until_10pm():
     now = datetime.now()
-    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=23, minutes=00)
+    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=7, minutes=41)
     if now >= today_10pm:
         today_10pm += timedelta(days=1)
     seconds_until_10pm = (today_10pm - now).total_seconds()
