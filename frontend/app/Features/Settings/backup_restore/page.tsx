@@ -1,6 +1,15 @@
 "use client";
-import { FaDatabase, FaEye, FaEyeSlash } from "react-icons/fa";
-import { useRef, useState, useEffect } from "react";
+import {
+  FaDatabase,
+  FaEye,
+  FaEyeSlash,
+  FaDownload,
+  FaUpload,
+  FaHistory,
+  FaClock,
+  FaTrash,
+} from "react-icons/fa";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useBackupSchedule,
@@ -10,7 +19,8 @@ import { useBackupRestoreAPI } from "./hook/use-BackupRestoreAPI";
 
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
-import { FiCheck } from "react-icons/fi";
+import { FiCheck, FiAlertCircle } from "react-icons/fi";
+import Pagination from "@/app/components/Pagination";
 
 export default function BackupRestorePage() {
   // Robust offline/cached state
@@ -43,6 +53,10 @@ export default function BackupRestorePage() {
   const [scheduleLoaded, setScheduleLoaded] = useState(false);
   const [scheduleMsg, setScheduleMsg] = useState("");
   const initialSettingsRef = useRef<any>(null);
+
+  // Pagination state for backup history
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Initialize UI state from backend schedule
   useEffect(() => {
@@ -115,6 +129,19 @@ export default function BackupRestorePage() {
     };
     fetchHistory();
   }, []);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(history.length / itemsPerPage);
+  const paginatedHistory = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return history.slice(startIndex, endIndex);
+  }, [history, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when history changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [history]);
 
   // Manual backup handler
   const handleBackup = async () => {
@@ -301,107 +328,150 @@ export default function BackupRestorePage() {
                   Manage your backup and restore settings.
                 </p>
               </header>
-              {/* Manual Backup */}
+              {/* Manual Backup & Restore */}
               <section className="mb-8" aria-label="Manual Backup">
-                <span className="text-lg font-semibold text-yellow-300 mb-1">
-                  Manual Backup
-                </span>
-                <div className="flex flex-col gap-3 w-full max-w-xs">
-                  <button
-                    className={`bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-2 rounded-lg font-semibold shadow transition-all duration-200 flex items-center gap-2 ${
-                      isBackingUp ? "opacity-60 cursor-not-allowed" : ""
-                    }`}
-                    onClick={handleBackup}
-                    disabled={isBackingUp}
-                    title="Download a backup of your data now"
-                    aria-label="Backup Now"
-                  >
-                    {isBackingUp ? "Backing up..." : "Download Backup"}
-                  </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Backup Card */}
+                  <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-xl p-6 border border-gray-700/50 hover:border-yellow-400/30 transition-all duration-300">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="bg-yellow-400/10 p-3 rounded-lg">
+                        <FaDownload className="text-yellow-400 text-xl" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-yellow-300">
+                          Create Backup
+                        </h3>
+                        <p className="text-xs text-gray-400">
+                          Download your data instantly
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      className={`w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-yellow-400/50 transition-all duration-300 flex items-center justify-center gap-2 ${
+                        isBackingUp ? "opacity-60 cursor-not-allowed" : ""
+                      }`}
+                      onClick={handleBackup}
+                      disabled={isBackingUp}
+                      title="Download a backup of your data now"
+                      aria-label="Backup Now"
+                    >
+                      <FaDownload className="text-lg" />
+                      {isBackingUp ? "Creating Backup..." : "Download Backup"}
+                    </button>
+                  </div>
 
-                  <span className="text-lg font-semibold text-yellow-300 mb-1">
-                    Restore Backup
-                  </span>
-                  <button
-                    className={`bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-2 rounded-lg font-semibold shadow transition-all duration-200 flex items-center gap-2 ${
-                      isRestoring ? "opacity-60 cursor-not-allowed" : ""
-                    }`}
-                    onClick={handleLocalRestoreClick}
-                    disabled={isRestoring}
-                    title="Restore from a local backup file"
-                    aria-label="Restore from Local Backup"
-                  >
-                    {isRestoring ? "Restoring..." : "Restore from Local Backup"}
-                  </button>
-                  {/* Modal for restoring from local backup directory */}
-                  {localRestoreModalOpen && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
-                      <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border-2 border-yellow-400/70">
-                        <div className="flex justify-center mb-2 xs:mb-3 sm:mb-4">
-                          <div className="relative">
-                            <div className="absolute inset-0 bg-yellow-400/20 rounded-full blur-lg xs:blur-xl"></div>
-                            <div className="relative bg-gradient-to-br from-yellow-400 to-yellow-500 p-2 xs:p-3 sm:p-4 rounded-full">
-                              <FaDatabase className="text-black text-lg xs:text-xl sm:text-2xl md:text-3xl" />
-                            </div>
-                          </div>
-                        </div>
-                        <h2 className="text-base xs:text-lg sm:text-xl md:text-2xl font-bold text-transparent bg-gradient-to-r from-yellow-400 to-yellow-500 bg-clip-text font-poppins">
-                          Restore from Local Backup
-                        </h2>
-                        <div className="flex flex-col gap-4 items-center">
-                          <input
-                            type="file"
-                            accept=".enc,.json,.gz,.zip,.bak"
-                            className="w-full px-4 py-2 rounded-lg bg-gray-900 text-yellow-200 border-2 border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-lg"
-                            onChange={(e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                setLocalRestoreFile(e.target.files[0]);
-                                setLocalRestoreFilename(e.target.files[0].name);
-                              } else {
-                                setLocalRestoreFile(null);
-                                setLocalRestoreFilename("");
-                              }
-                            }}
-                            autoFocus
-                          />
-                          <input
-                            type="password"
-                            className="w-full px-4 py-2 rounded-lg bg-gray-900 text-yellow-200 border-2 border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-lg"
-                            value={localRestorePassword}
-                            onChange={(e) =>
-                              setLocalRestorePassword(e.target.value)
-                            }
-                            placeholder="Password"
-                          />
-                          <div className="flex flex-col sm:flex-row justify-center gap-4 w-full">
-                            <button
-                              onClick={handleLocalRestore}
-                              className="flex items-center justify-center gap-1 xs:gap-2 px-6 py-2 rounded-lg border-2 border-yellow-400/70 text-yellow-400 hover:bg-yellow-400 hover:text-black font-semibold transition-all duration-300 cursor-pointer text-base"
-                              disabled={isRestoring}
-                            >
-                              {isRestoring ? "Restoring..." : "Restore"}
-                            </button>
-                            <button
-                              onClick={() => {
-                                setLocalRestoreModalOpen(false);
-                                setLocalRestoreFilename("");
-                                setLocalRestorePassword("");
-                              }}
-                              className="flex items-center justify-center gap-1 xs:gap-2 px-6 py-2 rounded-lg border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold transition-all duration-300 cursor-pointer text-base"
-                            >
-                              Cancel
-                            </button>
+                  {/* Restore Card */}
+                  <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-xl p-6 border border-gray-700/50 hover:border-yellow-400/30 transition-all duration-300">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="bg-yellow-400/10 p-3 rounded-lg">
+                        <FaUpload className="text-yellow-400 text-xl" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-yellow-300">
+                          Restore Backup
+                        </h3>
+                        <p className="text-xs text-gray-400">
+                          Upload a backup file to restore
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      className={`w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-yellow-400/50 transition-all duration-300 flex items-center justify-center gap-2 ${
+                        isRestoring ? "opacity-60 cursor-not-allowed" : ""
+                      }`}
+                      onClick={handleLocalRestoreClick}
+                      disabled={isRestoring}
+                      title="Restore from a local backup file"
+                      aria-label="Restore from Local Backup"
+                    >
+                      <FaUpload className="text-lg" />
+                      {isRestoring ? "Restoring..." : "Upload & Restore"}
+                    </button>
+                  </div>
+                </div>
+                {/* Modal for restoring from local backup directory */}
+                {localRestoreModalOpen && (
+                  <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+                    <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-8 rounded-3xl shadow-2xl text-center space-y-8 max-w-md w-full border-2 border-yellow-400/70">
+                      <div className="flex justify-center mb-2 xs:mb-3 sm:mb-4">
+                        <div className="relative">
+                          <div className="absolute inset-0 bg-yellow-400/20 rounded-full blur-lg xs:blur-xl"></div>
+                          <div className="relative bg-gradient-to-br from-yellow-400 to-yellow-500 p-2 xs:p-3 sm:p-4 rounded-full">
+                            <FaDatabase className="text-black text-lg xs:text-xl sm:text-2xl md:text-3xl" />
                           </div>
                         </div>
                       </div>
+                      <h2 className="text-base xs:text-lg sm:text-xl md:text-2xl font-bold text-transparent bg-gradient-to-r from-yellow-400 to-yellow-500 bg-clip-text font-poppins">
+                        Restore from Local Backup
+                      </h2>
+                      <div className="flex flex-col gap-4 items-center">
+                        <input
+                          type="file"
+                          accept=".enc,.json,.gz,.zip,.bak"
+                          className="w-full px-4 py-2 rounded-lg bg-gray-900 text-yellow-200 border-2 border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-lg"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              setLocalRestoreFile(e.target.files[0]);
+                              setLocalRestoreFilename(e.target.files[0].name);
+                            } else {
+                              setLocalRestoreFile(null);
+                              setLocalRestoreFilename("");
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <input
+                          type="password"
+                          className="w-full px-4 py-2 rounded-lg bg-gray-900 text-yellow-200 border-2 border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-lg"
+                          value={localRestorePassword}
+                          onChange={(e) =>
+                            setLocalRestorePassword(e.target.value)
+                          }
+                          placeholder="Password"
+                        />
+                        <div className="flex flex-col sm:flex-row justify-center gap-4 w-full">
+                          <button
+                            onClick={handleLocalRestore}
+                            className="flex items-center justify-center gap-1 xs:gap-2 px-6 py-2 rounded-lg border-2 border-yellow-400/70 text-yellow-400 hover:bg-yellow-400 hover:text-black font-semibold transition-all duration-300 cursor-pointer text-base"
+                            disabled={isRestoring}
+                          >
+                            {isRestoring ? "Restoring..." : "Restore"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setLocalRestoreModalOpen(false);
+                              setLocalRestoreFilename("");
+                              setLocalRestorePassword("");
+                            }}
+                            className="flex items-center justify-center gap-1 xs:gap-2 px-6 py-2 rounded-lg border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold transition-all duration-300 cursor-pointer text-base"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
                 {restoreMsg && (
-                  <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
-                    <div className="flex items-center gap-2 xs:gap-3">
-                      <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
+                  <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-[60] animate-fadein">
+                    <div className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 border border-green-400/30">
+                      <div className="bg-white/20 p-2 rounded-full">
+                        <FiCheck className="text-white text-lg" />
+                      </div>
+                      <span className="font-semibold text-sm">
                         {restoreMsg}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {restoreError && (
+                  <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-[60] animate-fadein">
+                    <div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 border border-red-400/30">
+                      <div className="bg-white/20 p-2 rounded-full">
+                        <FiAlertCircle className="text-white text-lg" />
+                      </div>
+                      <span className="font-semibold text-sm">
+                        {restoreError}
                       </span>
                     </div>
                   </div>
@@ -410,138 +480,100 @@ export default function BackupRestorePage() {
 
               {/* Automatic Backup Settings */}
               <section className="mb-8" aria-label="Automatic Backup Settings">
-                <span className="text-lg font-semibold text-yellow-300 mb-1 block">
-                  Automatic Backup Settings
-                </span>
-                <div className="flex items-center mb-4">
-                  <label className="mr-4">Enable Automatic Backup</label>
-                  <input
-                    type="checkbox"
-                    checked={autoBackup}
-                    onChange={() => setAutoBackup((prev) => !prev)}
-                    className="w-6 h-6 accent-yellow-400 border-2 border-yellow-400 rounded focus:ring-2 focus:ring-yellow-300 outline-none"
-                    style={{ accentColor: "#FFD600" }}
-                    title="Enable or disable automatic backups"
-                    aria-label="Enable automatic backup"
-                    disabled={scheduleLoading}
-                  />
-                  <button
-                    className="ml-4 px-4 py-2 rounded-lg bg-yellow-400 text-black font-semibold"
-                    onClick={handleSaveSchedule}
-                    disabled={scheduleLoading}
-                  >
-                    Save
-                  </button>
+                <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-xl p-6 border border-gray-700/50">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="bg-yellow-400/10 p-3 rounded-lg">
+                      <FaClock className="text-yellow-400 text-xl" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-yellow-300">
+                        Automatic Backup Schedule
+                      </h3>
+                      <p className="text-xs text-gray-400">
+                        Configure automated backup frequency
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mb-6 p-4 bg-gray-900/50 rounded-lg border border-gray-700/30">
+                    <div className="flex items-center gap-3">
+                      <label className="text-white font-medium">
+                        Enable Automatic Backup
+                      </label>
+                      <input
+                        type="checkbox"
+                        checked={autoBackup}
+                        onChange={() => setAutoBackup((prev) => !prev)}
+                        className="w-5 h-5 accent-yellow-400 border-2 border-yellow-400 rounded focus:ring-2 focus:ring-yellow-300 outline-none cursor-pointer"
+                        style={{ accentColor: "#FFD600" }}
+                        title="Enable or disable automatic backups"
+                        aria-label="Enable automatic backup"
+                        disabled={scheduleLoading}
+                      />
+                    </div>
+                    <button
+                      className="px-6 py-2 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black font-semibold shadow-lg hover:shadow-yellow-400/50 transition-all duration-300"
+                      onClick={handleSaveSchedule}
+                      disabled={scheduleLoading}
+                    >
+                      Save Schedule
+                    </button>
+                  </div>
                   {/* Success Message */}
                   {scheduleMsg && (
-                    <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 flex items-center gap-2">
-                      <div className="flex items-center gap-2 xs:gap-3">
-                        <div className="w-5 xs:w-6 h-5 xs:h-6 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-                          <FiCheck className="w-3 xs:w-4 h-3 xs:h-4 text-white" />
+                    <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-[60] animate-fadein">
+                      <div className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 border border-green-400/30">
+                        <div className="bg-white/20 p-2 rounded-full">
+                          <FiCheck className="text-white text-lg" />
                         </div>
-                        <span className="font-medium xs:font-semibold text-xs xs:text-sm sm:text-base leading-tight">
+                        <span className="font-semibold text-sm">
                           {scheduleMsg}
                         </span>
                       </div>
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 max-w-xl">
-                  <div className="flex items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
                     <label
-                      className="text-yellow-100 w-40"
+                      className="text-yellow-100 text-sm font-medium"
                       htmlFor="frequency-select"
                     >
-                      Backup Frequency:
+                      Backup Frequency
                     </label>
                     <select
                       id="frequency-select"
-                      className={`px-3 py-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+                      className={`px-4 py-3 rounded-lg border focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all ${
                         !autoBackup
-                          ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                          : "bg-gray-800 text-white"
+                          ? "bg-gray-700/50 text-gray-400 cursor-not-allowed border-gray-600"
+                          : "bg-gray-800/80 text-white border-gray-600 hover:border-yellow-400/50"
                       }`}
                       value={frequency}
                       onChange={(e) => setFrequency(e.target.value)}
                       disabled={!autoBackup}
                       aria-disabled={!autoBackup}
                     >
-                      <option value="">-</option>
+                      <option value="">Select frequency</option>
                       <option value="daily">Daily</option>
                       <option value="weekly">Weekly</option>
                       <option value="monthly">Monthly</option>
                     </select>
                   </div>
-                  <div className="flex items-center">
+
+                  <div className="flex flex-col gap-2">
                     <label
-                      className="text-yellow-100 w-40"
-                      htmlFor="dayofweek-select"
-                    >
-                      Day of Week:
-                    </label>
-                    <select
-                      id="dayofweek-select"
-                      className={`px-3 py-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
-                        !autoBackup || frequency !== "weekly"
-                          ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                          : "bg-gray-800 text-white"
-                      }`}
-                      value={dayOfWeek}
-                      onChange={(e) => setDayOfWeek(e.target.value)}
-                      disabled={!autoBackup || frequency !== "weekly"}
-                      aria-disabled={!autoBackup || frequency !== "weekly"}
-                    >
-                      <option value="">-</option>
-                      <option value="monday">Monday</option>
-                      <option value="tuesday">Tuesday</option>
-                      <option value="wednesday">Wednesday</option>
-                      <option value="thursday">Thursday</option>
-                      <option value="friday">Friday</option>
-                      <option value="saturday">Saturday</option>
-                      <option value="sunday">Sunday</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center">
-                    <label
-                      className="text-yellow-100 w-40"
-                      htmlFor="dayofmonth-select"
-                    >
-                      Day of Month:
-                    </label>
-                    <select
-                      id="dayofmonth-select"
-                      className={`px-3 py-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
-                        !autoBackup || frequency !== "monthly"
-                          ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                          : "bg-gray-800 text-white"
-                      }`}
-                      value={dayOfMonth}
-                      onChange={(e) => setDayOfMonth(e.target.value)}
-                      disabled={!autoBackup || frequency !== "monthly"}
-                      aria-disabled={!autoBackup || frequency !== "monthly"}
-                    >
-                      <option value="">-</option>
-                      {[...Array(31)].map((_, i) => (
-                        <option key={i + 1} value={i + 1}>
-                          {i + 1}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-center">
-                    <label
-                      className="text-yellow-100 w-40 pr-2"
+                      className="text-yellow-100 text-sm font-medium"
                       htmlFor="timeofday-select"
                     >
-                      Time:
+                      Time
                     </label>
                     <input
                       id="timeofday-select"
                       type="time"
-                      className={`px-2 py-2 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+                      className={`px-4 py-3 rounded-lg border focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all ${
                         !autoBackup
-                          ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                          : "bg-gray-800 text-white"
+                          ? "bg-gray-700/50 text-gray-400 cursor-not-allowed border-gray-600"
+                          : "bg-gray-800/80 text-white border-gray-600 hover:border-yellow-400/50"
                       }`}
                       value={timeOfDay}
                       onChange={(e) => setTimeOfDay(e.target.value)}
@@ -549,76 +581,195 @@ export default function BackupRestorePage() {
                       aria-disabled={!autoBackup}
                     />
                   </div>
+
+                  {frequency === "weekly" && (
+                    <div className="flex flex-col gap-2">
+                      <label
+                        className="text-yellow-100 text-sm font-medium"
+                        htmlFor="dayofweek-select"
+                      >
+                        Day of Week
+                      </label>
+                      <select
+                        id="dayofweek-select"
+                        className={`px-4 py-3 rounded-lg border focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all ${
+                          !autoBackup || frequency !== "weekly"
+                            ? "bg-gray-700/50 text-gray-400 cursor-not-allowed border-gray-600"
+                            : "bg-gray-800/80 text-white border-gray-600 hover:border-yellow-400/50"
+                        }`}
+                        value={dayOfWeek}
+                        onChange={(e) => setDayOfWeek(e.target.value)}
+                        disabled={!autoBackup || frequency !== "weekly"}
+                        aria-disabled={!autoBackup || frequency !== "weekly"}
+                      >
+                        <option value="">Select day</option>
+                        <option value="monday">Monday</option>
+                        <option value="tuesday">Tuesday</option>
+                        <option value="wednesday">Wednesday</option>
+                        <option value="thursday">Thursday</option>
+                        <option value="friday">Friday</option>
+                        <option value="saturday">Saturday</option>
+                        <option value="sunday">Sunday</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {frequency === "monthly" && (
+                    <div className="flex flex-col gap-2">
+                      <label
+                        className="text-yellow-100 text-sm font-medium"
+                        htmlFor="dayofmonth-select"
+                      >
+                        Day of Month
+                      </label>
+                      <select
+                        id="dayofmonth-select"
+                        className={`px-4 py-3 rounded-lg border focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all ${
+                          !autoBackup || frequency !== "monthly"
+                            ? "bg-gray-700/50 text-gray-400 cursor-not-allowed border-gray-600"
+                            : "bg-gray-800/80 text-white border-gray-600 hover:border-yellow-400/50"
+                        }`}
+                        value={dayOfMonth}
+                        onChange={(e) => setDayOfMonth(e.target.value)}
+                        disabled={!autoBackup || frequency !== "monthly"}
+                        aria-disabled={!autoBackup || frequency !== "monthly"}
+                      >
+                        <option value="">Select day</option>
+                        {[...Array(31)].map((_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {i + 1}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               </section>
               {/* Backup History Section */}
               <section className="mb-8" aria-label="Backup History">
-                <span className="text-lg font-semibold text-yellow-300 mb-1 block">
-                  Backup History
-                </span>
-                <div className="overflow-x-auto rounded-lg border border-gray-800/50 bg-gray-900/80 mt-2">
-                  <table className="min-w-full text-sm text-left">
-                    <thead>
-                      <tr className="bg-gray-800 text-yellow-300">
-                        <th className="px-4 py-2">Filename</th>
-                        <th className="px-4 py-2">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {historyLoading && (
-                        <tr>
-                          <td
-                            colSpan={2}
-                            className="px-4 py-2 text-yellow-200 text-center"
-                          >
-                            Loading...
-                          </td>
+                <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-xl p-6 border border-gray-700/50">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="bg-yellow-400/10 p-3 rounded-lg">
+                      <FaHistory className="text-yellow-400 text-xl" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-yellow-300">
+                        Backup History
+                      </h3>
+                      <p className="text-xs text-gray-400">
+                        View and manage your backup files
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-hidden rounded-lg border border-gray-700/50 bg-gray-900/50">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-800/80 border-b border-gray-700/50">
+                          <th className="px-6 py-4 text-left text-yellow-300 font-semibold">
+                            <div className="flex items-center gap-2">
+                              <FaDatabase className="text-yellow-400" />
+                              Filename
+                            </div>
+                          </th>
+                          <th className="px-6 py-4 text-right text-yellow-300 font-semibold">
+                            Actions
+                          </th>
                         </tr>
-                      )}
-                      {!historyLoading && history.length === 0 && (
-                        <tr>
-                          <td
-                            colSpan={2}
-                            className="px-4 py-2 text-gray-400 text-center"
-                          >
-                            No backups found.
-                          </td>
-                        </tr>
-                      )}
-                      {!historyLoading &&
-                        history.length > 0 &&
-                        history.map((filename: string) => (
-                          <tr
-                            key={filename}
-                            className="border-t border-gray-700"
-                          >
-                            <td className="px-4 py-2">{filename}</td>
-                            <td className="px-4 py-2 flex gap-2">
-                              <button
-                                className="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-300 text-xs font-semibold"
-                                onClick={() => handleHistoryRestore(filename)}
-                                disabled={isRestoring}
-                              >
-                                Restore
-                              </button>
-                              <button
-                                className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-400 text-xs font-semibold"
-                                onClick={() => handleRemoveBackup(filename)}
-                                disabled={removingBackup === filename}
-                              >
-                                {removingBackup === filename
-                                  ? "Removing..."
-                                  : "Remove"}
-                              </button>
+                      </thead>
+                      <tbody>
+                        {historyLoading && (
+                          <tr>
+                            <td colSpan={2} className="px-6 py-12 text-center">
+                              <div className="flex flex-col items-center gap-3">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-400"></div>
+                                <span className="text-gray-400">
+                                  Loading backup history...
+                                </span>
+                              </div>
                             </td>
                           </tr>
-                        ))}
-                    </tbody>
-                  </table>
+                        )}
+                        {!historyLoading && history.length === 0 && (
+                          <tr>
+                            <td colSpan={2} className="px-6 py-12 text-center">
+                              <div className="flex flex-col items-center gap-3">
+                                <FiAlertCircle className="text-gray-500 text-3xl" />
+                                <span className="text-gray-400">
+                                  No backups found.
+                                </span>
+                                <p className="text-xs text-gray-500">
+                                  Create your first backup to get started
+                                </p>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {!historyLoading &&
+                          paginatedHistory.length > 0 &&
+                          paginatedHistory.map((filename: string) => (
+                            <tr
+                              key={filename}
+                              className="border-t border-gray-700/30 hover:bg-gray-800/30 transition-colors"
+                            >
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="bg-yellow-400/10 p-2 rounded">
+                                    <FaDatabase className="text-yellow-400 text-sm" />
+                                  </div>
+                                  <span className="text-white font-mono text-sm">
+                                    {filename}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex gap-2 justify-end">
+                                  <button
+                                    className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black px-4 py-2 rounded-lg font-semibold text-xs shadow-lg hover:shadow-yellow-400/50 transition-all duration-300 flex items-center gap-2"
+                                    onClick={() =>
+                                      handleHistoryRestore(filename)
+                                    }
+                                    disabled={isRestoring}
+                                  >
+                                    <FaUpload className="text-xs" />
+                                    Restore
+                                  </button>
+                                  <button
+                                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-lg font-semibold text-xs shadow-lg hover:shadow-red-500/50 transition-all duration-300 flex items-center gap-2"
+                                    onClick={() => handleRemoveBackup(filename)}
+                                    disabled={removingBackup === filename}
+                                  >
+                                    <FaTrash className="text-xs" />
+                                    {removingBackup === filename
+                                      ? "Removing..."
+                                      : "Remove"}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+
+                    {/* Pagination for Backup History */}
+                    {history.length > 0 && (
+                      <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                        itemsPerPage={itemsPerPage}
+                        totalItems={history.length}
+                        onItemsPerPageChange={setItemsPerPage}
+                      />
+                    )}
+                  </div>
+                  <div className="px-6 py-3 bg-gray-800/50 border-t border-gray-700/50">
+                    <p className="text-gray-400 text-xs flex items-center gap-2">
+                      <FiAlertCircle className="text-yellow-400" />
+                      Backup files are stored securely in your Supabase storage
+                    </p>
+                  </div>
                 </div>
-                <p className="text-gray-400 text-xs mt-2">
-                  * This table lists your recent Supabase backups.
-                </p>
               </section>
               {modalOpen && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">

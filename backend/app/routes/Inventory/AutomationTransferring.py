@@ -10,6 +10,11 @@ router = APIRouter()
 
 from app.supabase import SyncSessionLocal
 
+# Track last execution dates to prevent multiple runs per day
+last_surplus_to_today_run = None
+last_today_to_surplus_run = None
+last_master_to_today_run = None
+
 from app.routes.Inventory.master_inventory import (
     run_blocking,
     get_threshold_for_item,
@@ -132,7 +137,7 @@ async def fifo_transfer_to_today_with_surplus_first(item_name: str, quantity_nee
                 "expiration_date": surplus_item.get("expiration_date"),
                 "created_at": now,
                 "updated_at": now,
-                "unit_price": surplus_item.get("unit_price"),
+                "unit_cost": surplus_item.get("unit_cost", 0.00),
             }
 
             @run_blocking
@@ -228,7 +233,7 @@ async def fifo_transfer_to_today_with_surplus_first(item_name: str, quantity_nee
                     "expiration_date": master_item.get("expiration_date"),
                     "created_at": now,
                     "updated_at": now,
-                    "unit_price": master_item.get("unit_price"),
+                    "unit_cost": master_item.get("unit_cost", 0.00),
                 }
 
                 @run_blocking
@@ -280,7 +285,7 @@ async def fifo_transfer_to_today_with_surplus_first(item_name: str, quantity_nee
 
 async def wait_until_6am():
     now = datetime.now()
-    today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=15, minutes=34)
+    today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=2, minutes=48)
     if now >= today_6am:
         today_6am += timedelta(days=1)
     seconds_until_6am = (today_6am - now).total_seconds()
@@ -288,137 +293,176 @@ async def wait_until_6am():
 
 async def wait_until_10pm():
     now = datetime.now()
-    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=2, minutes=38)
+    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=2, minutes=49)
     if now >= today_10pm:
         today_10pm += timedelta(days=1)
     seconds_until_10pm = (today_10pm - now).total_seconds()
     await asyncio.sleep(seconds_until_10pm)
 
-# @router.on_event("startup")
-# @repeat_every(seconds=86400)  # Run every 24 hours
-# async def auto_transfer_master_to_today_top_selling() -> None:
-#     try:
-#         # Wait until 6am before first run (same as surplus-to-today)
-#         await wait_until_6am()
-#         now = datetime.utcnow().isoformat()
-#         today = datetime.utcnow().date()
+@router.on_event("startup")
+@repeat_every(seconds=86400)  # Run every 24 hours
+async def auto_transfer_master_to_today_top_selling() -> None:
+    """
+    FIXED VERSION: Auto-transfer ingredients for top selling menu items at 6 AM daily.
+    Uses actual sales data from sales_report table and calculates quantities based on 7-day average.
+    """
+    global last_master_to_today_run
+    try:
+        # Wait until 6am before first run
+        await wait_until_6am()
 
-#         # 1. Get top selling menu items from sales in the last 7 days
-#         @run_blocking
-#         def _fetch_top_selling():
-#             sales_res = postgrest_client.table("sales") \
-#                 .select("menu_id,quantity_sold") \
-#                 .gte("sale_date", (today - timedelta(days=7)).isoformat()) \
-#                 .execute()
-#             sales_data = sales_res.data or []
-#             from collections import Counter
-#             counter = Counter()
-#             for sale in sales_data:
-#                 counter[sale["menu_id"]] += sale.get("quantity_sold", 0)
-#             top_menu_ids = [menu_id for menu_id, _ in counter.most_common(5)]
-#             return top_menu_ids
+        # Check if already ran today
+        today = datetime.utcnow().date()
+        if last_master_to_today_run == today:
+            logger.info(f"Master to today transfer already ran today ({today}), skipping...")
+            return
 
-#         top_menu_ids = await _fetch_top_selling()
+        now = datetime.utcnow().isoformat()
+        last_7_days = (today - timedelta(days=7)).isoformat()
 
-#         # 2. For each top menu, get required ingredients and quantities
-#         for menu_id in top_menu_ids:
-#             @run_blocking
-#             def _fetch_ingredients():
-#                 res = postgrest_client.table("menu_ingredients") \
-#                     .select("*") \
-#                     .eq("menu_id", menu_id) \
-#                     .execute()
-#                 return res.data or []
-#             ingredients = await _fetch_ingredients()
+        logger.info(f"Starting auto transfer from master/surplus to today for top selling items at {now}")
 
-#             for ing in ingredients:
-#                 item_id = ing.get("ingredient_id")
-#                 qty_needed = ing.get("qty_per_portion", 1) * 10  # Example: enough for 10 portions
+        # 1. Get top selling menu items from sales_report (FIXED)
+        @run_blocking
+        def _fetch_top_selling():
+            sales_res = postgrest_client.table("sales_report") \
+                .select("item_name,quantity") \
+                .gte("sale_date", last_7_days) \
+                .execute()
+            sales_data = sales_res.data or []
 
-#                 # Fetch all batches FIFO
-#                 @run_blocking
-#                 def _fetch_master_batches():
-#                     res = postgrest_client.table("inventory") \
-#                         .select("*") \
-#                         .eq("item_id", item_id) \
-#                         .order("batch_date", asc=True) \
-#                         .execute()
-#                     return res.data or []
-#                 master_batches = await _fetch_master_batches()
+            from collections import Counter
+            counter = Counter()
+            for sale in sales_data:
+                item_name = sale.get("item_name")
+                qty = sale.get("quantity", 0)
+                counter[item_name] += qty
 
-#                 qty_to_transfer = qty_needed
-#                 for master_item in master_batches:
-#                     if qty_to_transfer <= 0:
-#                         break
-#                     available_qty = master_item.get("stock_quantity", 0)
-#                     transfer_quantity = min(qty_to_transfer, available_qty)
-#                     if transfer_quantity <= 0:
-#                         continue
+            # Get top 5 selling items
+            top_items = [item_name for item_name, _ in counter.most_common(5)]
+            return top_items, counter
 
-#                     threshold = await get_threshold_for_item(master_item["item_name"])
-#                     transfer_status = calculate_stock_status(transfer_quantity, threshold)
-#                     payload = {
-#                         "item_id": master_item["item_id"],
-#                         "item_name": master_item["item_name"],
-#                         "batch_date": master_item.get("batch_date"),
-#                         "category": master_item.get("category"),
-#                         "stock_status": transfer_status,
-#                         "stock_quantity": transfer_quantity,
-#                         "expiration_date": master_item.get("expiration_date"),
-#                         "updated_at": now,
-#                         "unit_price": master_item.get("unit_price"),
-#                         "created_at": now,
-#                     }
+        top_items, sales_counter = await _fetch_top_selling()
 
-#                     # Upsert to today inventory
-#                     @run_blocking
-#                     def _upsert_today():
-#                         return (
-#                             postgrest_client.table("inventory_today")
-#                             .upsert([payload], on_conflict=["item_id", "batch_date"])
-#                             .execute()
-#                         )
-#                     await _upsert_today()
+        if not top_items:
+            logger.info("No top selling items found in last 7 days")
+            last_master_to_today_run = today
+            return
 
-#                     # Deduct from master inventory
-#                     new_master_qty = available_qty - transfer_quantity
-#                     @run_blocking
-#                     def _update_master():
-#                         return postgrest_client.table("inventory") \
-#                             .update({"stock_quantity": new_master_qty}) \
-#                             .eq("item_id", master_item["item_id"]) \
-#                             .eq("batch_date", master_item.get("batch_date")) \
-#                             .execute()
-#                     await _update_master()
+        logger.info(f"Top 5 selling items: {top_items}")
 
-#                     # Log activity
-#                     db = SyncSessionLocal()
-#                     try:
-#                         description = (
-#                             f"Auto-transferred {transfer_quantity} of Id {master_item['item_id']} | item {master_item['item_name']} "
-#                             f"from master inventory to today inventory for top selling menu {menu_id} at 6am."
-#                         )
-#                         log_user_activity(
-#                             db=db,
-#                             user={"user_id": 0, "name": "System", "user_role": "System"},
-#                             action_type="auto transfer master to today for top selling",
-#                             description=description,
-#                         )
-#                     finally:
-#                         db.close()
+        # 2. For each top item, get required ingredients
+        total_transfers = 0
+        for item_name in top_items:
+            # Get menu_id from menu table
+            @run_blocking
+            def _fetch_menu():
+                res = postgrest_client.table("menu") \
+                    .select("menu_id,dish_name") \
+                    .ilike("dish_name", item_name) \
+                    .limit(1) \
+                    .execute()
+                return res.data[0] if res.data else None
 
-#                     qty_to_transfer -= transfer_quantity
-#         logger.info(f"Auto transfer from master inventory to today for top selling menus completed at {now}")
-#     except Exception as e:
-#         logger.exception("Error in scheduled auto transfer from master to today for top selling menus")
+            menu_item = await _fetch_menu()
+            if not menu_item:
+                logger.warning(f"Menu item '{item_name}' not found in menu table")
+                continue
+
+            menu_id = menu_item["menu_id"]
+
+            # Get ingredients for this menu
+            @run_blocking
+            def _fetch_ingredients():
+                res = postgrest_client.table("menu_ingredients") \
+                    .select("*") \
+                    .eq("menu_id", menu_id) \
+                    .execute()
+                return res.data or []
+
+            ingredients = await _fetch_ingredients()
+
+            if not ingredients:
+                logger.warning(f"No ingredients found for menu item '{item_name}'")
+                continue
+
+            # Calculate quantity needed based on actual sales (not hardcoded)
+            total_sold = sales_counter[item_name]
+            daily_average = total_sold / 7
+            buffer_multiplier = 1.5  # 50% buffer for expected sales today
+
+            logger.info(f"Menu '{item_name}': {total_sold} sold in 7 days (avg {daily_average:.1f}/day)")
+
+            for ing in ingredients:
+                ingredient_name = ing.get("ingredient_name")
+                qty_per_serving = float(ing.get("quantity", 0))
+                recipe_unit = ing.get("measurements", "")
+
+                if not ingredient_name or qty_per_serving <= 0:
+                    continue
+
+                # Calculate quantity needed (based on 7-day average × buffer)
+                qty_needed = daily_average * buffer_multiplier * qty_per_serving
+
+                logger.info(f"  Ingredient '{ingredient_name}': need {qty_needed:.2f} {recipe_unit}")
+
+                # Use the existing FIFO transfer function with surplus-first priority
+                transfer_result = await fifo_transfer_to_today_with_surplus_first(
+                    ingredient_name, qty_needed
+                )
+
+                # Log the transfer
+                if transfer_result["transferred_quantity"] > 0:
+                    total_transfers += 1
+                    db = SyncSessionLocal()
+                    try:
+                        description = (
+                            f"Auto-transferred {transfer_result['transferred_quantity']:.2f} {recipe_unit} "
+                            f"of '{ingredient_name}' to today inventory for top selling item '{item_name}' "
+                            f"(7-day avg: {daily_average:.1f} sold/day, requested: {qty_needed:.2f}). "
+                            f"Sources: {transfer_result['summary']['from_surplus']:.2f} from surplus, "
+                            f"{transfer_result['summary']['from_master']:.2f} from master."
+                        )
+                        log_user_activity(
+                            db=db,
+                            user={"user_id": 0, "name": "System", "user_role": "System"},
+                            action_type="auto transfer master to today for top selling",
+                            description=description,
+                        )
+                        logger.info(f"    Transferred: {transfer_result['transferred_quantity']:.2f} {recipe_unit}")
+                    finally:
+                        db.close()
+
+                # Warn if insufficient stock
+                if transfer_result["remaining_shortage"] > 0:
+                    logger.warning(
+                        f"    Insufficient stock for '{ingredient_name}': "
+                        f"needed {qty_needed:.2f} {recipe_unit}, "
+                        f"short by {transfer_result['remaining_shortage']:.2f} {recipe_unit}"
+                    )
+
+        # Mark as completed for today
+        last_master_to_today_run = today
+        logger.info(f"Auto transfer for top selling items completed at {now}. Total transfers: {total_transfers}")
+    except Exception as e:
+        logger.exception("Error in scheduled auto transfer for top selling items")
 
 @router.on_event("startup")
 @repeat_every(seconds=86400)  # Run every 24 hours
 async def auto_transfer_surplus_to_today() -> None:
+    global last_surplus_to_today_run
     try:
         # Wait until 6am before first run
         await wait_until_6am()
+
+        # Check if already ran today
+        today = datetime.utcnow().date()
+        if last_surplus_to_today_run == today:
+            logger.info(f"Surplus to today transfer already ran today ({today}), skipping...")
+            return
+
         now = datetime.utcnow().isoformat()
+        logger.info(f"Starting auto transfer from surplus to today at {now}")
 
         @run_blocking
         def _fetch_all():
@@ -446,7 +490,7 @@ async def auto_transfer_surplus_to_today() -> None:
                 "stock_quantity": transfer_quantity,
                 "expiration_date": item.get("expiration_date"),
                 "updated_at": now,
-                "unit_price": item.get("unit_price"),
+                "unit_cost": item.get("unit_cost", 0.00),
                 "created_at": now,
             }
 
@@ -478,10 +522,10 @@ async def auto_transfer_surplus_to_today() -> None:
                     today_response = await _fetch_today()
                     today_item = today_response.data
 
-                    # Update the found today item (add to stock_quantity)
-                    new_quantity = today_item.get("stock_quantity", 0) + transfer_quantity
+                    # REPLACE the quantity (do not add) to prevent multiplication on reruns
+                    # The surplus item is being transferred, so we should replace, not accumulate
                     update_payload = payload.copy()
-                    update_payload["stock_quantity"] = new_quantity
+                    update_payload["stock_quantity"] = transfer_quantity
                     update_payload["created_at"] = today_item.get("created_at", now)
 
                     @run_blocking
@@ -510,7 +554,7 @@ async def auto_transfer_surplus_to_today() -> None:
                 )
 
             await _delete_surplus()
-        
+
             db = SyncSessionLocal()
             try:
                 description = f"Auto-transferred {transfer_quantity} of Id {item['item_id']} | item {item['item_name']} from surplus to today at 6am."
@@ -524,6 +568,9 @@ async def auto_transfer_surplus_to_today() -> None:
                 logger.warning(f"Failed to record auto transfer activity: {e}")
             finally:
                 db.close()
+
+        # Mark as completed for today
+        last_surplus_to_today_run = today
         logger.info(f"Auto transfer from inventory_surplus to today completed at {now}")
     except Exception as e:
         logger.exception("Error in scheduled auto transfer from surplus to today")
@@ -531,10 +578,19 @@ async def auto_transfer_surplus_to_today() -> None:
 @router.on_event("startup")
 @repeat_every(seconds=86400)  # Run every 24 hours
 async def auto_transfer_today_to_surplus() -> None:
+    global last_today_to_surplus_run
     try:
         # Wait until 10pm before first run
         await wait_until_10pm()
+
+        # Check if already ran today
+        today = datetime.utcnow().date()
+        if last_today_to_surplus_run == today:
+            logger.info(f"Today to surplus transfer already ran today ({today}), skipping...")
+            return
+
         now = datetime.utcnow().isoformat()
+        logger.info(f"Starting auto transfer from today to surplus at {now}")
 
         @run_blocking
         def _fetch_all():
@@ -562,7 +618,7 @@ async def auto_transfer_today_to_surplus() -> None:
                 "stock_status": transfer_status,
                 "expiration_date": item.get("expiration_date"),
                 "updated_at": now,
-                "unit_price": item.get("unit_price"),
+                "unit_cost": item.get("unit_cost", 0.00),
                 "created_at": now,
             }
 
@@ -594,10 +650,10 @@ async def auto_transfer_today_to_surplus() -> None:
                     surplus_response = await _fetch_surplus()
                     surplus_item = surplus_response.data
 
-                    # Update the found surplus item (add to stock_quantity)
-                    new_quantity = surplus_item.get("stock_quantity", 0) + transfer_quantity
+                    # REPLACE the quantity (do not add) to prevent multiplication on reruns
+                    # The today item is being transferred, so we should replace, not accumulate
                     update_payload = payload.copy()
-                    update_payload["stock_quantity"] = new_quantity
+                    update_payload["stock_quantity"] = transfer_quantity
                     update_payload["created_at"] = surplus_item.get("created_at", now)
 
                     @run_blocking
@@ -626,7 +682,7 @@ async def auto_transfer_today_to_surplus() -> None:
                 )
 
             await _delete_today()
-        
+
             db = SyncSessionLocal()
             try:
                 description = f"Auto-transferred {transfer_quantity} of Id {item['item_id']} | item {item['item_name']} from today to surplus at 10pm."
@@ -640,7 +696,10 @@ async def auto_transfer_today_to_surplus() -> None:
                 logger.warning(f"Failed to record auto transfer activity: {e}")
             finally:
                 db.close()
-            logger.info(f"Auto transfer from inventory_today to surplus completed at {now}")
+
+        # Mark as completed for today
+        last_today_to_surplus_run = today
+        logger.info(f"Auto transfer from inventory_today to surplus completed at {now}")
     except Exception as e:
         logger.exception("Error in scheduled auto transfer from today to surplus")
 
@@ -690,7 +749,6 @@ async def auto_transfer_expired_to_spoilage() -> None:
                     "created_at": now,
                     "updated_at": now,
                     "quantity_spoiled": 0,
-                    "unit_price": item.get("unit_price"),
                     "_source_items": [],
                 }
             qty = (
@@ -750,6 +808,3 @@ async def auto_transfer_expired_to_spoilage() -> None:
                 db.close()
     except Exception as e:
         logger.exception("Error during auto_transfer_expired_to_spoilage")
-
-
-

@@ -12,6 +12,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { useInventoryAPI } from "../hook/use-inventoryAPI";
 import { GiBiohazard } from "react-icons/gi";
+import Pagination from "@/app/components/Pagination";
+import { TableLoading, EmptyState } from "@/app/components/LoadingStates";
 
 type SpoilageItem = {
   spoilage_id: number;
@@ -24,6 +26,7 @@ type SpoilageItem = {
   created_at: string;
   updated_at: string;
   unit_price?: number | null;
+  unit_cost?: number | null;
 };
 
 // Extend SpoilageItem type to include batch_date, expiration_date, and category
@@ -51,6 +54,8 @@ export default function SpoilageInventoryPage() {
     key: "",
     direction: "asc",
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // Patch: Use cached data when offline, and show offline message if no cache
   const [offlineSpoilage, setOfflineSpoilage] = useState<
@@ -208,6 +213,19 @@ export default function SpoilageInventoryPage() {
     });
   }, [groupedData, sortConfig]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return sortedData.slice(startIndex, endIndex);
+  }, [sortedData, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, sortConfig]);
+
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => {
       if (prev.key === key) {
@@ -234,7 +252,8 @@ export default function SpoilageInventoryPage() {
     { key: "batch_date", label: "Batch Date" },
     { key: "category", label: "Category" },
     { key: "quantity_spoiled", label: "Quantity Spoiled" },
-    { key: "unit_price", label: "Unit Price" },
+    { key: "unit_cost", label: "Unit Cost" },
+    { key: "total_loss", label: "Total Loss" },
     { key: "expiration_date", label: "Expiration Date" },
     { key: "spoilage_date", label: "Spoilage Date" },
     { key: "reason", label: "Reason" },
@@ -298,8 +317,14 @@ export default function SpoilageInventoryPage() {
                       onClick={handleRefresh}
                       className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
                     >
-                      <FiRefreshCw className={`text-xs xs:text-sm ${isFetching ? 'animate-spin' : ''}`} />
-                      <span className="sm:inline">{isFetching ? 'Syncing...' : 'Refresh'}</span>
+                      <FiRefreshCw
+                        className={`text-xs xs:text-sm ${
+                          isFetching ? "animate-spin" : ""
+                        }`}
+                      />
+                      <span className="sm:inline">
+                        {isFetching ? "Syncing..." : "Refresh"}
+                      </span>
                     </button>
                   </nav>
                 </div>
@@ -370,19 +395,18 @@ export default function SpoilageInventoryPage() {
                 <div className="overflow-x-auto">
                   {isLoading || isFetching ? (
                     offlineError ? (
-                      <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
-                        <MdWarning className="text-yellow-400 text-3xl mx-auto" />
-                        <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                      <div className="flex flex-col items-center gap-4 py-12">
+                        <MdWarning className="text-yellow-400 text-5xl" />
+                        <div className="text-yellow-400 text-lg font-medium text-center">
                           {offlineError}
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
-                        <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                        <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                          Loading spoilage data...
-                        </div>
-                      </div>
+                      <TableLoading
+                        rows={itemsPerPage}
+                        columns={11}
+                        message="Loading spoilage data..."
+                      />
                     )
                   ) : (
                     <table className="table-auto w-full text-xs xs:text-sm sm:text-base lg:text-lg xl:text-xl text-left border-collapse min-w-[700px]">
@@ -429,7 +453,7 @@ export default function SpoilageInventoryPage() {
                       </thead>
                       <tbody>
                         {sortedData.length > 0 ? (
-                          sortedData.map(
+                          paginatedData.map(
                             (item: ExtendedSpoilageItem, index) => (
                               <tr
                                 key={item.spoilage_id}
@@ -449,7 +473,7 @@ export default function SpoilageInventoryPage() {
                                     )
                                   }
                                 >
-                                  {index + 1}
+                                  {(currentPage - 1) * itemsPerPage + index + 1}
                                 </td>
                                 <td
                                   className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap"
@@ -502,7 +526,7 @@ export default function SpoilageInventoryPage() {
                                   {item.quantity_spoiled}
                                 </td>
                                 <td
-                                  className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-green-300 text-xs xs:text-sm"
+                                  className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-blue-300 text-xs xs:text-sm"
                                   onClick={() =>
                                     router.push(
                                       routes.ViewSpoilageInventory(
@@ -511,9 +535,25 @@ export default function SpoilageInventoryPage() {
                                     )
                                   }
                                 >
-                                  {item.unit_price !== undefined &&
-                                  item.unit_price !== null
-                                    ? `$${item.unit_price.toFixed(2)}`
+                                  {item.unit_cost !== undefined &&
+                                  item.unit_cost !== null
+                                    ? `₱${Number(item.unit_cost).toFixed(2)}`
+                                    : "-"}
+                                </td>
+                                <td
+                                  className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-red-400 text-xs xs:text-sm font-semibold"
+                                  onClick={() =>
+                                    router.push(
+                                      routes.ViewSpoilageInventory(
+                                        item.spoilage_id
+                                      )
+                                    )
+                                  }
+                                >
+                                  {item.unit_cost !== undefined &&
+                                  item.unit_cost !== null &&
+                                  item.quantity_spoiled !== undefined
+                                    ? `₱${(Number(item.unit_cost) * Number(item.quantity_spoiled)).toFixed(2)}`
                                     : "-"}
                                 </td>
                                 <td
@@ -572,26 +612,28 @@ export default function SpoilageInventoryPage() {
                           )
                         ) : (
                           <tr>
-                            <td
-                              colSpan={columns.length}
-                              className="px-4 xl:px-6 py-12 xl:py-16 text-center"
-                            >
-                              <div className="flex flex-col items-center gap-4">
-                                <MdInventory className="text-6xl text-gray-600" />
-                                <div>
-                                  <h3 className="text-gray-400 font-medium mb-2">
-                                    No spoilage records found
-                                  </h3>
-                                  <p className="text-gray-500 text-sm">
-                                    No items have been marked as spoiled yet.
-                                  </p>
-                                </div>
-                              </div>
+                            <td colSpan={columns.length}>
+                              <EmptyState
+                                icon={<GiBiohazard className="text-6xl" />}
+                                title="No spoilage records found"
+                                message="No items have been marked as spoiled yet."
+                              />
                             </td>
                           </tr>
                         )}
                       </tbody>
                     </table>
+                  )}
+
+                  {sortedData.length > 0 && (
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                      itemsPerPage={itemsPerPage}
+                      totalItems={sortedData.length}
+                      onItemsPerPageChange={setItemsPerPage}
+                    />
                   )}
                 </div>
               </section>

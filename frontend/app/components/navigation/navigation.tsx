@@ -406,23 +406,34 @@ const NavigationBar = ({
 
   const fetchNotifications = React.useCallback(async () => {
     const userId = user?.user_id || user?.id;
+    console.log("[Notifications] Fetching for user:", userId);
     if (userId && typeof userId === "number") {
       try {
         const res = await fetch(
           `${API_BASE_URL}/api/notifications?user_id=${userId}`
         );
         const data = await res.json();
+        console.log("[Notifications] Received:", data.notifications?.length || 0, "notifications");
         setNotifications(data.notifications || []);
-      } catch {
+      } catch (error) {
+        console.error("[Notifications] Fetch error:", error);
         setNotifications([]);
       }
     } else {
+      console.log("[Notifications] No valid user ID");
       setNotifications([]);
     }
   }, [user]);
 
   useEffect(() => {
     fetchNotifications();
+
+    // Poll for new notifications every 30 seconds
+    const pollInterval = setInterval(() => {
+      fetchNotifications();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(pollInterval);
   }, [user, fetchNotifications]);
 
   // Close dropdown when clicking outside
@@ -572,7 +583,8 @@ const NavigationBar = ({
     setNotificationModal(n); // This sets notificationModalState
     setBellOpen(false);
     const userId = user?.user_id || user?.id;
-    if (userId && typeof userId === "number") {
+    // Only mark as read if notification has a valid ID
+    if (userId && typeof userId === "number" && n.id !== null && n.id !== undefined) {
       try {
         await fetch(
           `${API_BASE_URL}/api/notifications/mark-read?user_id=${userId}&notification_id=${n.id}`,
@@ -594,7 +606,8 @@ const NavigationBar = ({
   ) {
     event.stopPropagation(); // Prevent triggering the notification click
     const userId = user?.user_id || user?.id;
-    if (userId && typeof userId === "number") {
+    // Only delete if notification has a valid ID
+    if (userId && typeof userId === "number" && n.id !== null && n.id !== undefined) {
       try {
         await fetch(
           `${API_BASE_URL}/api/notifications?user_id=${userId}&notification_id=${n.id}`,
@@ -613,6 +626,9 @@ const NavigationBar = ({
       } catch (error) {
         console.error("Failed to remove notification:", error);
       }
+    } else {
+      // If notification has no ID, show a warning
+      console.warn("Cannot delete notification without ID. Please run database migration.");
     }
   }
 

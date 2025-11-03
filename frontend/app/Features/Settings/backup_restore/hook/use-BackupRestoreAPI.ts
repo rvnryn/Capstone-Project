@@ -30,35 +30,52 @@ export function useBackupRestoreAPI() {
     if (!password) throw new Error("Password is required for backup.");
 
     const token = getToken();
-    const response = await fetch(
-      `${API_BASE_URL}/api/backup?password=${encodeURIComponent(password)}`,
+    const response = await fetch(`${API_BASE_URL}/api/backup`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: JSON.stringify({ password }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ detail: "Backup failed" }));
+      throw new Error(
+        errorData.detail || `HTTP error! status: ${response.status}`
+      );
+    }
+
+    // Expecting a JSON response with backup info
+    const data = await response.json();
+    const filename =
+      data.filename ||
+      `backup-${new Date().toISOString().replace(/[:.]/g, "-")}.json.enc`;
+
+    // Download the backup file from Supabase Storage
+    const fileResponse = await fetch(
+      `${API_BASE_URL}/api/download-backup?filename=${encodeURIComponent(
+        filename
+      )}`,
       {
         method: "GET",
         headers: {
-          "Content-Type": "application/json",
           ...(token && { Authorization: `Bearer ${token}` }),
         },
       }
     );
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    if (!fileResponse.ok) {
+      throw new Error("Failed to download backup file");
     }
 
-    const blob = await response.blob();
+    const blob = await fileResponse.blob();
     if (!blob) {
       throw new Error("Backup not available");
     }
 
-    let filename = `backup-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-    const disposition = response.headers.get("content-disposition");
-    if (disposition) {
-      const match = /filename=([^;]+)/.exec(disposition);
-      if (match) filename = match[1].replace(/"/g, "");
-    } else {
-      filename += ".json.enc";
-    }
-    // Get blob from response
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

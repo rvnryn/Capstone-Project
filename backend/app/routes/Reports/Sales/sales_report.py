@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Query, Depends, HTTPException, Request
+from fastapi import Body
 from slowapi.util import get_remote_address
 from slowapi import Limiter
 
@@ -8,11 +9,46 @@ from sqlalchemy import text
 
 from typing import List, Optional
 from datetime import datetime, timedelta
+from dateutil import parser as date_parser
 from app.supabase import get_db
 from sqlalchemy import select
 from app.models.custom_holiday import CustomHoliday
+from app.models.user_activity_log import UserActivityLog
+from app.routes.Inventory.master_inventory import require_role
 
 router = APIRouter()
+@router.post("/import-sales-json")
+async def import_sales_json(
+    sales_data: list = Body(..., example=[{"sale_date": "02-Nov-25 11:09:12", "count": 1}]),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Import sales data in custom JSON format, parse sale_date, and insert into sales_report table.
+    """
+    inserted = 0
+    errors = []
+    for entry in sales_data:
+        try:
+            # Parse date in format '02-Nov-25 11:09:12' to datetime
+            dt = datetime.strptime(entry["sale_date"], "%d-%b-%y %H:%M:%S")
+            # Insert into sales_report (adjust columns as needed)
+            await session.execute(
+                text("""
+                    INSERT INTO sales_report (sale_date, total_price, item_name, count)
+                    VALUES (:sale_date, :total_price, :item_name, :count)
+                """),
+                {
+                    "sale_date": dt,
+                    "total_price": entry.get("total_price", 0),
+                    "item_name": entry.get("item_name", "Imported Sale"),
+                    "count": entry.get("count", 1),
+                },
+            )
+            inserted += 1
+        except Exception as e:
+            errors.append({"entry": entry, "error": str(e)})
+    await session.commit()
+    return {"inserted": inserted, "errors": errors}
 
 # --- Weekly Sales Forecast Endpoint ---
 from typing import Dict
@@ -62,8 +98,8 @@ async def get_weekly_sales_forecast(
             params["start_date"] = start_date.strftime("%Y-%m-%d")
         result = await session.execute(query, params)
         rows = result.fetchall()
-        if not rows or len(rows) < 4:
-            return {"error": "Not enough historical data for weekly forecasting."}
+        if not rows or len(rows) < 1:
+            return {"error": "Not enough historical data for weekly forecasting (need at least 1 week)."}
 
         # Prepare data for regression with seasonality and holiday features
         df = pd.DataFrame(rows, columns=["week", "total_sales"])
@@ -325,13 +361,13 @@ async def get_sales_by_item(
 
         query = text(
             """
-            SELECT 
+            SELECT
                 item_name,
                 category,
                 SUM(quantity) as total_quantity,
                 SUM(total_price) as total_revenue,
                 AVG(unit_price) as avg_price
-            FROM sales_report 
+            FROM sales_report
             WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
             GROUP BY item_name, category
             ORDER BY total_revenue DESC
@@ -365,6 +401,92 @@ async def get_sales_by_item(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error generating item sales report: {str(e)}"
+        )
+
+
+@limiter.limit("10/minute")
+@router.get("/sales-detailed")
+async def get_sales_detailed(
+    request: Request,
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    session: AsyncSession = Depends(get_db),
+):
+    """Get detailed sales records with all restaurant information (NO aggregation)"""
+    try:
+        if not start_date:
+            start_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
+        if not end_date:
+            end_date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # Convert string dates to datetime objects for proper SQL handling
+        start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
+        end_datetime = datetime.strptime(end_date, "%Y-%m-%d")
+
+        # First, check what columns exist in the table
+        check_columns_query = text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'sales_report'
+            ORDER BY ordinal_position
+        """)
+
+        columns_result = await session.execute(check_columns_query)
+        available_columns = [row[0] for row in columns_result.fetchall()]
+
+        print(f"[DEBUG] Available columns in sales_report: {available_columns}")
+
+        # Build dynamic SELECT based on available columns
+        base_columns = ["sale_date", "item_name", "category", "quantity", "unit_price", "price", "total_price"]
+        optional_columns = [
+            "order_number", "transaction_number", "receipt_number", "subtotal",
+            "discount_percentage", "dine_type", "order_taker", "cashier",
+            "terminal_no", "member", "itemcode"
+        ]
+
+        # Only select columns that exist
+        select_columns = base_columns + [col for col in optional_columns if col in available_columns]
+        select_clause = ", ".join(select_columns)
+
+        query = text(f"""
+            SELECT {select_clause}
+            FROM sales_report
+            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
+            ORDER BY sale_date DESC
+            LIMIT 1000
+        """)
+
+        params = {"start_date": start_datetime, "end_date": end_datetime}
+        result = await session.execute(query, params)
+
+        sales = []
+        for row in result.fetchall():
+            sale_dict = {}
+            for i, col_name in enumerate(select_columns):
+                value = row[i]
+                if value is not None:
+                    if col_name == "sale_date":
+                        sale_dict[col_name] = value.strftime("%Y-%m-%d %H:%M") if hasattr(value, 'strftime') else str(value)
+                    elif col_name in ["unit_price", "price", "subtotal", "discount_percentage", "total_price"]:
+                        sale_dict[col_name] = float(value)
+                    elif col_name == "quantity":
+                        sale_dict[col_name] = int(value)
+                    else:
+                        sale_dict[col_name] = str(value)
+                else:
+                    sale_dict[col_name] = "" if col_name not in ["quantity", "unit_price", "price", "subtotal", "discount_percentage", "total_price"] else 0
+
+            sales.append(sale_dict)
+
+        print(f"[DEBUG] Returning {len(sales)} sales records")
+        return {"period": f"{start_date} to {end_date}", "sales": sales}
+
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] sales-detailed endpoint error: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500, detail=f"Error generating detailed sales report: {str(e)}"
         )
 
 
@@ -468,17 +590,17 @@ async def get_top_performers(
 
         query = text(
             f"""
-            SELECT 
-                item_name,
-                category,
-                SUM(quantity) as total_quantity,
-                SUM(total_price) as total_revenue,
-                AVG(unit_price) as avg_price
-            FROM sales_report 
-            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
-            GROUP BY item_name, category
-            ORDER BY {order_by} DESC
-            LIMIT :limit
+            SELECT
+    LOWER(TRIM(REGEXP_REPLACE(item_name, '[^a-zA-Z0-9 ]', '', 'g'))) AS normalized_item_name,
+    MAX(category) as category,
+    SUM(quantity) as total_quantity_sold,
+    SUM(total_price) as total_revenue,
+    AVG(unit_price) as avg_price
+FROM sales_report
+WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
+GROUP BY normalized_item_name
+ORDER BY total_revenue DESC
+LIMIT 10
         """
         )
 
@@ -663,6 +785,13 @@ async def get_comprehensive_sales_analytics(
     - Profit Margins
     - Top Performing Items
     - Category Breakdown
+
+    IMPORTANT FIXES (2025):
+    - Fixed COGS calculation that was showing negative profits due to unit mismatch
+    - Added proper sales aggregation to prevent double-counting
+    - Implemented unit conversion (g, kg, ml, L, oz, tbsp, tsp, cup, pcs)
+    - Adjusted unit costs: assumes inventory unit_cost is per kg/L, divides by 1000 for gram/ml calculations
+    - This prevents the 1000x multiplication error that caused COGS to be 73x revenue
     """
     try:
         # Default to last 30 days if no dates provided
@@ -680,7 +809,7 @@ async def get_comprehensive_sales_analytics(
             SELECT
                 SUM(quantity) as total_items_sold,
                 SUM(total_price) as total_revenue,
-                AVG(unit_price) as avg_unit_price,
+                AVG(unit_price) as avg_unit_cost,
                 COUNT(DISTINCT item_name) as unique_items_sold,
                 COUNT(*) as total_transactions
             FROM sales_report
@@ -698,51 +827,228 @@ async def get_comprehensive_sales_analytics(
         total_items_sold = revenue_row.total_items_sold or 0
         unique_items_sold = revenue_row.unique_items_sold or 0
         total_transactions = revenue_row.total_transactions or 0
-        avg_unit_price = float(revenue_row.avg_unit_price or 0)
+        avg_unit_cost = float(revenue_row.avg_unit_cost or 0)
 
         # 2. Calculate COGS (Cost of Goods Sold) from menu ingredients
         # This calculates the cost based on ingredients used for sold menu items
+        # IMPORTANT: Properly aggregates sales by menu item first, then calculates ingredient costs
+        # This prevents double-counting when multiple sales rows exist for the same dish
         cogs_query = text(
             """
-            WITH sales_with_menu AS (
+            WITH sales_aggregated AS (
+                -- CRITICAL FIX: Aggregate sales by item FIRST to avoid double-counting
+                -- Each row in sales_report represents ONE item sold, so we SUM the quantities
                 SELECT
                     sr.item_name,
-                    sr.quantity as quantity_sold,
+                    SUM(sr.quantity) as total_quantity_sold,
                     m.menu_id
                 FROM sales_report sr
                 LEFT JOIN menu m ON LOWER(TRIM(sr.item_name)) = LOWER(TRIM(m.dish_name))
                 WHERE DATE(sr.sale_date) BETWEEN :start_date AND :end_date
+                  AND m.menu_id IS NOT NULL
+                GROUP BY sr.item_name, m.menu_id
             ),
             ingredient_costs AS (
                 SELECT
-                    swm.item_name,
-                    swm.quantity_sold,
+                    sa.item_name,
+                    sa.total_quantity_sold,
                     mi.ingredient_name,
                     mi.quantity as ingredient_quantity_per_serving,
+                    mi.measurements,
+                    -- Get unit cost from inventory
                     COALESCE(
-                        (SELECT AVG(it.unit_price)
-                         FROM inventory_today it
-                         WHERE LOWER(TRIM(it.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                        (SELECT AVG(it.unit_cost)
+                        FROM inventory_today it
+                        WHERE LOWER(TRIM(it.item_name)) = LOWER(TRIM(mi.ingredient_name))
                         ),
-                        (SELECT AVG(i.unit_price)
-                         FROM inventory i
-                         WHERE LOWER(TRIM(i.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                        (SELECT AVG(i.unit_cost)
+                        FROM inventory i
+                        WHERE LOWER(TRIM(i.item_name)) = LOWER(TRIM(mi.ingredient_name))
                         ),
-                        (SELECT AVG(isp.unit_price)
-                         FROM inventory_spoilage isp
-                         WHERE LOWER(TRIM(isp.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                        (SELECT AVG(isp.unit_cost)
+                        FROM inventory_spoilage isp
+                        WHERE LOWER(TRIM(isp.item_name)) = LOWER(TRIM(mi.ingredient_name))
                         ),
                         0
-                    ) as unit_cost
-                FROM sales_with_menu swm
-                LEFT JOIN menu_ingredients mi ON swm.menu_id = mi.menu_id
-                WHERE swm.menu_id IS NOT NULL AND mi.ingredient_name IS NOT NULL
+                    ) as inventory_unit_cost,
+                    -- CRITICAL FIX: Determine the correct unit cost based on measurement type
+                    -- If measurements use small units (g, ml) but inventory unit_cost is for large units (kg, L),
+                    -- we need to divide by the appropriate conversion factor to get cost per base unit
+                    CASE
+                        WHEN LOWER(mi.measurements) IN ('g', 'ml', 'oz', 'tbsp', 'tsp', 'cup') THEN
+                            -- For small units, assume inventory unit_cost is per kg/L, so divide by 1000
+                            COALESCE(
+                                (SELECT AVG(it.unit_cost) / 1000.0
+                                FROM inventory_today it
+                                WHERE LOWER(TRIM(it.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                (SELECT AVG(i.unit_cost) / 1000.0
+                                FROM inventory i
+                                WHERE LOWER(TRIM(i.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                (SELECT AVG(isp.unit_cost) / 1000.0
+                                FROM inventory_spoilage isp
+                                WHERE LOWER(TRIM(isp.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                0
+                            )
+                        WHEN LOWER(mi.measurements) IN ('kg', 'l', 'lbs', 'gal', 'gallon') THEN
+                            -- For large units, assume unit_cost is per kg/L/lb/gal, divide by 1000 for gram/ml base
+                            COALESCE(
+                                (SELECT AVG(it.unit_cost) / 1000.0
+                                FROM inventory_today it
+                                WHERE LOWER(TRIM(it.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                (SELECT AVG(i.unit_cost) / 1000.0
+                                FROM inventory i
+                                WHERE LOWER(TRIM(i.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                (SELECT AVG(isp.unit_cost) / 1000.0
+                                FROM inventory_spoilage isp
+                                WHERE LOWER(TRIM(isp.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                0
+                            )
+                        WHEN LOWER(COALESCE(mi.measurements, '')) IN ('pcs', 'pack', 'case', 'sack', 'btl', 'bottle', 'can') THEN
+                            -- For count/container units, use unit_cost as-is (cost per piece/pack/case/etc)
+                            COALESCE(
+                                (SELECT AVG(it.unit_cost)
+                                FROM inventory_today it
+                                WHERE LOWER(TRIM(it.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                (SELECT AVG(i.unit_cost)
+                                FROM inventory i
+                                WHERE LOWER(TRIM(i.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                (SELECT AVG(isp.unit_cost)
+                                FROM inventory_spoilage isp
+                                WHERE LOWER(TRIM(isp.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                0
+                            )
+                        ELSE
+                            -- DEFAULT: For missing/unknown/empty units, assume grams and divide by 1000
+                            -- This is the safe default since inventory unit_cost is per kg
+                            COALESCE(
+                                (SELECT AVG(it.unit_cost) / 1000.0
+                                FROM inventory_today it
+                                WHERE LOWER(TRIM(it.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                (SELECT AVG(i.unit_cost) / 1000.0
+                                FROM inventory i
+                                WHERE LOWER(TRIM(i.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                (SELECT AVG(isp.unit_cost) / 1000.0
+                                FROM inventory_spoilage isp
+                                WHERE LOWER(TRIM(isp.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                                ),
+                                0
+                            )
+                    END as unit_cost_adjusted
+                FROM sales_aggregated sa
+                JOIN menu_ingredients mi ON sa.menu_id = mi.menu_id
+                WHERE mi.ingredient_name IS NOT NULL
+            ),
+            ingredient_costs_normalized AS (
+                SELECT
+                    item_name,
+                    total_quantity_sold,
+                    ingredient_name,
+                    ingredient_quantity_per_serving,
+                    measurements,
+                    unit_cost_adjusted,
+                    -- Normalize quantity to base units (grams or ml)
+                    -- Handles ALL measurement units from inventory settings and menu ingredients
+                    CASE
+                        -- Weight conversions to grams
+                        WHEN LOWER(measurements) = 'kg' THEN ingredient_quantity_per_serving * 1000
+                        WHEN LOWER(measurements) = 'g' THEN ingredient_quantity_per_serving
+                        WHEN LOWER(measurements) = 'lbs' THEN ingredient_quantity_per_serving * 453.592  -- pounds to grams
+                        WHEN LOWER(measurements) = 'oz' THEN ingredient_quantity_per_serving * 28.35    -- ounces to grams
+
+                        -- Volume conversions to ml
+                        WHEN LOWER(measurements) = 'l' THEN ingredient_quantity_per_serving * 1000      -- liters to ml
+                        WHEN LOWER(measurements) = 'ml' THEN ingredient_quantity_per_serving            -- already ml
+                        WHEN LOWER(measurements) = 'gal' THEN ingredient_quantity_per_serving * 3785.41 -- gallons to ml
+                        WHEN LOWER(measurements) = 'gallon' THEN ingredient_quantity_per_serving * 3785.41 -- gallons to ml (alt spelling)
+                        WHEN LOWER(measurements) = 'tbsp' THEN ingredient_quantity_per_serving * 15     -- tablespoon to ml
+                        WHEN LOWER(measurements) = 'tsp' THEN ingredient_quantity_per_serving * 5       -- teaspoon to ml
+                        WHEN LOWER(measurements) = 'cup' THEN ingredient_quantity_per_serving * 240     -- cup to ml
+
+                        -- Count/container units (no conversion needed)
+                        WHEN LOWER(measurements) IN ('pcs', 'pack', 'case', 'sack', 'btl', 'bottle', 'can') THEN ingredient_quantity_per_serving
+
+                        ELSE ingredient_quantity_per_serving  -- default: no conversion
+                    END as quantity_in_base_units
+                FROM ingredient_costs
             )
             SELECT
-                COALESCE(SUM(quantity_sold * ingredient_quantity_per_serving * unit_cost), 0) as total_cogs
-            FROM ingredient_costs
+                -- Calculate: (total dishes sold) × (ingredient qty in base units) × (adjusted unit cost)
+                COALESCE(SUM(
+                    total_quantity_sold * quantity_in_base_units * unit_cost_adjusted
+                ), 0) as total_cogs
+            FROM ingredient_costs_normalized
         """
         )
+
+        # Debug: First, let's see sample data to understand the issue
+        debug_query = text(
+            """
+            WITH sales_aggregated AS (
+                SELECT
+                    sr.item_name,
+                    SUM(sr.quantity) as total_quantity_sold,
+                    m.menu_id
+                FROM sales_report sr
+                LEFT JOIN menu m ON LOWER(TRIM(sr.item_name)) = LOWER(TRIM(m.dish_name))
+                WHERE DATE(sr.sale_date) BETWEEN :start_date AND :end_date
+                  AND m.menu_id IS NOT NULL
+                GROUP BY sr.item_name, m.menu_id
+            ),
+            ingredient_costs AS (
+                SELECT
+                    sa.item_name,
+                    sa.total_quantity_sold,
+                    mi.ingredient_name,
+                    mi.quantity as ingredient_quantity_per_serving,
+                    mi.measurements,
+                    COALESCE(
+                        (SELECT AVG(it.unit_cost)
+                        FROM inventory_today it
+                        WHERE LOWER(TRIM(it.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                        ),
+                        (SELECT AVG(i.unit_cost)
+                        FROM inventory i
+                        WHERE LOWER(TRIM(i.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                        ),
+                        0
+                    ) as inventory_unit_cost
+                FROM sales_aggregated sa
+                JOIN menu_ingredients mi ON sa.menu_id = mi.menu_id
+                WHERE mi.ingredient_name IS NOT NULL
+            )
+            SELECT
+                item_name,
+                ingredient_name,
+                total_quantity_sold,
+                ingredient_quantity_per_serving,
+                measurements,
+                inventory_unit_cost,
+                (total_quantity_sold * ingredient_quantity_per_serving * inventory_unit_cost) as raw_cost
+            FROM ingredient_costs
+            ORDER BY raw_cost DESC
+            LIMIT 5
+        """
+        )
+
+        debug_result = await session.execute(
+            debug_query,
+            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
+        )
+
+        for row in debug_result.fetchall():
+            print(f"  {row.item_name} -> {row.ingredient_name}:")
+            print(f"    Sold: {row.total_quantity_sold} | Per serving: {row.ingredient_quantity_per_serving} {row.measurements} | Unit cost: ₱{row.inventory_unit_cost:.4f} | Total: ₱{row.raw_cost:,.2f}")
 
         cogs_result = await session.execute(
             cogs_query,
@@ -751,11 +1057,15 @@ async def get_comprehensive_sales_analytics(
         cogs_row = cogs_result.fetchone()
         total_cogs = float(cogs_row.total_cogs or 0) if cogs_row else 0.0
 
+        if total_cogs > total_revenue:
+            print(f"[COGS WARNING] COGS is higher than revenue! Check unit conversions and inventory unit_cost values.")
+        print(f"{'='*60}\n")
+
         # 3. Get Spoilage/Loss Costs
         spoilage_query = text(
             """
             SELECT
-                SUM(quantity_spoiled * COALESCE(unit_price, 0)) as total_spoilage_cost,
+                SUM(quantity_spoiled * COALESCE(unit_cost, 0)) as total_spoilage_cost,
                 SUM(quantity_spoiled) as total_quantity_spoiled,
                 COUNT(*) as total_spoilage_incidents,
                 COUNT(DISTINCT item_name) as unique_items_spoiled
@@ -793,14 +1103,14 @@ async def get_comprehensive_sales_analytics(
         top_items_query = text(
             """
             SELECT
-                item_name,
-                category,
+                LOWER(TRIM(REGEXP_REPLACE(item_name, '[^a-zA-Z0-9 ]', '', 'g'))) AS item_name,
+                MAX(category) as category,
                 SUM(quantity) as total_quantity_sold,
                 SUM(total_price) as total_revenue,
                 AVG(unit_price) as avg_price
             FROM sales_report
             WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
-            GROUP BY item_name, category
+            GROUP BY LOWER(TRIM(REGEXP_REPLACE(item_name, '[^a-zA-Z0-9 ]', '', 'g')))
             ORDER BY total_revenue DESC
             LIMIT 10
         """
@@ -867,7 +1177,7 @@ async def get_comprehensive_sales_analytics(
                 item_name,
                 category,
                 SUM(quantity_spoiled) as total_spoiled,
-                SUM(quantity_spoiled * COALESCE(unit_price, 0)) as total_cost,
+                SUM(quantity_spoiled * COALESCE(unit_cost, 0)) as total_cost,
                 COUNT(*) as incidents,
                 STRING_AGG(DISTINCT reason, ', ') as reasons
             FROM inventory_spoilage
@@ -938,7 +1248,7 @@ async def get_comprehensive_sales_analytics(
                 "total_items_sold": total_items_sold,
                 "unique_items_sold": unique_items_sold,
                 "total_transactions": total_transactions,
-                "avg_unit_price": round(avg_unit_price, 2),
+                "avg_unit_price": round(avg_unit_cost, 2),
             },
             "profitability": {
                 "gross_profit_margin": round(gross_profit_margin, 2),
@@ -969,3 +1279,110 @@ async def get_comprehensive_sales_analytics(
             status_code=500,
             detail=f"Error generating comprehensive sales analytics: {str(e)}",
         )
+
+
+@limiter.limit("10/minute")
+@router.post("/export-sales")
+async def export_sales(
+    request: Request,
+    start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
+    export_type: str = Query("detailed", description="Export type: detailed or summary"),
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Log user activity when sales reports are exported.
+    The actual export happens in the frontend, but this endpoint tracks the export action.
+    """
+    try:
+        # Count the records that will be exported
+        query = text("""
+            SELECT COUNT(*) as count
+            FROM sales_report
+            WHERE sale_date >= :start_date AND sale_date <= :end_date
+        """)
+        result = await db.execute(query, {"start_date": start_date, "end_date": end_date})
+        count_row = result.fetchone()
+        record_count = count_row[0] if count_row else 0
+
+        # Log user activity for sales export
+        try:
+            user_row = getattr(user, "user_row", user)
+            new_activity = UserActivityLog(
+                user_id=user_row.get("user_id"),
+                action_type="export sales report",
+                description=f"Exported {export_type} sales report ({record_count} records) for period: {start_date} to {end_date}",
+                activity_date=datetime.utcnow(),
+                report_date=datetime.utcnow(),
+                user_name=user_row.get("name"),
+                role=user_row.get("user_role"),
+            )
+            db.add(new_activity)
+            await db.flush()
+            await db.commit()
+        except Exception as e:
+            print(f"Failed to record user activity for sales export: {e}")
+
+        return {
+            "message": "Export logged successfully",
+            "records": record_count,
+            "date_range": f"{start_date} to {end_date}",
+            "export_type": export_type
+        }
+
+    except Exception as e:
+        import traceback
+        print("EXPORT LOGGING ERROR:", e)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error logging sales export: {str(e)}",
+        )
+
+@limiter.limit("5/minute")
+@router.post("/clean-sales-report-invalid-dates")
+async def clean_sales_report_invalid_dates(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Delete rows in sales_report where sale_date is not a valid date (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS).
+    Returns the number and details of deleted rows.
+    """
+    import re
+    try:
+        # Regex for valid date (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS)
+        date_regex = r"^\\d{4}-\\d{2}-\\d{2}(?:[ T]\\d{2}:\\d{2}(:\\d{2})?)?$"
+        # Find invalid rows
+        query = text("""
+            SELECT sales_id, sale_date, item_name, total_price
+            FROM sales_report
+        """)
+        result = await session.execute(query)
+        rows = result.fetchall()
+        invalid_rows = [
+            dict(sales_id=row.sales_id, sale_date=row.sale_date, item_name=row.item_name, total_price=row.total_price)
+            for row in rows
+            if not row.sale_date or not re.match(date_regex, str(row.sale_date))
+        ]
+        deleted_count = 0
+        deleted_ids = []
+        if invalid_rows:
+            # Delete invalid rows
+            delete_ids = [row["sales_id"] for row in invalid_rows]
+            delete_query = text("DELETE FROM sales_report WHERE sales_id = ANY(:ids)")
+            await session.execute(delete_query, {"ids": delete_ids})
+            await session.commit()
+            deleted_count = len(delete_ids)
+            deleted_ids = delete_ids
+        return {
+            "deleted_count": deleted_count,
+            "deleted_ids": deleted_ids,
+            "invalid_rows": invalid_rows,
+            "message": f"Deleted {deleted_count} invalid sales_report rows."
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error cleaning sales_report: {str(e)}")

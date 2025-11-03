@@ -25,6 +25,7 @@ import { FiBarChart } from "react-icons/fi";
 import { useUserActivityLogAPI } from "./hook/use-userActivityLogAPI";
 import { saveAs } from "file-saver";
 import { supabase } from "@/app/utils/Server/supabaseClient";
+import Pagination from "@/app/components/Pagination";
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID as string;
 const SHEET_RANGE = "Sheet1!A1";
@@ -95,6 +96,10 @@ const Report_UserActivity = () => {
     key: string;
     direction: "asc" | "desc";
   }>({ key: "", direction: "asc" });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   const roles = [
     "Owner",
@@ -348,6 +353,29 @@ const Report_UserActivity = () => {
     return sorted;
   }, [filteredActivity, sortConfig]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(sortedActivity.length / itemsPerPage);
+  const paginatedActivity = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return sortedActivity.slice(startIndex, endIndex);
+  }, [sortedActivity, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchQuery,
+    reportDate,
+    period,
+    role,
+    startDate,
+    endDate,
+    username,
+    activityTimeFilter,
+    sortConfig,
+  ]);
+
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => ({
       key,
@@ -381,37 +409,290 @@ const Report_UserActivity = () => {
     []
   );
 
-  const values = [
-    ["ID", "Username", "Role", "Action Performed", "Date & Time"],
-    ...sortedActivity.map((item) => [
-      item.activity_id,
-      item.user_name,
-      item.role,
-      item.description,
-      item.activity_date,
-    ]),
-  ];
-
   const exportToExcel = async () => {
     const workbook = new ExcelJS.Workbook();
+
+    // Set workbook properties
+    workbook.creator = "Cardiac Delights";
+    workbook.created = new Date();
+    workbook.modified = new Date();
+
     const worksheet = workbook.addWorksheet("User Activity Report");
 
-    // Add headers and data
-    worksheet.addRows(values);
+    // ==== TITLE SECTION ====
+    worksheet.mergeCells("A1:F1");
+    const titleCell = worksheet.getCell("A1");
+    titleCell.value = "USER ACTIVITY REPORT";
+    titleCell.font = { size: 20, bold: true, color: { argb: "FF6B46C1" } };
+    titleCell.alignment = { vertical: "middle", horizontal: "center" };
+    titleCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF3F4F6" },
+    };
+    worksheet.getRow(1).height = 35;
 
-    // Style the header row
-    const headerRow = worksheet.getRow(1);
-    headerRow.font = { bold: true };
+    // ==== REPORT METADATA ====
+    worksheet.mergeCells("A2:F2");
+    const metaCell = worksheet.getCell("A2");
+    metaCell.value = `Generated: ${new Date().toLocaleString()} | Total Activities: ${
+      sortedActivity.length
+    }`;
+    metaCell.font = { size: 10, italic: true, color: { argb: "FF6B7280" } };
+    metaCell.alignment = { vertical: "middle", horizontal: "center" };
+    worksheet.getRow(2).height = 20;
+
+    // ==== FILTER SUMMARY ====
+    let currentRow = 3;
+    const activeFilters = [];
+    if (searchQuery) activeFilters.push(`Search: "${searchQuery}"`);
+    if (reportDate) activeFilters.push(`Date: ${reportDate}`);
+    if (role) activeFilters.push(`Role: ${role}`);
+    if (period !== "all") activeFilters.push(`Period: ${period}`);
+    if (username) activeFilters.push(`Username: ${username}`);
+    if (activityTimeFilter) activeFilters.push(`Time: ${activityTimeFilter}`);
+    if (startDate || endDate)
+      activeFilters.push(
+        `Range: ${startDate || "Start"} - ${endDate || "End"}`
+      );
+
+    if (activeFilters.length > 0) {
+      worksheet.mergeCells(`A${currentRow}:F${currentRow}`);
+      const filterCell = worksheet.getCell(`A${currentRow}`);
+      filterCell.value = `Active Filters: ${activeFilters.join(" | ")}`;
+      filterCell.font = { size: 9, italic: true, color: { argb: "FF8B5CF6" } };
+      filterCell.alignment = { vertical: "middle", horizontal: "left" };
+      filterCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFFAF5FF" },
+      };
+      worksheet.getRow(currentRow).height = 18;
+      currentRow++;
+    }
+
+    // ==== SUMMARY STATISTICS ====
+    currentRow++;
+    worksheet.mergeCells(`A${currentRow}:F${currentRow}`);
+    const summaryTitleCell = worksheet.getCell(`A${currentRow}`);
+    summaryTitleCell.value = "📊 SUMMARY STATISTICS";
+    summaryTitleCell.font = {
+      size: 12,
+      bold: true,
+      color: { argb: "FF6B46C1" },
+    };
+    summaryTitleCell.alignment = { vertical: "middle", horizontal: "left" };
+    summaryTitleCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE9D5FF" },
+    };
+    worksheet.getRow(currentRow).height = 25;
+    currentRow++;
+
+    // Calculate statistics
+    const totalActivities = sortedActivity.length;
+    const uniqueUsers = new Set(sortedActivity.map((item) => item.user_name))
+      .size;
+    const mostActiveUser =
+      sortedActivity.length > 0
+        ? Object.entries(
+            sortedActivity.reduce((acc: any, item) => {
+              acc[item.user_name] = (acc[item.user_name] || 0) + 1;
+              return acc;
+            }, {})
+          ).reduce(
+            (max, [user, count]) =>
+              (count as number) > (max as [string, number])[1]
+                ? [user, count as number]
+                : max,
+            ["N/A", 0]
+          )
+        : ["N/A", 0];
+
+    const activityByRole = sortedActivity.reduce((acc: any, item) => {
+      acc[item.role] = (acc[item.role] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Add summary statistics
+    const summaryData = [
+      ["Metric", "Value"],
+      ["Total Activities", totalActivities],
+      ["Active Users", uniqueUsers],
+      [
+        "Most Active User",
+        `${mostActiveUser[0]} (${mostActiveUser[1]} activities)`,
+      ],
+      ["Date Range", `${startDate || "All"} to ${endDate || "All"}`],
+    ];
+
+    summaryData.forEach((row) => {
+      worksheet.addRow(row);
+      const addedRow = worksheet.getRow(currentRow);
+      addedRow.getCell(1).font = { bold: true, color: { argb: "FF374151" } };
+      addedRow.getCell(1).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFF3F4F6" },
+      };
+      addedRow.getCell(2).font = { color: { argb: "FF6B46C1" }, bold: true };
+      addedRow.height = 20;
+      currentRow++;
+    });
+
+    // Add activity by role breakdown
+    currentRow++;
+    worksheet.mergeCells(`A${currentRow}:F${currentRow}`);
+    const roleBreakdownCell = worksheet.getCell(`A${currentRow}`);
+    roleBreakdownCell.value = "👥 ACTIVITY BY ROLE";
+    roleBreakdownCell.font = {
+      size: 11,
+      bold: true,
+      color: { argb: "FF6B46C1" },
+    };
+    roleBreakdownCell.alignment = { vertical: "middle", horizontal: "left" };
+    roleBreakdownCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE9D5FF" },
+    };
+    worksheet.getRow(currentRow).height = 22;
+    currentRow++;
+
+    Object.entries(activityByRole).forEach(([role, count]) => {
+      worksheet.addRow([role, count]);
+      const addedRow = worksheet.getRow(currentRow);
+      addedRow.getCell(1).font = { bold: true };
+      addedRow.getCell(2).font = { color: { argb: "FF6B46C1" } };
+      addedRow.height = 18;
+      currentRow++;
+    });
+
+    // ==== DETAILED ACTIVITY LOG ====
+    currentRow += 2;
+    worksheet.mergeCells(`A${currentRow}:F${currentRow}`);
+    const detailTitleCell = worksheet.getCell(`A${currentRow}`);
+    detailTitleCell.value = "📋 DETAILED ACTIVITY LOG";
+    detailTitleCell.font = {
+      size: 12,
+      bold: true,
+      color: { argb: "FF6B46C1" },
+    };
+    detailTitleCell.alignment = { vertical: "middle", horizontal: "left" };
+    detailTitleCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE9D5FF" },
+    };
+    worksheet.getRow(currentRow).height = 25;
+    currentRow++;
+
+    // Add data headers
+    const headers = [
+      "ID",
+      "Username",
+      "Role",
+      "Action Performed",
+      "Action Type",
+      "Date & Time",
+    ];
+    worksheet.addRow(headers);
+    const headerRow = worksheet.getRow(currentRow);
+    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
     headerRow.fill = {
       type: "pattern",
       pattern: "solid",
-      fgColor: { argb: "FFE6E6FA" },
+      fgColor: { argb: "FF6B46C1" },
     };
-
-    // Auto-fit columns
-    worksheet.columns.forEach((column) => {
-      column.width = 15;
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+    headerRow.height = 25;
+    headerRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin", color: { argb: "FF6B46C1" } },
+        left: { style: "thin", color: { argb: "FF6B46C1" } },
+        bottom: { style: "thin", color: { argb: "FF6B46C1" } },
+        right: { style: "thin", color: { argb: "FF6B46C1" } },
+      };
     });
+    currentRow++;
+
+    // Add activity data with alternating row colors
+    sortedActivity.forEach((item, index) => {
+      // Determine action type from description
+      const actionType = item.description.toLowerCase().includes("add")
+        ? "Create"
+        : item.description.toLowerCase().includes("update")
+        ? "Update"
+        : item.description.toLowerCase().includes("delete")
+        ? "Delete"
+        : item.description.toLowerCase().includes("restore")
+        ? "Restore"
+        : item.description.toLowerCase().includes("backup")
+        ? "Backup"
+        : item.description.toLowerCase().includes("login")
+        ? "Authentication"
+        : "Other";
+
+      worksheet.addRow([
+        item.activity_id,
+        item.user_name,
+        item.role,
+        item.description,
+        actionType,
+        new Date(item.activity_date).toLocaleString(),
+      ]);
+
+      const dataRow = worksheet.getRow(currentRow);
+      dataRow.height = 20;
+
+      // Alternating row colors
+      const fillColor = index % 2 === 0 ? "FFFFFFFF" : "FFF9FAFB";
+      dataRow.eachCell((cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: fillColor },
+        };
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE5E7EB" } },
+          left: { style: "thin", color: { argb: "FFE5E7EB" } },
+          bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+          right: { style: "thin", color: { argb: "FFE5E7EB" } },
+        };
+        cell.alignment = { vertical: "middle", horizontal: "left" };
+      });
+
+      // Color code by action type
+      const actionTypeCell = dataRow.getCell(5);
+      if (actionType === "Create") {
+        actionTypeCell.font = { bold: true, color: { argb: "FF10B981" } };
+      } else if (actionType === "Update") {
+        actionTypeCell.font = { bold: true, color: { argb: "FF3B82F6" } };
+      } else if (actionType === "Delete") {
+        actionTypeCell.font = { bold: true, color: { argb: "FFEF4444" } };
+      } else if (actionType === "Authentication") {
+        actionTypeCell.font = { bold: true, color: { argb: "FF8B5CF6" } };
+      }
+
+      currentRow++;
+    });
+
+    // Set column widths
+    worksheet.getColumn(1).width = 10; // ID
+    worksheet.getColumn(2).width = 20; // Username
+    worksheet.getColumn(3).width = 25; // Role
+    worksheet.getColumn(4).width = 50; // Action Performed
+    worksheet.getColumn(5).width = 15; // Action Type
+    worksheet.getColumn(6).width = 22; // Date & Time
+
+    // Add footer
+    currentRow += 2;
+    worksheet.mergeCells(`A${currentRow}:F${currentRow}`);
+    const footerCell = worksheet.getCell(`A${currentRow}`);
+    footerCell.value = `Report generated by Cardiac Delights | ${new Date().toLocaleString()}`;
+    footerCell.font = { size: 9, italic: true, color: { argb: "FF9CA3AF" } };
+    footerCell.alignment = { vertical: "middle", horizontal: "center" };
 
     // Generate buffer and save
     const buffer = await workbook.xlsx.writeBuffer();
@@ -421,6 +702,26 @@ const Report_UserActivity = () => {
     saveAs(blob, `User_Activity_Report_${getFormattedDate()}.xlsx`);
     setExportSuccess(true);
     setShowPopup(false);
+
+    // Log export activity
+    try {
+      const token = localStorage.getItem("token");
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      await fetch(`${API_URL}/api/log-export`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          report_type: "user activity report",
+          record_count: paginatedActivity.length,
+        }),
+      });
+    } catch (error) {
+      console.log("Failed to log export activity:", error);
+      // Don't show error to user, just log it
+    }
   };
 
   const appendToGoogleSheet = async (
@@ -467,6 +768,39 @@ const Report_UserActivity = () => {
       );
       const sheet = await response.json();
       const sheetId = sheet.spreadsheetId;
+
+      // Prepare values for Google Sheets
+      const values = [
+        [
+          "ID",
+          "Username",
+          "Role",
+          "Action Performed",
+          "Action Type",
+          "Date & Time",
+        ],
+        ...sortedActivity.map((item) => [
+          item.activity_id,
+          item.user_name,
+          item.role,
+          item.description,
+          item.description.toLowerCase().includes("add")
+            ? "Create"
+            : item.description.toLowerCase().includes("update")
+            ? "Update"
+            : item.description.toLowerCase().includes("delete")
+            ? "Delete"
+            : item.description.toLowerCase().includes("restore")
+            ? "Restore"
+            : item.description.toLowerCase().includes("backup")
+            ? "Backup"
+            : item.description.toLowerCase().includes("login")
+            ? "Authentication"
+            : "Other",
+          new Date(item.activity_date).toLocaleString(),
+        ]),
+      ];
+
       await appendToGoogleSheet(accessToken, sheetId, SHEET_RANGE, values);
     } catch (error) {
       console.error("Failed to create sheet:", error);
@@ -785,42 +1119,6 @@ const Report_UserActivity = () => {
                     <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 xs:gap-3 sm:gap-4 mb-4">
                       <div>
                         <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
-                          Date
-                        </label>
-                        <select
-                          value={reportDate}
-                          onChange={(e) => setReportDate(e.target.value)}
-                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-violet-400 cursor-pointer text-2xs xs:text-xs sm:text-sm transition-all"
-                          aria-label="Filter by date"
-                        >
-                          <option value="">All Dates</option>
-                          {uniqueReportDates.map((date) => (
-                            <option key={date} value={date}>
-                              {date ? dayjs(date).format("MMMM D, YYYY") : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
-                          Period
-                        </label>
-                        <select
-                          value={period}
-                          onChange={(e) => setPeriod(e.target.value)}
-                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-violet-400 cursor-pointer text-2xs xs:text-xs sm:text-sm transition-all"
-                          aria-label="Filter by period"
-                        >
-                          <option value="all">All Time</option>
-                          <option value="weekly">This Week</option>
-                          <option value="monthly">This Month</option>
-                          <option value="yearly">This Year</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
                           Role
                         </label>
                         <select
@@ -1075,7 +1373,7 @@ const Report_UserActivity = () => {
                           </p>
                         </div>
                       ) : (
-                        sortedActivity.map((item, index) => (
+                        paginatedActivity.map((item, index) => (
                           <div
                             key={`${item.activity_id}-${index}`}
                             className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 rounded-lg p-2 border border-gray-700/30 xs-compact"
@@ -1168,7 +1466,7 @@ const Report_UserActivity = () => {
                           </p>
                         </div>
                       ) : (
-                        sortedActivity.map((item, index) => (
+                        paginatedActivity.map((item, index) => (
                           <div
                             key={`${item.id}-${index}`}
                             className="bg-gradient-to-r from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-lg xs:rounded-xl p-3 xs:p-4 border border-gray-700/30 hover:border-violet-500/30 transition-all duration-200 touch-manipulation"
@@ -1278,7 +1576,7 @@ const Report_UserActivity = () => {
                             </td>
                           </tr>
                         ) : (
-                          sortedActivity.map((item, index) => (
+                          paginatedActivity.map((item, index) => (
                             <tr
                               key={`${item.activity_id}-${index}`}
                               className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-violet-400/5 hover:to-violet-500/5 transition-all duration-200 cursor-pointer ${
@@ -1317,7 +1615,35 @@ const Report_UserActivity = () => {
                         )}
                       </tbody>
                     </table>
+
+                    {/* Pagination for Desktop View */}
+                    {sortedActivity.length > 0 && (
+                      <div className="p-4">
+                        <Pagination
+                          currentPage={currentPage}
+                          totalPages={totalPages}
+                          onPageChange={setCurrentPage}
+                          itemsPerPage={itemsPerPage}
+                          totalItems={sortedActivity.length}
+                          onItemsPerPageChange={setItemsPerPage}
+                        />
+                      </div>
+                    )}
                   </div>
+
+                  {/* Pagination for Mobile Views */}
+                  {sortedActivity.length > 0 && (
+                    <div className="md:hidden p-2 xs:p-3">
+                      <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                        itemsPerPage={itemsPerPage}
+                        totalItems={sortedActivity.length}
+                        onItemsPerPageChange={setItemsPerPage}
+                      />
+                    </div>
+                  )}
                 </section>
               </section>
             </div>

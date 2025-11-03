@@ -24,6 +24,8 @@ import { useMenuAPI, MenuItem as MenuItemType } from "./hook/use-menu";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { FiEye, FiMinus, FiRefreshCw, FiTrendingDown } from "react-icons/fi";
 import { MdWarning, MdCheckCircle } from "react-icons/md";
+import Pagination from "@/app/components/Pagination";
+import { TableLoading, EmptyState } from "@/app/components/LoadingStates";
 
 const columns = [
   { key: "menu_id", label: "Dish ID" },
@@ -96,6 +98,8 @@ const Menu: React.FC = () => {
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // Patch: Use cached data when offline, and show offline message if no cache
   const [offlineMenu, setOfflineMenu] = useState<MenuItemType[] | null>(null);
@@ -283,6 +287,19 @@ const Menu: React.FC = () => {
     });
   }, [filtered, sortConfig]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return sortedData.slice(startIndex, endIndex);
+  }, [sortedData, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, sortConfig]);
+
   const requestSort = (key: string) => {
     setSortConfig((prev) => ({
       key,
@@ -455,12 +472,17 @@ const Menu: React.FC = () => {
                     className="w-full sm:w-auto bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
                   >
                     <option value="">All Categories</option>
-                    <option>Soup & Noodles</option>
-                    <option>Rice Toppings</option>
+                    <option>Bagnet Meals</option>
                     <option>Sizzlers</option>
-                    <option>Extras</option>
+                    <option>Unli Rice w/ Bone Marrow</option>
+                    <option>Soups w/ Bone Marrow</option>
+                    <option>Combo</option>
+                    <option>For Sharing</option>
+                    <option>Noodles</option>
                     <option>Desserts</option>
-                    <option>Beverage</option>
+                    <option>Sides</option>
+                    <option>Drinks</option>
+                    <option>Extras</option>
                   </select>
                   {(searchQuery || selectedCategory || sortConfig.key) && (
                     <button
@@ -534,27 +556,25 @@ const Menu: React.FC = () => {
                     <tbody>
                       {shouldShowLoading ? (
                         <tr>
-                          <td
-                            colSpan={columns.length}
-                            className="text-center py-8"
-                          >
-                            <div className="text-yellow-300 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
-                              {typeof navigator !== "undefined" &&
-                              navigator.onLine
-                                ? "Refreshing menu data..."
-                                : "Loading from offline cache..."}
-                            </div>
+                          <td colSpan={columns.length}>
+                            <TableLoading
+                              rows={itemsPerPage}
+                              columns={columns.length}
+                              message={
+                                typeof navigator !== "undefined" &&
+                                navigator.onLine
+                                  ? "Refreshing menu data..."
+                                  : "Loading from offline cache..."
+                              }
+                            />
                           </td>
                         </tr>
                       ) : offlineError ? (
                         <tr>
-                          <td
-                            colSpan={columns.length}
-                            className="text-center py-8"
-                          >
-                            <div className="flex flex-col items-center gap-2">
-                              <MdWarning className="text-yellow-400 text-3xl mx-auto" />
-                              <div className="text-yellow-400 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
+                          <td colSpan={columns.length}>
+                            <div className="flex flex-col items-center gap-4 py-12">
+                              <MdWarning className="text-yellow-400 text-5xl" />
+                              <div className="text-yellow-400 text-lg font-medium text-center">
                                 {offlineError}
                               </div>
                             </div>
@@ -562,15 +582,17 @@ const Menu: React.FC = () => {
                         </tr>
                       ) : isError ? (
                         <tr>
-                          <td
-                            colSpan={columns.length}
-                            className="text-center py-8 text-red-400"
-                          >
-                            Error loading menu items.
+                          <td colSpan={columns.length}>
+                            <div className="flex flex-col items-center gap-4 py-12">
+                              <MdWarning className="text-red-400 text-5xl" />
+                              <div className="text-red-400 text-lg font-medium text-center">
+                                Error loading menu items.
+                              </div>
+                            </div>
                           </td>
                         </tr>
-                      ) : sortedData.length > 0 ? (
-                        sortedData.map((dish) => (
+                      ) : paginatedData.length > 0 ? (
+                        paginatedData.map((dish, index) => (
                           <tr
                             key={
                               dish.menu_id ??
@@ -579,7 +601,7 @@ const Menu: React.FC = () => {
                               }-${Math.random()}`
                             }
                             className={`group border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-yellow-500/5 transition-all duration-200 cursor-pointer ${
-                              sortedData.indexOf(dish) % 2 === 0
+                              index % 2 === 0
                                 ? "bg-gray-800/20"
                                 : "bg-gray-900/20"
                             }`}
@@ -588,7 +610,7 @@ const Menu: React.FC = () => {
                             }}
                           >
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
-                              {dish.menu_id}
+                              {(currentPage - 1) * itemsPerPage + index + 1}
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
                               {dish.itemcode || "-"}
@@ -752,18 +774,37 @@ const Menu: React.FC = () => {
                         ))
                       ) : (
                         <tr>
-                          <td
-                            colSpan={columns.length}
-                            className="px-3 sm:px-6 py-8 sm:py-12 text-center text-gray-400 text-lg"
-                          >
-                            {menuData.length === 0
-                              ? "No menu items found."
-                              : "No menu items found matching your filters"}
+                          <td colSpan={columns.length}>
+                            <EmptyState
+                              icon={<FaUtensils className="text-6xl" />}
+                              title={
+                                menuData.length === 0
+                                  ? "No menu items found"
+                                  : "No matches found"
+                              }
+                              message={
+                                menuData.length === 0
+                                  ? "Add your first menu item to get started"
+                                  : "Try adjusting your search or filter criteria"
+                              }
+                            />
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
+
+                  {/* Pagination */}
+                  {sortedData.length > 0 && (
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                      itemsPerPage={itemsPerPage}
+                      totalItems={sortedData.length}
+                      onItemsPerPageChange={setItemsPerPage}
+                    />
+                  )}
                 </div>
               </section>
             </article>

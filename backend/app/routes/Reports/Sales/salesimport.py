@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
-from app.supabase import supabase, postgrest_client
-from collections import defaultdict
+from app.supabase import supabase, postgrest_client, get_db
 import logging
 from app.utils.unit_converter import convert_units, get_unit_type, normalize_unit, format_quantity_with_unit
+from app.models.user_activity_log import UserActivityLog
+from app.routes.Inventory.master_inventory import require_role
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -154,58 +155,75 @@ async def auto_deduct_inventory_from_sales(sale_date: str):
 
 
 @router.post("/import-sales")
-async def import_sales(request: Request):
+async def import_sales(
+    request: Request,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
     data = await request.json()
     rows = data.get("rows", [])
     auto_deduct = data.get("auto_deduct", True)  # Default to True for automatic deduction
 
-    # Aggregate rows by item_name
-    grouped = defaultdict(lambda: {
-        "order_item_id": None,
-        "quantity": 0,
-        "unit_price": 0,
-        "price": 0,
-        "subtotal": 0,
-        "total_price": 0,
-        "category": "",
-        "sale_date": None,
-    })
-
-    for row in rows:
-        itemcode = row.get("itemcode") or row.get("itemcodex")
-        item_name = row.get("item_name") or row.get("itemname")
-        grouped[item_name]["itemcode"] = itemcode
-        grouped[item_name]["quantity"] += int(row.get("quantity", 0))
-        grouped[item_name]["unit_price"] = float(row.get("unit_price", row.get("amount", 0)))  # last unit price
-        grouped[item_name]["price"] += float(row.get("price", row.get("amount", 0)))
-        grouped[item_name]["subtotal"] += float(row.get("subtotal", row.get("amount", 0)))
-        grouped[item_name]["total_price"] += float(row.get("total_price", row.get("amount", 0)))
-        grouped[item_name]["category"] = row.get("category", "")
-        grouped[item_name]["sale_date"] = row.get("date")
-
+    # Import rows individually with all detailed fields (NO aggregation)
     imported = 0
     sale_dates = set()
 
-    for item_name, data in grouped.items():
+    for row in rows:
+        # Extract all fields from Excel import
+        itemcode = row.get("itemcode") or row.get("itemcodex") or ""
+        item_name = row.get("item_name") or row.get("itemname") or ""
+
+        # Parse date and time
+        date_str = row.get("date", "")
+        time_str = row.get("time", "")
+
+        # Combine date and time if both present
+        if date_str and time_str:
+            try:
+                sale_datetime = f"{date_str} {time_str}"
+            except:
+                sale_datetime = date_str
+        else:
+            sale_datetime = date_str or datetime.utcnow().date().isoformat()
+
+        # Build detailed row with all restaurant fields from your Excel
         db_row = {
-            "itemcode": data["itemcode"],
+            "itemcode": itemcode,
             "item_name": item_name,
-            "quantity": data["quantity"],
-            "unit_price": data["unit_price"],
-            "price": data["price"],
-            "subtotal": data["subtotal"],
-            "total_price": data["total_price"],
-            "sale_date": data["sale_date"],
-            "category": data["category"],
+            "quantity": int(row.get("quantity", 0)),
+            "unit_price": float(row.get("price", 0)),  # Unit price
+            "price": float(row.get("price", 0)),
+            "subtotal": float(row.get("amount", 0)),  # Amount before discount
+            "total_price": float(row.get("netamount", row.get("amount", 0))),  # Final price after discount
+            "sale_date": sale_datetime,
+            "category": row.get("category", ""),
+
+            # Discount field (sdisc_perc is the discount percentage that has data)
+            "discount_percentage": float(row.get("sdisc_perc", 0)),
+
+            # Order details
+            "order_number": row.get("orderno", ""),
+            "transaction_number": row.get("transno", row.get("transactionno", "")),
+            "receipt_number": row.get("receptno", row.get("receiptno", "")),
+
+            # Service details
+            "dine_type": row.get("dinetype", ""),
+            "order_taker": row.get("ordertaker", ""),
+            "cashier": row.get("cashier", ""),
+            "terminal_no": row.get("terminalno", ""),
+
+            # Customer details
+            "member": row.get("member", ""),
         }
+
         res = supabase.table("sales_report").insert(db_row).execute()
         if res.data is not None:
             imported += 1
-            if data["sale_date"]:
-                sale_dates.add(data["sale_date"])
+            if date_str:
+                sale_dates.add(date_str)
 
     response = {
-        "message": "Sales data imported successfully (aggregated)",
+        "message": "Sales data imported successfully with detailed information",
         "rows": imported
     }
 
@@ -221,5 +239,24 @@ async def import_sales(request: Request):
 
         response["inventory_deduction"] = deduction_results
         response["message"] += " and inventory automatically updated"
+
+    # Log user activity for sales import
+    try:
+        user_row = getattr(user, "user_row", user)
+        date_range = f"{min(sale_dates)} to {max(sale_dates)}" if len(sale_dates) > 1 else list(sale_dates)[0] if sale_dates else "N/A"
+        new_activity = UserActivityLog(
+            user_id=user_row.get("user_id"),
+            action_type="import sales report",
+            description=f"Imported {imported} sales records for date(s): {date_range}. Auto-deduct: {'Yes' if auto_deduct else 'No'}",
+            activity_date=datetime.utcnow(),
+            report_date=datetime.utcnow(),
+            user_name=user_row.get("name"),
+            role=user_row.get("user_role"),
+        )
+        db.add(new_activity)
+        db.flush()
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to record user activity for sales import: {e}")
 
     return response

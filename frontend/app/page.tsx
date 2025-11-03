@@ -599,12 +599,16 @@ const Login = () => {
       )}
 
       {showResetModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-md z-50 px-4 transition-opacity duration-300 animate-fadeIn">
-          <section className="relative bg-gradient-to-br from-gray-900/95 to-black/95 text-white p-8 border-2 border-yellow-400 rounded-3xl shadow-2xl w-full max-w-sm text-center scale-100 animate-popIn">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-lg z-50 px-4 transition-opacity duration-300 animate-fadeIn">
+          <section className="relative bg-gradient-to-br from-gray-900/98 via-gray-800/95 to-black/98 text-white p-8 sm:p-10 border-2 border-yellow-400/80 rounded-3xl shadow-2xl w-full max-w-md text-center scale-100 animate-popIn">
+            {/* Decorative gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-yellow-400/5 via-transparent to-yellow-500/5 rounded-3xl pointer-events-none"></div>
+
+            {/* Close button */}
             <button
               onClick={handleCloseResetModal}
               aria-label="Close modal"
-              className="absolute top-3 right-3 text-yellow-400 hover:text-yellow-300 bg-black/40 rounded-full p-2 transition-colors focus:outline-none"
+              className="absolute top-4 right-4 text-yellow-400 hover:text-yellow-300 bg-black/60 hover:bg-black/80 rounded-full p-2.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-400 z-10"
             >
               <svg
                 width="20"
@@ -620,57 +624,109 @@ const Login = () => {
                 />
               </svg>
             </button>
-            <h3 className="text-2xl font-bold mb-4 drop-shadow text-yellow-300">
-              {resetStep === "email"
-                ? "Forgot Password"
-                : resetStep === "otp"
-                ? "Enter OTP"
-                : "Set New Password"}
-            </h3>
+
+            {/* Header with icon */}
+            <div className="mb-6 relative z-10">
+              <div className="mx-auto w-16 h-16 bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                {resetStep === "email" ? (
+                  <svg className="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                ) : resetStep === "otp" ? (
+                  <svg className="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                ) : (
+                  <svg className="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                )}
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-bold drop-shadow-lg bg-gradient-to-r from-yellow-300 to-yellow-500 bg-clip-text text-transparent">
+                {resetStep === "email"
+                  ? "Forgot Password?"
+                  : resetStep === "otp"
+                  ? "Verify Your Identity"
+                  : "Create New Password"}
+              </h3>
+              <p className="text-gray-400 text-sm mt-2">
+                {resetStep === "email"
+                  ? "Don't worry, we'll help you reset it"
+                  : resetStep === "otp"
+                  ? "Enter the code we sent to your email"
+                  : "Choose a strong password for your account"}
+              </p>
+            </div>
 
             {resetStep === "email" && (
-              <div className="space-y-4">
-                <div className="flex gap-2">
+              <div className="space-y-4 relative z-10">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                    </svg>
+                  </div>
                   <input
                     type="email"
-                    placeholder="Enter your email"
+                    placeholder="Enter your email address"
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
                     required
-                    className="flex-1 bg-gray-900/80 border-2 border-yellow-400 text-white placeholder-gray-400 px-2 py-3 text-sm rounded-lg shadow focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-400 transition-all"
+                    className="w-full bg-gray-900/60 backdrop-blur-sm border-2 border-yellow-400/50 focus:border-yellow-400 text-white placeholder-gray-500 pl-12 pr-4 py-4 text-base rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-yellow-400/50 transition-all duration-200"
                   />
-                  <button
-                    type="button"
-                    onClick={handleSendOtp}
-                    disabled={resetLoading || !resetEmail}
-                    className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-2 px-3 rounded-lg transition-all shadow-lg hover:scale-105 transform focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {resetLoading ? (
-                      <FaSpinner className="animate-spin" />
-                    ) : (
-                      "Send OTP"
-                    )}
-                  </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={resetLoading || !resetEmail}
+                  className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-yellow-400/50 hover:scale-[1.02] transform focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
+                >
+                  {resetLoading ? (
+                    <>
+                      <FaSpinner className="animate-spin" />
+                      <span>Sending...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                      <span>Send Verification Code</span>
+                    </>
+                  )}
+                </button>
               </div>
             )}
             {resetStep === "otp" && (
-              <form onSubmit={handleVerifyOtp} className="space-y-4">
-                <div className="text-yellow-200 text-sm mb-2">
-                  OTP sent to: {resetEmail}
-                  <br />
+              <form onSubmit={handleVerifyOtp} className="space-y-6 relative z-10">
+                {/* Email info banner */}
+                <div className="bg-yellow-400/10 border border-yellow-400/30 rounded-xl p-4 backdrop-blur-sm">
+                  <div className="flex items-center gap-2 text-yellow-300 text-sm font-medium mb-2">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                      <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                    </svg>
+                    <span>Code sent to: <span className="text-white">{resetEmail}</span></span>
+                  </div>
                   {otpTimer > 0 ? (
-                    <span className="text-blue-300">
-                      Code expires in: {Math.floor(otpTimer / 60)}:
-                      {(otpTimer % 60).toString().padStart(2, "0")}
-                    </span>
+                    <div className="flex items-center gap-2 text-blue-300 text-sm">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Expires in: <span className="font-bold">{Math.floor(otpTimer / 60)}:{(otpTimer % 60).toString().padStart(2, "0")}</span></span>
+                    </div>
                   ) : (
-                    <span className="text-red-400">
-                      OTP has expired. Please request a new one.
-                    </span>
+                    <div className="flex items-center gap-2 text-red-400 text-sm">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <span className="font-medium">Code expired. Request a new one.</span>
+                    </div>
                   )}
                 </div>
-                <div className="flex gap-2 justify-center">
+
+                {/* OTP input boxes */}
+                <div className="flex gap-2 sm:gap-3 justify-center">
                   {[0, 1, 2, 3, 4, 5].map((index) => (
                     <input
                       key={index}
@@ -685,111 +741,176 @@ const Login = () => {
                       }
                       onKeyDown={(e) => handleOtpKeyDown(index, e)}
                       maxLength={1}
-                      className="w-12 h-12 bg-gray-900/80 border-2 border-yellow-400 text-white text-center text-xl font-bold rounded-lg shadow focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-400 transition-all"
+                      className="w-11 h-14 sm:w-13 sm:h-16 bg-gray-900/60 backdrop-blur-sm border-2 border-yellow-400/50 focus:border-yellow-400 text-white text-center text-2xl font-bold rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-yellow-400/50 transition-all duration-200"
                     />
                   ))}
                 </div>
-                <div className="flex gap-2">
+                {/* Action buttons */}
+                <div className="space-y-3">
                   <button
                     type="submit"
                     disabled={resetLoading || resetOtp.length !== 6}
-                    className="flex-1 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-3 px-8 rounded-lg transition-all shadow-lg hover:scale-105 transform focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-yellow-400/50 hover:scale-[1.02] transform focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
                   >
                     {resetLoading ? (
-                      <span className="flex items-center justify-center">
-                        <FaSpinner className="animate-spin mr-2" />
-                        Verifying...
-                      </span>
+                      <>
+                        <FaSpinner className="animate-spin" />
+                        <span>Verifying...</span>
+                      </>
                     ) : (
-                      "Verify OTP"
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Verify Code</span>
+                      </>
                     )}
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={resetLoading || resendCooldown > 0}
+                    className="w-full bg-transparent border-2 border-yellow-400/50 hover:border-yellow-400 text-yellow-400 hover:bg-yellow-400/10 font-semibold py-3 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {resetLoading ? (
+                      <>
+                        <FaSpinner className="animate-spin" />
+                        <span>Resending...</span>
+                      </>
+                    ) : resendCooldown > 0 ? (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Resend in {resendCooldown}s</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Resend Code</span>
+                      </>
+                    )}
+                  </button>
+
                   <button
                     type="button"
                     onClick={handleBackFromOtp}
-                    className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-lg"
+                    className="w-full bg-gray-700/50 hover:bg-gray-700 text-gray-300 hover:text-white font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2"
                   >
-                    Back
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    <span>Back to Email</span>
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSendOtp}
-                  disabled={resetLoading}
-                  className="w-full bg-transparent border border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black font-semibold py-2 px-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {resetLoading ? (
-                    <span className="flex items-center justify-center">
-                      <FaSpinner className="animate-spin mr-2" />
-                      Resending...
-                    </span>
-                  ) : resendCooldown > 0 ? (
-                    `Resend OTP (${resendCooldown}s)`
-                  ) : (
-                    "Resend OTP"
-                  )}
-                </button>
               </form>
             )}
             {resetStep === "password" && (
-              <form onSubmit={handleUpdatePassword} className="space-y-4">
-                <div>
+              <form onSubmit={handleUpdatePassword} className="space-y-5 relative z-10">
+                {/* New Password Input */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    New Password
+                  </label>
                   <div className="relative">
                     <input
                       type={showNewPassword ? "text" : "password"}
-                      placeholder="Enter new password"
+                      placeholder="Enter at least 8 characters"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       required
                       minLength={8}
-                      className="w-full bg-gray-900/80 border-2 border-yellow-400 text-white placeholder-gray-400 px-4 py-3 text-base rounded-lg shadow focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-400 transition-all pr-12"
+                      className="w-full bg-gray-900/60 backdrop-blur-sm border-2 border-yellow-400/50 focus:border-yellow-400 text-white placeholder-gray-500 px-4 py-4 pr-12 text-base rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-yellow-400/50 transition-all duration-200"
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-yellow-400 hover:text-yellow-300 cursor-pointer text-xl focus:outline-none"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-yellow-400 hover:text-yellow-300 cursor-pointer text-xl focus:outline-none transition-colors"
                     >
                       {showNewPassword ? <FaEyeSlash /> : <FaEye />}
                     </button>
                   </div>
                   {newPassword && (
-                    <div className="mt-2 text-sm flex items-center gap-2">
-                      <div
-                        className={`h-2 flex-1 rounded ${
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-300 ${
+                              newPassword.length < 8
+                                ? "w-1/3 bg-red-500"
+                                : newPassword.length < 12
+                                ? "w-2/3 bg-yellow-500"
+                                : "w-full bg-green-500"
+                            }`}
+                          />
+                        </div>
+                        <span className={`text-sm font-semibold ${
                           newPassword.length < 8
-                            ? "bg-red-500"
+                            ? "text-red-400"
                             : newPassword.length < 12
-                            ? "bg-yellow-500"
-                            : "bg-green-500"
-                        }`}
-                      />
-                      <span className="text-gray-300">
-                        {newPassword.length < 8
-                          ? "Weak"
-                          : newPassword.length < 12
-                          ? "Medium"
-                          : "Strong"}
-                      </span>
+                            ? "text-yellow-400"
+                            : "text-green-400"
+                        }`}>
+                          {newPassword.length < 8
+                            ? "Weak"
+                            : newPassword.length < 12
+                            ? "Medium"
+                            : "Strong"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        Password strength: {newPassword.length < 8 ? "Use at least 8 characters" : newPassword.length < 12 ? "Add more characters for better security" : "Excellent!"}
+                      </p>
                     </div>
                   )}
                 </div>
-                <input
-                  type={showNewPassword ? "text" : "password"}
-                  placeholder="Confirm new password"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  className={`w-full bg-gray-900/80 border-2 ${
-                    confirmNewPassword && confirmNewPassword !== newPassword
-                      ? "border-red-500"
-                      : "border-yellow-400"
-                  } text-white placeholder-gray-400 px-4 py-3 text-base rounded-lg shadow focus:outline-none focus:ring-2 ${
-                    confirmNewPassword && confirmNewPassword !== newPassword
-                      ? "focus:ring-red-500"
-                      : "focus:ring-yellow-400"
-                  } transition-all`}
-                />
+
+                {/* Confirm Password Input */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Confirm Password
+                  </label>
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    placeholder="Re-enter your password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    className={`w-full bg-gray-900/60 backdrop-blur-sm border-2 ${
+                      confirmNewPassword && confirmNewPassword !== newPassword
+                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/50"
+                        : "border-yellow-400/50 focus:border-yellow-400 focus:ring-yellow-400/50"
+                    } text-white placeholder-gray-500 px-4 py-4 text-base rounded-xl shadow-lg focus:outline-none focus:ring-2 transition-all duration-200`}
+                  />
+                  {confirmNewPassword && confirmNewPassword !== newPassword && (
+                    <p className="text-sm text-red-400 flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      Passwords do not match
+                    </p>
+                  )}
+                  {confirmNewPassword && confirmNewPassword === newPassword && newPassword && (
+                    <p className="text-sm text-green-400 flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Passwords match
+                    </p>
+                  )}
+                </div>
+
+                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={
@@ -797,30 +918,56 @@ const Login = () => {
                     !newPassword ||
                     newPassword !== confirmNewPassword
                   }
-                  className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-3 px-8 rounded-lg transition-all shadow-lg hover:scale-105 transform focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-4 px-6 rounded-xl transition-all shadow-lg hover:shadow-yellow-400/50 hover:scale-[1.02] transform focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
                 >
                   {resetLoading ? (
-                    <span className="flex items-center justify-center">
-                      <FaSpinner className="animate-spin mr-2" />
-                      Updating...
-                    </span>
+                    <>
+                      <FaSpinner className="animate-spin" />
+                      <span>Updating Password...</span>
+                    </>
                   ) : (
-                    "Update Password"
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Reset Password</span>
+                    </>
                   )}
                 </button>
               </form>
             )}
+
+            {/* Status Message */}
             {resetStatus && (
-              <div
-                className={`mt-4 text-base font-medium rounded-lg py-2 px-4 ${
+              <div className={`mt-6 relative z-10 rounded-xl p-4 flex items-start gap-3 ${
+                resetStatus.includes("sent") ||
+                resetStatus.includes("verified") ||
+                resetStatus.includes("successfully")
+                  ? "bg-green-500/20 border-2 border-green-500/50"
+                  : "bg-red-500/20 border-2 border-red-500/50"
+              }`}>
+                <svg className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
                   resetStatus.includes("sent") ||
                   resetStatus.includes("verified") ||
                   resetStatus.includes("successfully")
-                    ? "bg-green-600/90 text-white"
-                    : "bg-red-600/90 text-white"
-                }`}
-              >
-                {resetStatus}
+                    ? "text-green-400"
+                    : "text-red-400"
+                }`} fill="currentColor" viewBox="0 0 20 20">
+                  {resetStatus.includes("sent") || resetStatus.includes("verified") || resetStatus.includes("successfully") ? (
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  ) : (
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  )}
+                </svg>
+                <p className={`text-sm font-medium ${
+                  resetStatus.includes("sent") ||
+                  resetStatus.includes("verified") ||
+                  resetStatus.includes("successfully")
+                    ? "text-green-200"
+                    : "text-red-200"
+                }`}>
+                  {resetStatus}
+                </p>
               </div>
             )}
           </section>

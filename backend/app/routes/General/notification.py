@@ -27,6 +27,8 @@ class NotificationSettings(BaseModel):
     expiration_enabled: bool = True
     expiration_days: int = 3
     expiration_method: Optional[List[str]] = ["inapp"]
+    transfer_enabled: bool = True  # New: Transfer notifications
+    transfer_method: Optional[List[str]] = ["inapp"]  # New: Transfer notification methods
 
 
 class Notification(BaseModel):
@@ -75,39 +77,39 @@ async def update_notification_settings(
 ):
     try:
         from app.models.notification_settings import NotificationSettings as NotificationSettingsModel
-        # Try to fetch existing settings
-        from sqlalchemy import text
-        result = await db.execute(
-            text("SELECT * FROM notification_settings WHERE user_id = :user_id"), {"user_id": settings.user_id}
-        )
-        row = result.fetchone()
-        if row:
-            # Update existing
-            await db.execute(
-                text("UPDATE notification_settings SET low_stock_enabled = :low_stock_enabled, low_stock_method = :low_stock_method, expiration_enabled = :expiration_enabled, expiration_days = :expiration_days, expiration_method = :expiration_method WHERE user_id = :user_id"),
-                {
-                    "user_id": settings.user_id,
-                    "low_stock_enabled": settings.low_stock_enabled,
-                    "low_stock_method": json.dumps(settings.low_stock_method),
-                    "expiration_enabled": settings.expiration_enabled,
-                    "expiration_days": settings.expiration_days,
-                    "expiration_method": json.dumps(settings.expiration_method),
-                }
-            )
+        from sqlalchemy import select
+
+        # Try to fetch existing settings using ORM
+        stmt = select(NotificationSettingsModel).where(NotificationSettingsModel.user_id == settings.user_id)
+        result = await db.execute(stmt)
+        existing = result.scalars().first()
+
+        if existing:
+            # Update existing record
+            existing.low_stock_enabled = settings.low_stock_enabled
+            existing.low_stock_method = json.dumps(settings.low_stock_method)
+            existing.expiration_enabled = settings.expiration_enabled
+            existing.expiration_days = settings.expiration_days
+            existing.expiration_method = json.dumps(settings.expiration_method)
+            existing.transfer_enabled = settings.transfer_enabled
+            existing.transfer_method = json.dumps(settings.transfer_method)
         else:
-            # Insert new
-            await db.execute(
-                text("INSERT INTO notification_settings (user_id, low_stock_enabled, low_stock_method, expiration_enabled, expiration_days, expiration_method) VALUES (:user_id, :low_stock_enabled, :low_stock_method, :expiration_enabled, :expiration_days, :expiration_method)"),
-                {
-                    "user_id": settings.user_id,
-                    "low_stock_enabled": settings.low_stock_enabled,
-                    "low_stock_method": json.dumps(settings.low_stock_method),
-                    "expiration_enabled": settings.expiration_enabled,
-                    "expiration_days": settings.expiration_days,
-                    "expiration_method": json.dumps(settings.expiration_method),
-                }
+            # Insert new record
+            new_settings = NotificationSettingsModel(
+                user_id=settings.user_id,
+                low_stock_enabled=settings.low_stock_enabled,
+                low_stock_method=json.dumps(settings.low_stock_method),
+                expiration_enabled=settings.expiration_enabled,
+                expiration_days=settings.expiration_days,
+                expiration_method=json.dumps(settings.expiration_method),
+                transfer_enabled=settings.transfer_enabled,
+                transfer_method=json.dumps(settings.transfer_method),
             )
+            db.add(new_settings)
+
         await db.commit()
+
+        # Log user activity
         try:
             user_row = getattr(user, "user_row", user)
             new_activity = UserActivityLog(
@@ -163,11 +165,14 @@ def create_notification(user_id, type, message, details=None):
             "created_at": now,
         }
         if details is not None:
-            payload["details"] = (
-                details  # Make sure your Supabase table has a 'details' column (text)
-            )
-        result = postgrest_client.table("notification").insert(payload).execute()
+            payload["details"] = details
+        # Insert and fetch the id
+        result = postgrest_client.table("notification").insert(payload).select("id").execute()
         print("Insert result:", result)
+        if result.data and "id" in result.data[0]:
+            print(f"Notification created with id: {result.data[0]['id']}")
+        else:
+            print("Warning: Notification id missing after insert!")
     except Exception as e:
         print("Error creating notification:", e)
 
@@ -241,7 +246,7 @@ def check_inventory_alerts():
                 and len(threshold_resp.data) > 0
                 and threshold_resp.data[0].get("low_stock_threshold") is not None
             ):
-                threshold = threshold_resp.data[0]["low_stock_threshold"]
+                threshold = float(threshold_resp.data[0]["low_stock_threshold"])
             # If not found by name, try by category
             if threshold is None and category:
                 threshold_resp = (
@@ -255,7 +260,7 @@ def check_inventory_alerts():
                     and len(threshold_resp.data) > 0
                     and threshold_resp.data[0].get("low_stock_threshold") is not None
                 ):
-                    threshold = threshold_resp.data[0]["low_stock_threshold"]
+                    threshold = float(threshold_resp.data[0]["low_stock_threshold"])
 
             print(
                 f"Item: {item_name} ({source_table}), Stock: {stock}, Threshold: {threshold}"

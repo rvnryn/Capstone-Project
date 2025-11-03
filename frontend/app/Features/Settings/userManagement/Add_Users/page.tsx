@@ -13,101 +13,103 @@ import { MdCancel, MdSave } from "react-icons/md";
 import { FiAlertTriangle, FiArrowRight, FiCheck, FiX } from "react-icons/fi";
 
 export default function AddUsers() {
-    const ROLE_OPTIONS = [
-      "Owner",
-      "General Manager",
-      "Store Manager",
-      "Assistant Store Manager",
-    ];
-    const router = useRouter();
-    const [showPassword, setShowPassword] = useState(false);
-    const [initialSettings, setInitialSettings] = useState<any>(null);
-    const [showUnsavedModal, setShowUnsavedModal] = useState(false);
-    const [pendingRoute, setPendingRoute] = useState<string | null>(null);
-    const [showCancelModal, setShowCancelModal] = useState(false);
-    const [isDirty, setIsDirty] = useState(false);
-    const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-    const [offlineError, setOfflineError] = useState<string | null>(null);
-    const [isOnline, setIsOnline] = useState(true);
-    const [isLoading, setIsLoading] = useState(true);
+  const ROLE_OPTIONS = [
+    "Owner",
+    "General Manager",
+    "Store Manager",
+    "Assistant Store Manager",
+  ];
+  const router = useRouter();
+  const [showPassword, setShowPassword] = useState(false);
+  const [initialSettings, setInitialSettings] = useState<any>(null);
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
-    // Form state and cache key
-    const cacheKey = "add_user_form_cache";
-    const [formData, setFormData] = useState(() => {
-      if (typeof window !== "undefined") {
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          try {
-            return JSON.parse(cached);
-          } catch {
-            return {
-              name: "",
-              username: "",
-              email: "",
-              password: "",
-              re_password: "",
-              user_role: "",
-            };
-          }
+  // Form state and cache key
+  const cacheKey = "add_user_form_cache";
+  const [formData, setFormData] = useState(() => {
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          return JSON.parse(cached);
+        } catch {
+          return {
+            name: "",
+            username: "",
+            email: "",
+            password: "",
+            re_password: "",
+            user_role: "",
+          };
         }
       }
-      return {
-        name: "",
-        username: "",
-        email: "",
-        password: "",
-        re_password: "",
-        user_role: "",
-      };
-    });
-
-    const [errors, setErrors] = useState({
+    }
+    return {
       name: "",
       username: "",
-      gmail: "",
+      email: "",
       password: "",
       re_password: "",
       user_role: "",
-      duplicate: "",
-      supabase: "",
-    });
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    };
+  });
 
-    // Online/offline detection
-    useEffect(() => {
-      const handleOnline = () => setIsOnline(true);
-      const handleOffline = () => setIsOnline(false);
-      setIsOnline(navigator.onLine);
-      window.addEventListener("online", handleOnline);
-      window.addEventListener("offline", handleOffline);
-      return () => {
-        window.removeEventListener("online", handleOnline);
-        window.removeEventListener("offline", handleOffline);
-      };
-    }, []);
+  const [errors, setErrors] = useState({
+    name: "",
+    username: "",
+    gmail: "",
+    password: "",
+    re_password: "",
+    user_role: "",
+    duplicate: "",
+    supabase: "",
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Cache form data on change
-    useEffect(() => {
-      if (typeof window !== "undefined") {
-        localStorage.setItem(cacheKey, JSON.stringify(formData));
-      }
-    }, [formData]);
+  // Online/offline detection
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    setIsOnline(navigator.onLine);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
-    // Simulate loading state for offline/cached
-    useEffect(() => {
-      setIsLoading(false);
-      if (!isOnline) {
-        // If offline and no cache, show error
-        const cached = localStorage.getItem(cacheKey);
-        if (!cached) {
-          setOfflineError("You are offline and no cached form data is available. Please connect to the internet to add a user.");
-        } else {
-          setOfflineError(null);
-        }
+  // Cache form data on change
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(cacheKey, JSON.stringify(formData));
+    }
+  }, [formData]);
+
+  // Simulate loading state for offline/cached
+  useEffect(() => {
+    setIsLoading(false);
+    if (!isOnline) {
+      // If offline and no cache, show error
+      const cached = localStorage.getItem(cacheKey);
+      if (!cached) {
+        setOfflineError(
+          "You are offline and no cached form data is available. Please connect to the internet to add a user."
+        );
       } else {
         setOfflineError(null);
       }
-    }, [isOnline]);
+    } else {
+      setOfflineError(null);
+    }
+  }, [isOnline]);
   // Validation logic
   const validate = useCallback((data: typeof formData) => {
     const newErrors = {
@@ -138,22 +140,25 @@ export default function AddUsers() {
       newErrors.gmail = "Enter a valid Gmail address.";
     }
 
+    // Enhanced password validation
     if (!data.password.trim()) {
       newErrors.password = "Password is required.";
     } else if (data.password.length < 6) {
       newErrors.password = "Password must be at least 6 characters.";
+    } else if (!/[A-Z]/.test(data.password)) {
+      newErrors.password =
+        "Password must contain at least one uppercase letter.";
+    } else if (!/[a-z]/.test(data.password)) {
+      newErrors.password =
+        "Password must contain at least one lowercase letter.";
+    } else if (!/[0-9]/.test(data.password)) {
+      newErrors.password = "Password must contain at least one digit.";
     }
 
     if (!data.user_role) {
       newErrors.user_role = "User role is required.";
     } else if (!ROLE_OPTIONS.includes(data.user_role)) {
       newErrors.user_role = "Invalid role selected.";
-    }
-
-    if (!data.password.trim()) {
-      newErrors.password = "Password is required.";
-    } else if (data.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters.";
     }
 
     // Password match validation
@@ -178,29 +183,31 @@ export default function AddUsers() {
     str.replace(/\b\w/g, (char) => char.toUpperCase());
 
   const handleChange = useCallback(
-  (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setIsDirty(true);
-    setFormData((prev: typeof formData) => {
-      let newValue = value;
-      if (name === "name") {
-        newValue = capitalizeWords(value);
-      } else if (name === "username") {
-        newValue = value.trim().toLowerCase();
-      }
-      return {
-        ...prev,
-        [name]: newValue,
-      };
-    });
-  },
-  []
-);
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const { name, value } = e.target;
+      setIsDirty(true);
+      setFormData((prev: typeof formData) => {
+        let newValue = value;
+        if (name === "name") {
+          newValue = capitalizeWords(value);
+        } else if (name === "username") {
+          newValue = value.trim().toLowerCase();
+        }
+        return {
+          ...prev,
+          [name]: newValue,
+        };
+      });
+    },
+    []
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isOnline) {
-      setOfflineError("You are offline. Please connect to the internet to add a user.");
+      setOfflineError(
+        "You are offline. Please connect to the internet to add a user."
+      );
       return;
     }
     setIsSubmitting(true);
@@ -218,26 +225,55 @@ export default function AddUsers() {
       return;
     }
     try {
-      // 1. Create user in Supabase Auth
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.username,
-          },
+      // 1. FIRST check with backend if email/username already exists (validation)
+      const token = localStorage.getItem("token");
+      const API_BASE_URL =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+      // Validate with backend BEFORE creating auth user
+      const validationResponse = await fetch(`${API_BASE_URL}/api/users/validate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        body: JSON.stringify({
+          email: formData.email,
+          username: formData.username,
+        }),
       });
-      if (error) {
+
+      if (!validationResponse.ok) {
+        const validationError = await validationResponse.json();
         setErrors((prev) => ({
           ...prev,
-          supabase: error.message || "Supabase Auth error.",
+          supabase: validationError.detail || "Validation failed.",
         }));
         setIsSubmitting(false);
         return;
       }
-      // 2. Store extra info in your users table
-      const authId = data?.user?.id;
+
+      // 2. Then create user in Supabase Auth (only if validation passed)
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            full_name: formData.name,
+          },
+        },
+      });
+
+      if (authError) {
+        setErrors((prev) => ({
+          ...prev,
+          supabase: authError.message || "Supabase Auth error.",
+        }));
+        setIsSubmitting(false);
+        return;
+      }
+
+      const authId = authData?.user?.id;
       if (!authId) {
         setErrors((prev) => ({
           ...prev,
@@ -246,34 +282,33 @@ export default function AddUsers() {
         setIsSubmitting(false);
         return;
       }
-      // Check for duplicate username in your table
-      const { data: existingUsers } = await supabase
-        .from("users")
-        .select("username")
-        .eq("username", formData.username);
-      if (existingUsers && existingUsers.length > 0) {
-        setErrors((prev) => ({
-          ...prev,
-          duplicate: "Username already exists.",
-        }));
-        setIsSubmitting(false);
-        return;
-      }
-      // Insert user profile (user_id is your app PK, auth_id is Supabase UUID)
-      const { error: dbError } = await supabase.from("users").insert([
-        {
-          auth_id: authId, // store Supabase Auth UUID
+
+      // 3. Finally create user in database via backend API (handles activity logging)
+      const response = await fetch(`${API_BASE_URL}/api/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          auth_id: authId,
           name: formData.name,
           username: formData.username,
           email: formData.email,
           user_role: formData.user_role,
           status: "active",
-        },
-      ]);
-      if (dbError) {
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // If DB insert fails after auth created, we have a problem
+        // Log the auth_id so it can be cleaned up manually if needed
+        console.error("User created in Auth but failed in DB. Auth ID:", authId);
         setErrors((prev) => ({
           ...prev,
-          supabase: dbError.message || "Database error.",
+          supabase: data.detail || "Failed to create user in database.",
         }));
         setIsSubmitting(false);
         return;
@@ -360,7 +395,9 @@ export default function AddUsers() {
           <main className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="flex flex-col items-center gap-4">
               <div className="w-8 h-8 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-              <div className="text-yellow-400 font-medium text-base">Loading Add User form...</div>
+              <div className="text-yellow-400 font-medium text-base">
+                Loading Add User form...
+              </div>
             </div>
           </main>
         </ResponsiveMain>
@@ -374,7 +411,9 @@ export default function AddUsers() {
         <ResponsiveMain>
           <main className="flex flex-col items-center justify-center min-h-[60vh]">
             <div className="flex flex-col items-center gap-4">
-              <div className="text-red-400 font-bold text-lg">{offlineError}</div>
+              <div className="text-red-400 font-bold text-lg">
+                {offlineError}
+              </div>
               <button
                 className="mt-4 px-6 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition"
                 onClick={() => window.location.reload()}

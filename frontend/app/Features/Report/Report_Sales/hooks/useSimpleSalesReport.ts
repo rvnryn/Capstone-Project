@@ -25,7 +25,17 @@ interface SalesReportData {
     category?: string;
     revenue: number;
     quantity: number;
-    orders: number;
+    unitPrice?: number;
+    subtotal?: number;
+    discount_percentage?: number;
+    sale_date?: string;
+    order_number?: string;
+    transaction_number?: string;
+    dine_type?: string;
+    order_taker?: string;
+    cashier?: string;
+    terminal_no?: string;
+    member?: string;
   }>;
   dailySales: Array<{
     date: string;
@@ -63,12 +73,19 @@ export function useSimpleSalesReport() {
         if (options?.category)
           forecastParams.append("category", options.category);
 
+        // Get token for Authorization header
+        const token = localStorage.getItem("access_token");
+        const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+
         // Fetch all required data in parallel using fetch with offline handling
         const [summaryRes, itemsRes, dateRes, forecastRes] =
           await Promise.allSettled([
             fetch(`${API_BASE_URL}/api/sales-summary?${params.toString()}`, {
               method: "GET",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
             })
               .then(async (res) => {
                 if (!res.ok)
@@ -91,9 +108,12 @@ export function useSimpleSalesReport() {
                       },
                 };
               }),
-            fetch(`${API_BASE_URL}/api/sales-by-item?${params.toString()}`, {
+            fetch(`${API_BASE_URL}/api/sales-detailed?${params.toString()}`, {
               method: "GET",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
             })
               .then(async (res) => {
                 if (!res.ok)
@@ -102,16 +122,19 @@ export function useSimpleSalesReport() {
               })
               .catch((error) => {
                 console.log(
-                  "Sales by item API failed - using cached data or defaults"
+                  "Sales detailed API failed - using cached data or defaults"
                 );
-                const cached = localStorage.getItem("cached_sales_items");
-                return { data: cached ? JSON.parse(cached) : { items: [] } };
+                const cached = localStorage.getItem("cached_sales_detailed");
+                return { data: cached ? JSON.parse(cached) : { sales: [] } };
               }),
             fetch(
               `${API_BASE_URL}/api/sales-by-date?${params.toString()}&grouping=daily`,
               {
                 method: "GET",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
               }
             )
               .then(async (res) => {
@@ -132,7 +155,10 @@ export function useSimpleSalesReport() {
               }`,
               {
                 method: "GET",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
               }
             )
               .then(async (res) => {
@@ -163,8 +189,8 @@ export function useSimpleSalesReport() {
                 total_items_sold: 0,
                 avg_order_value: 0,
               };
-        const items =
-          itemsRes.status === "fulfilled" ? itemsRes.value.data : { items: [] };
+        const salesDetailed =
+          itemsRes.status === "fulfilled" ? itemsRes.value.data : { sales: [] };
         const dates =
           dateRes.status === "fulfilled" ? dateRes.value.data : { data: [] };
         const forecast =
@@ -176,7 +202,10 @@ export function useSimpleSalesReport() {
         if (summaryRes.status === "fulfilled")
           localStorage.setItem("cached_sales_summary", JSON.stringify(summary));
         if (itemsRes.status === "fulfilled")
-          localStorage.setItem("cached_sales_items", JSON.stringify(items));
+          localStorage.setItem(
+            "cached_sales_detailed",
+            JSON.stringify(salesDetailed)
+          );
         if (dateRes.status === "fulfilled")
           localStorage.setItem("cached_sales_dates", JSON.stringify(dates));
         if (forecastRes.status === "fulfilled")
@@ -187,12 +216,22 @@ export function useSimpleSalesReport() {
           totalOrders: summary.total_orders,
           totalItems: summary.total_items_sold,
           avgOrderValue: summary.avg_order_value,
-          topItems: items.items.map((item: any) => ({
-            name: item.item_name,
-            category: item.category,
-            revenue: item.total_revenue,
-            quantity: item.total_quantity,
-            orders: item.orders_count,
+          topItems: salesDetailed.sales.map((sale: any) => ({
+            name: sale.item_name,
+            category: sale.category,
+            revenue: sale.total_price,
+            quantity: sale.quantity,
+            unitPrice: sale.unit_price,
+            subtotal: sale.subtotal,
+            discount_percentage: sale.discount_percentage,
+            sale_date: sale.sale_date,
+            order_number: sale.order_number,
+            transaction_number: sale.transaction_number,
+            dine_type: sale.dine_type,
+            order_taker: sale.order_taker,
+            cashier: sale.cashier,
+            terminal_no: sale.terminal_no,
+            member: sale.member,
           })),
           dailySales: dates.data.map((day: any) => ({
             date: day.period,
@@ -266,12 +305,29 @@ export function useSimpleSalesReport() {
   }, []);
 
   const importSalesData = useCallback(async (rows: any[]) => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      throw new Error("Authentication required. Please log in again.");
+    }
+
     const res = await fetch(`${API_BASE_URL}/api/import-sales`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
       body: JSON.stringify({ rows }),
     });
-    // handle response...
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error("Session expired. Please log in again.");
+      }
+      throw new Error(`Import failed: ${res.statusText}`);
+    }
+
+    return await res.json();
   }, []);
 
   return {

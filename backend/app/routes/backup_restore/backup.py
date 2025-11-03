@@ -82,11 +82,24 @@ def convert_time_to_24h(time_str: str):
     return None
 
 def upload_to_supabase_storage(filepath):
-    with open(filepath, "rb") as f:
-        data = f.read()
-    filename = os.path.basename(filepath)
-    response = supabase.storage.from_(SUPABASE_BUCKET).upload(filename, data)
-    return response
+    """Upload backup file to Supabase storage with error handling"""
+    try:
+        with open(filepath, "rb") as f:
+            data = f.read()
+        filename = os.path.basename(filepath)
+
+        # Check if file already exists and remove it first
+        try:
+            supabase.storage.from_(SUPABASE_BUCKET).remove([filename])
+        except Exception:
+            pass  # File might not exist, that's okay
+
+        response = supabase.storage.from_(SUPABASE_BUCKET).upload(filename, data)
+        print(f"[Backup] Successfully uploaded {filename} to Supabase storage")
+        return response
+    except Exception as e:
+        print(f"[Backup] Error uploading to Supabase storage: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload backup to cloud storage: {str(e)}")
 
 
 @router.post("/schedule")
@@ -182,42 +195,84 @@ async def get_schedule(session=Depends(get_db), user=Depends(require_role("Owner
     return out
 
 @router.post("/backup")
-async def manual_backup(session=Depends(get_db), user=Depends(require_role("Owner")), password: str = Body(...)):
-    engine = create_engine(POSTGRES_URL.replace("asyncpg", "psycopg2"))
-    insp = engine.inspect(engine)
-    tables = insp.get_table_names()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_data = {}
-    for table in tables:
-        df = pd.read_sql_table(table, engine)
-        backup_data[table] = df.to_dict(orient="records")
-    key = derive_fernet_key(password)
-    fernet = Fernet(key)
-    buf = io.BytesIO()
-    with gzip.GzipFile(fileobj=buf, mode="w") as gz_file:
-        gz_file.write(json.dumps(backup_data, default=str, indent=2).encode("utf-8"))
-    buf.seek(0)
-    encrypted = fernet.encrypt(buf.getvalue())
-    backup_filename = f"backup_{timestamp}.json.enc"
-    os.makedirs(BACKUP_DIR, exist_ok=True)
-    local_path = os.path.join(BACKUP_DIR, backup_filename)
-    with open(local_path, "wb") as f:
-        f.write(encrypted)
-    upload_to_supabase_storage(local_path)
-    user_row = getattr(user, "user_row", user) if user else None
-    new_activity = UserActivityLog(
-        user_id=user_row.get("user_id") if user_row else None,
-        action_type="manual backup",
-        description=f"Backup: triggered manually",
-        activity_date=datetime.utcnow(),
-        report_date=datetime.utcnow(),
-        user_name=user_row.get("name") if user_row else None,
-        role=user_row.get("user_role") if user_row else None,
-    )
-    session.add(new_activity)
-    await session.flush()
-    await session.commit()
-    return {"message": "Backup triggered successfully.", "filename": backup_filename}
+async def manual_backup(
+    session=Depends(get_db),
+    user=Depends(require_role("Owner")),
+    password: str = Body(..., embed=True)
+):
+    try:
+        print("[Backup] Starting manual backup process...")
+        engine = create_engine(POSTGRES_URL.replace("asyncpg", "psycopg2"))
+        from sqlalchemy import inspect
+        insp = inspect(engine)
+        tables = insp.get_table_names()
+
+        if not tables:
+            raise HTTPException(status_code=500, detail="No tables found in database")
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_data = {}
+
+        # Backup each table
+        for table in tables:
+            try:
+                df = pd.read_sql_table(table, engine)
+                backup_data[table] = df.to_dict(orient="records")
+                print(f"[Backup] Backed up table {table}: {len(df)} records")
+            except Exception as e:
+                print(f"[Backup] Warning: Failed to backup table {table}: {e}")
+                continue
+
+        if not backup_data:
+            raise HTTPException(status_code=500, detail="No data was backed up")
+
+        # Encrypt the backup
+        key = derive_fernet_key(password)
+        fernet = Fernet(key)
+        buf = io.BytesIO()
+        with gzip.GzipFile(fileobj=buf, mode="w") as gz_file:
+            gz_file.write(json.dumps(backup_data, default=str, indent=2).encode("utf-8"))
+        buf.seek(0)
+        encrypted = fernet.encrypt(buf.getvalue())
+
+        # Save locally
+        backup_filename = f"backup_{timestamp}.json.enc"
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        local_path = os.path.join(BACKUP_DIR, backup_filename)
+        with open(local_path, "wb") as f:
+            f.write(encrypted)
+        print(f"[Backup] Saved locally to {local_path}")
+
+        # Upload to Supabase storage
+        upload_to_supabase_storage(local_path)
+
+        # Log the activity
+        user_row = getattr(user, "user_row", user) if user else None
+        new_activity = UserActivityLog(
+            user_id=user_row.get("user_id") if user_row else None,
+            action_type="manual backup",
+            description=f"Backup: triggered manually - {len(backup_data)} tables backed up",
+            activity_date=datetime.utcnow(),
+            report_date=datetime.utcnow(),
+            user_name=user_row.get("name") if user_row else None,
+            role=user_row.get("user_role") if user_row else None,
+        )
+        session.add(new_activity)
+        await session.flush()
+        await session.commit()
+
+        print(f"[Backup] Manual backup completed successfully: {backup_filename}")
+        return {
+            "message": "Backup triggered successfully.",
+            "filename": backup_filename,
+            "tables_backed_up": len(backup_data),
+            "total_records": sum(len(records) for records in backup_data.values())
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Backup] Error during manual backup: {e}")
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
 
 @router.get("/list-backups")
 async def list_supabase_backups():

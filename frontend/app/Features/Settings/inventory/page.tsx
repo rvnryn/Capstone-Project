@@ -15,16 +15,7 @@ import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { MdCancel, MdSave, MdWarning } from "react-icons/md";
 import { FiAlertTriangle, FiSave } from "react-icons/fi";
 import { useInventoryItemNames } from "@/app/hooks/Itemnames";
-
-const CATEGORIES = [
-  "Meats",
-  "Vegetables & Fruits",
-  "Dairy & Eggs",
-  "Seasonings & Condiments",
-  "Rice & Noodles",
-  "Cooking Oils",
-  "Beverage",
-];
+import { SectionLoading } from "@/app/components/LoadingStates";
 
 export default function InventorySettings() {
   // --- Offline/Cache State ---
@@ -58,6 +49,10 @@ export default function InventorySettings() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [ingredientToDelete, setIngredientToDelete] =
     useState<InventorySetting | null>(null);
+
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   const { items, loading: itemNamesLoading } = useInventoryItemNames();
   const uniqueCategories = Array.from(
@@ -141,8 +136,31 @@ export default function InventorySettings() {
       prev.map((i) => (i.id === id ? { ...i, category: value } : i))
     );
   };
-  const handleDeleteIngredient = (id: number) => {
-    setPendingIngredients((prev) => prev.filter((i) => i.id !== id));
+  const handleDeleteIngredient = async (id: number) => {
+    try {
+      // Call API to delete immediately
+      const success = await deleteSetting(id);
+      if (success) {
+        // Remove from both pending and initial state
+        setPendingIngredients((prev) => prev.filter((i) => i.id !== id));
+        setIngredients((prev) => prev.filter((i) => i.id !== id));
+        setInitialSettings((prev) => prev.filter((i) => i.id !== id));
+
+        // Update cache
+        const updatedIngredients = ingredients.filter((i) => i.id !== id);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(cacheKey, JSON.stringify(updatedIngredients));
+        }
+
+        setSaveMessage("Ingredient deleted successfully!");
+        setTimeout(() => setSaveMessage(""), 2000);
+      } else {
+        alert("Failed to delete ingredient. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error deleting ingredient:", error);
+      alert("An error occurred while deleting the ingredient.");
+    }
   };
   const handleAddIngredient = (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,7 +174,12 @@ export default function InventorySettings() {
       return;
     }
     if (
-      ingredients.some((ing) => ing.name.toLowerCase() === name.toLowerCase())
+      ingredients.some(
+        (ing) => ing.name.toLowerCase() === name.toLowerCase()
+      ) ||
+      pendingIngredients.some(
+        (ing) => ing.name.toLowerCase() === name.toLowerCase()
+      )
     ) {
       setAddError("Ingredient already exists.");
       return;
@@ -169,6 +192,10 @@ export default function InventorySettings() {
       low_stock_threshold: 1,
       category: "",
     });
+
+    // Show success message
+    setSaveMessage("Ingredient added! Click Save to confirm changes.");
+    setTimeout(() => setSaveMessage(""), 3000);
   };
   const capitalizeWords = (str: string) =>
     str.replace(/\b\w/g, (char) => char.toUpperCase());
@@ -194,9 +221,37 @@ export default function InventorySettings() {
     );
 
     // Batch API calls
-    for (const item of added) await createSetting(item);
-    for (const item of updated) await updateSetting(item.id, item);
-    for (const item of deleted) await deleteSetting(item.id);
+    for (const item of added) {
+      const result = await createSetting(item);
+      if (!result) {
+        setSaveMessage("Failed to add some ingredients.");
+        setTimeout(() => setSaveMessage(""), 3000);
+        return;
+      }
+    }
+    for (const item of updated) {
+      // Only send the editable fields, not id/created_at/updated_at
+      const updateData: InventorySettingInput = {
+        name: item.name,
+        default_unit: item.default_unit,
+        low_stock_threshold: item.low_stock_threshold,
+        category: item.category,
+      };
+      const result = await updateSetting(item.id, updateData);
+      if (!result) {
+        setSaveMessage("Failed to update some ingredients.");
+        setTimeout(() => setSaveMessage(""), 3000);
+        return;
+      }
+    }
+    for (const item of deleted) {
+      const result = await deleteSetting(item.id);
+      if (!result) {
+        setSaveMessage("Failed to delete some ingredients.");
+        setTimeout(() => setSaveMessage(""), 3000);
+        return;
+      }
+    }
 
     setSaveMessage("Settings saved successfully!");
     setTimeout(() => setSaveMessage(""), 2000);
@@ -218,6 +273,31 @@ export default function InventorySettings() {
     setAddError("");
     router.push(routes.settings);
   };
+
+  // Filter logic
+  const filteredIngredients = pendingIngredients.filter((ingredient) => {
+    // Search filter - matches name
+    const matchesSearch = ingredient.name
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+
+    // Category filter
+    const matchesCategory =
+      categoryFilter === "all" || ingredient.category === categoryFilter;
+
+    return matchesSearch && matchesCategory;
+  });
+
+  // Clear all filters
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setCategoryFilter("all");
+  };
+
+  // Get unique categories from pendingIngredients
+  const availableCategories = Array.from(
+    new Set(pendingIngredients.map((i) => i.category).filter(Boolean))
+  ).sort();
 
   const isSettingsChanged = () => {
     if (!initialSettings) return false;
@@ -254,12 +334,10 @@ export default function InventorySettings() {
         <NavigationBar onNavigate={handleSidebarNavigate} />
         <ResponsiveMain>
           <main className="flex flex-col items-center justify-center min-h-[60vh]">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-8 h-8 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-              <div className="text-yellow-400 font-medium text-base">
-                Loading inventory settings...
-              </div>
-            </div>
+            <SectionLoading
+              height="h-96"
+              message="Loading inventory settings..."
+            />
           </main>
         </ResponsiveMain>
       </section>
@@ -393,11 +471,20 @@ export default function InventorySettings() {
                         required
                       >
                         <option value="">Select Ingredient</option>
-                        {items.map((item) => (
-                          <option key={item.item_name} value={item.item_name}>
-                            {item.item_name}
-                          </option>
-                        ))}
+                        {items
+                          .filter(
+                            (item) =>
+                              !pendingIngredients.some(
+                                (ing) =>
+                                  ing.name.toLowerCase() ===
+                                  item.item_name.toLowerCase()
+                              )
+                          )
+                          .map((item) => (
+                            <option key={item.item_name} value={item.item_name}>
+                              {item.item_name}
+                            </option>
+                          ))}
                       </select>
                       <div className="absolute inset-y-0 top-7 right-0 flex items-center pr-3 pointer-events-none">
                         <svg
@@ -471,11 +558,17 @@ export default function InventorySettings() {
                         </option>
                         <option value="kg">kg</option>
                         <option value="g">g</option>
+                        <option value="lbs">lbs</option>
                         <option value="oz">oz</option>
-                        <option value="l">L</option>
-                        <option value="ml">ml</option>
+                        <option value="L">L</option>
+                        <option value="ml">mL</option>
+                        <option value="gal">gallon</option>
                         <option value="pcs">pcs</option>
                         <option value="pack">pack</option>
+                        <option value="case">case</option>
+                        <option value="sack">sack</option>
+                        <option value="btl">bottle</option>
+                        <option value="can">can</option>
                       </select>
                       {/* Custom dropdown arrow */}
                       <div className="absolute inset-y-0 top-7 right-0 flex items-center pr-3 pointer-events-none">
@@ -567,6 +660,110 @@ export default function InventorySettings() {
                   </div>
                 </form>
               </section>
+
+              {/* Filter Section */}
+              <section className="mb-6" aria-label="Filter ingredients">
+                <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl">
+                  <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-end">
+                    {/* Search Filter */}
+                    <div className="flex-1 w-full">
+                      <label
+                        htmlFor="search-ingredient"
+                        className="block mb-2 text-sm font-medium text-yellow-300"
+                      >
+                        Search Ingredient
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="search-ingredient"
+                          type="text"
+                          placeholder="Search by name..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full h-12 bg-gray-800/80 text-white rounded-xl pl-11 pr-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm transition-all duration-200 hover:border-gray-500"
+                        />
+                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                          <svg
+                            className="w-5 h-5 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Category Filter */}
+                    <div className="flex-1 w-full">
+                      <label
+                        htmlFor="category-filter"
+                        className="block mb-2 text-sm font-medium text-yellow-300"
+                      >
+                        Filter by Category
+                      </label>
+                      <div className="relative">
+                        <select
+                          id="category-filter"
+                          value={categoryFilter}
+                          onChange={(e) => setCategoryFilter(e.target.value)}
+                          className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                        >
+                          <option value="all">All Categories</option>
+                          {availableCategories.map((category) => (
+                            <option key={category} value={category}>
+                              {category}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                          <svg
+                            className="w-4 h-4 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 9l-7 7-7-7"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Clear Filters Button */}
+                    <div className="w-full lg:w-auto">
+                      <button
+                        type="button"
+                        onClick={handleClearFilters}
+                        disabled={
+                          searchQuery === "" && categoryFilter === "all"
+                        }
+                        className="w-full lg:w-auto h-12 px-6 bg-gray-700/50 hover:bg-gray-600/50 disabled:bg-gray-800/30 disabled:text-gray-500 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all duration-200 text-sm border border-gray-600 hover:border-gray-500 disabled:border-gray-700"
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Results Count */}
+                  <div className="mt-4 text-sm text-gray-400">
+                    Showing {filteredIngredients.length} of{" "}
+                    {pendingIngredients.length} ingredient
+                    {pendingIngredients.length !== 1 ? "s" : ""}
+                  </div>
+                </div>
+              </section>
+
               <section>
                 <div className="overflow-x-auto">
                   <table className="table-auto w-full text-xs xs:text-sm sm:text-base lg:text-lg xl:text-xl text-left border-collapse min-w-[700px]">
@@ -591,18 +788,19 @@ export default function InventorySettings() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pendingIngredients.length === 0 ? (
+                      {filteredIngredients.length === 0 ? (
                         <tr>
                           <td
                             colSpan={5}
                             className="text-center text-gray-400 py-12 text-lg animate-fade-in"
                           >
-                            No ingredients found. Add your first ingredient
-                            above!
+                            {pendingIngredients.length === 0
+                              ? "No ingredients found. Add your first ingredient above!"
+                              : "No ingredients match your filters. Try adjusting your search or category filter."}
                           </td>
                         </tr>
                       ) : (
-                        pendingIngredients.map((ing, idx) => (
+                        filteredIngredients.map((ing, idx) => (
                           <tr
                             key={ing.id}
                             tabIndex={0}
@@ -614,7 +812,7 @@ export default function InventorySettings() {
                             } hover:bg-yellow-100/10 ${
                               idx === 0 ? "rounded-t-xl" : ""
                             } ${
-                              idx === ingredients.length - 1
+                              idx === filteredIngredients.length - 1
                                 ? "rounded-b-xl"
                                 : ""
                             } animate-fade-in`}
@@ -658,12 +856,17 @@ export default function InventorySettings() {
                                 <option value="g">g</option>
                                 <option value="lbs">lbs</option>
                                 <option value="oz">oz</option>
-                                <option value="l">l</option>
-                                <option value="ml">ml</option>
+                                <option value="L">L</option>
+                                <option value="ml">mL</option>
+                                <option value="gal">gallon</option>
                                 <option value="pcs">pcs</option>
                                 <option value="pack">pack</option>
+                                <option value="bundle">bundle</option>
                                 <option value="case">case</option>
-                                <option value="dozen">dozen</option>
+                                <option value="sack">sack</option>
+                                <option value="btl">bottle</option>
+                                <option value="can">can</option>
+                                <option value="tray">tray</option>
                               </select>
                               {/* Custom dropdown arrow */}
                               <div className="absolute inset-y-0 right-7 flex items-center pointer-events-none">

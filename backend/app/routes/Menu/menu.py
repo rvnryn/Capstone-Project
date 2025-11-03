@@ -276,6 +276,7 @@ async def create_menu_with_ingredients(
                     and len(create_data) > 0
                 ):
                     ingredient_id = create_data[0].get("ingredient_id")
+                    ingredient_id = create_data[0].get("ingredient_id")
             if not ingredient_id:
                 raise HTTPException(
                     status_code=500,
@@ -367,7 +368,7 @@ async def get_menu():
         if menu_ids:
             ing_res = (
                 postgrest_client.table("menu_ingredients")
-                .select("menu_id,ingredient_id,ingredient_name,quantity")
+                .select("menu_id,ingredient_id,ingredient_name,quantity,measurements")
                 .in_("menu_id", menu_ids)
                 .execute()
             )
@@ -508,35 +509,51 @@ async def update_menu(
     db=Depends(get_db),
 ):
     import json
+    import traceback
+
+    try:
+        print(f"[UPDATE MENU] Updating menu_id={menu_id} with data: {menu_update}")
+        print(f"[UPDATE MENU] Allowed fields: {allowed_fields}")
+        print(f"[UPDATE MENU] Update data: {update_data}")
+        print(f"[UPDATE MENU] Ingredients: {ingredients}")
+    except Exception as e:
+        print(f"[UPDATE MENU] Error logging input: {e}")
 
     # Only allow updating certain fields
     allowed_fields = {
         "itemcode",
         "dish_name",
-        "image_url",
         "category",
         "price",
         "description",
         "stock_status",
+        "image_url",
+        "updated_at",
     }
-    update_data = {k: v for k, v in menu_update.items() if k in allowed_fields}
 
-    # Add updated timestamp
-    if update_data:
-        update_data["updated_at"] = datetime.utcnow().isoformat()
+    # Prepare update_data and ingredients
+    update_data = {}
+    ingredients = None
+    for key in allowed_fields:
+        if key in menu_update:
+            update_data[key] = menu_update[key]
+    if "ingredients" in menu_update:
+        ingredients = menu_update["ingredients"]
+
     # Handle ingredients update if provided
-    ingredients = menu_update.get("ingredients")
     if ingredients is not None:
-        # Remove all existing menu_ingredients for this menu
+        print(f"[UPDATE MENU] Removing existing menu_ingredients for menu_id={menu_id}")
         postgrest_client.table("menu_ingredients").delete().eq("menu_id", menu_id).execute()
-        # Insert new menu_ingredients if any
+        print(f"[UPDATE MENU] Inserting new menu_ingredients...")
         menu_ingredients = []
         for ing in ingredients:
+            print(f"[UPDATE MENU] Processing ingredient: {ing}")
             name = ing.get("name") or ing.get("ingredient_name")
             quantity = ing.get("quantity")
+            measurement = ing.get("measurement") or ing.get("measurements") or ""
             if not name or not quantity:
+                print(f"[UPDATE MENU] Skipping ingredient due to missing name/quantity: {ing}")
                 continue
-            # Find or create ingredient_id
             search_res = (
                 postgrest_client.table("ingredients")
                 .select("ingredient_id")
@@ -550,9 +567,11 @@ async def update_menu(
                 if hasattr(search_res, "data")
                 else search_res.get("data") if isinstance(search_res, dict) else None
             )
+            print(f"[UPDATE MENU] Ingredient search result: {search_data}")
             if search_data and isinstance(search_data, list) and len(search_data) > 0:
                 ingredient_id = search_data[0].get("ingredient_id")
             if not ingredient_id:
+                print(f"[UPDATE MENU] Ingredient not found, creating: {name}")
                 create_res = (
                     postgrest_client.table("ingredients")
                     .insert({"ingredient_name": name})
@@ -565,6 +584,7 @@ async def update_menu(
                         create_res.get("data") if isinstance(create_res, dict) else None
                     )
                 )
+                print(f"[UPDATE MENU] Ingredient create result: {create_data}")
                 if (
                     create_data
                     and isinstance(create_data, list)
@@ -572,6 +592,7 @@ async def update_menu(
                 ):
                     ingredient_id = create_data[0].get("ingredient_id")
             if not ingredient_id:
+                print(f"[UPDATE MENU] Failed to create or find ingredient: {name}")
                 raise HTTPException(
                     status_code=500,
                     detail=f"Failed to create or find ingredient: {name}",
@@ -582,8 +603,10 @@ async def update_menu(
                     "ingredient_id": ingredient_id,
                     "ingredient_name": name,
                     "quantity": quantity,
+                    "measurements": measurement,
                 }
             )
+        print(f"[UPDATE MENU] Final menu_ingredients list: {menu_ingredients}")
         if menu_ingredients:
             res_ing = (
                 postgrest_client.table("menu_ingredients").insert(menu_ingredients).execute()
@@ -593,69 +616,81 @@ async def update_menu(
                 if hasattr(res_ing, "error")
                 else res_ing.get("error") if isinstance(res_ing, dict) else None
             )
+            print(f"[UPDATE MENU] Ingredient insert result: {res_ing}")
             if err_ing:
+                print(f"[UPDATE MENU] Ingredient insert error: {err_ing}")
                 raise HTTPException(
                     status_code=400,
                     detail=f"Ingredient insert failed: {getattr(err_ing, 'message', str(err_ing))}",
                 )
     if not update_data and ingredients is None:
         raise HTTPException(status_code=400, detail="No valid fields to update.")
-    # Only update menu if update_data is present
     menu_row = None
-    if update_data:
-        res = (
-            postgrest_client.table("menu").update(update_data).eq("menu_id", menu_id).execute()
-        )
-        error = (
-            getattr(res, "error", None)
-            if hasattr(res, "error")
-            else res.get("error") if isinstance(res, dict) else None
-        )
-        if error:
-            raise HTTPException(
-                status_code=400, detail=getattr(error, "message", str(error))
+    try:
+        if update_data:
+            res = (
+                postgrest_client.table("menu").update(update_data).eq("menu_id", menu_id).execute()
             )
-        data = (
-            getattr(res, "data", None)
-            if hasattr(res, "data")
-            else res.get("data") if isinstance(res, dict) else None
-        )
-        if not data or not isinstance(data, list) or len(data) == 0:
-            raise HTTPException(status_code=404, detail="Menu item not found.")
-        menu_row = data[0]
-        menu_row["menu_id"] = menu_row.get("id") or menu_row.get("menu_id")
-
-        try:
-            user_row = getattr(user, "user_row", user)
-            desc = f"Update menu item: {menu_row.get('dish_name')}"
-            if ingredients is not None:
-                updated_ingredients = []
-                for ing in ingredients:
-                    name = ing.get("name") or ing.get("ingredient_name")
-                    quantity = ing.get("quantity")
-                    if name and quantity is not None:
-                        updated_ingredients.append(f"{name} (quantity: {quantity})")
-                if updated_ingredients:
-                    desc += (
-                        f" with updated ingredients: {', '.join(updated_ingredients)}"
-                    )
-            new_activity = UserActivityLog(
-                user_id=user_row.get("user_id"),
-                action_type="update menu item",
-                description=desc,
-                activity_date=datetime.utcnow(),
-                report_date=datetime.utcnow(),
-                user_name=user_row.get("name"),
-                role=user_row.get("user_role"),
+            error = (
+                getattr(res, "error", None)
+                if hasattr(res, "error")
+                else res.get("error") if isinstance(res, dict) else None
             )
-            db.add(new_activity)
-            await db.flush()
-            await db.commit()
-            print("Menu delete activity logged successfully.")
-        except Exception as e:
-            print("Failed to record menu delete activity:", e)
+            if error:
+                import traceback
+                print("[UPDATE MENU] DB error:", traceback.format_exc())
+                print("[UPDATE MENU] DB error detail:", error)
+                raise HTTPException(
+                    status_code=400, detail=getattr(error, "message", str(error))
+                )
+            data = (
+                getattr(res, "data", None)
+                if hasattr(res, "data")
+                else res.get("data") if isinstance(res, dict) else None
+            )
+            if not data or not isinstance(data, list) or len(data) == 0:
+                print("[UPDATE MENU] No data returned from DB update.")
+                raise HTTPException(status_code=404, detail="Menu item not found.")
+            menu_row = data[0]
+            menu_row["menu_id"] = menu_row.get("id") or menu_row.get("menu_id")
 
-    return menu_row or {"message": "Ingredients updated."}
+            try:
+                user_row = getattr(user, "user_row", user)
+                desc = f"Update menu item: {menu_row.get('dish_name')}"
+                if ingredients is not None:
+                    updated_ingredients = []
+                    for ing in ingredients:
+                        name = ing.get("name") or ing.get("ingredient_name")
+                        quantity = ing.get("quantity")
+                        if name and quantity is not None:
+                            updated_ingredients.append(f"{name} (quantity: {quantity})")
+                    if updated_ingredients:
+                        desc += (
+                            f" with updated ingredients: {', '.join(updated_ingredients)}"
+                        )
+                new_activity = UserActivityLog(
+                    user_id=user_row.get("user_id"),
+                    action_type="update menu item",
+                    description=desc,
+                    activity_date=datetime.utcnow(),
+                    report_date=datetime.utcnow(),
+                    user_name=user_row.get("name"),
+                    role=user_row.get("user_role"),
+                )
+                db.add(new_activity)
+                await db.flush()
+                await db.commit()
+                print("Menu delete activity logged successfully.")
+            except Exception as e:
+                import traceback
+                print("Failed to record menu delete activity:", e)
+                print(traceback.format_exc())
+        return menu_row or {"message": "Ingredients updated."}
+    except Exception as e:
+        import traceback
+        print("[UPDATE MENU] Exception:", e)
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Delete menu item by menu_id
@@ -833,6 +868,7 @@ async def update_menu_with_image_and_ingredients(
                     and len(create_data) > 0
                 ):
                     ingredient_id = create_data[0].get("ingredient_id")
+                    ingredient_id = create_data[0].get("ingredient_id")
             if not ingredient_id:
                 raise HTTPException(
                     status_code=500,
@@ -894,7 +930,7 @@ def get_menu_by_id(menu_id: int):
     # Fetch ingredients for this menu item with availability information
     ing_res = (
         postgrest_client.table("menu_ingredients")
-        .select("menu_id,ingredient_id,ingredient_name,quantity")
+        .select("menu_id,ingredient_id,ingredient_name,quantity,measurements")
         .eq("menu_id", menu_id)
         .execute()
     )

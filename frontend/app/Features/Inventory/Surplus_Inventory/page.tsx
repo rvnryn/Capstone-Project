@@ -1,5 +1,6 @@
 "use client";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import Pagination from "@/app/components/Pagination";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
 import {
@@ -11,6 +12,7 @@ import {
   FaFilter,
   FaSort,
   FaWarehouse,
+  FaBiohazard,
 } from "react-icons/fa";
 import {
   MdInventory,
@@ -36,6 +38,7 @@ import {
   InventorySetting,
 } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 import { useInventoryAPI } from "../hook/use-inventoryAPI";
+import { TableLoading, EmptyState } from "@/app/components/LoadingStates";
 type InventoryItem = {
   id: number;
   name: string;
@@ -78,7 +81,7 @@ export default function SurplusInventoryPage() {
     };
   }, []);
   const { isMobile } = useNavigation();
-  const { deleteSurplusItem } = useInventoryAPI();
+  const { deleteSurplusItem, transferSurplusToSpoilage } = useInventoryAPI();
 
   // Aggressively cache settings with React Query, prefetch on mount, avoid unnecessary refetches
   const { fetchSettings } = useInventorySettingsAPI();
@@ -132,6 +135,16 @@ export default function SurplusInventoryPage() {
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+  // Spoilage modal state
+  const [showSpoilageModal, setShowSpoilageModal] = useState(false);
+  const [itemToSpoilage, setItemToSpoilage] = useState<InventoryItem | null>(
+    null
+  );
+  const [spoilageQuantity, setSpoilageQuantity] = useState("");
+  const [spoilageReason, setSpoilageReason] = useState("");
+  const [customSpoilageReason, setCustomSpoilageReason] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   useEffect(() => {
     if (isMobile) {
@@ -392,6 +405,19 @@ export default function SurplusInventoryPage() {
     });
   }, [filtered, sortConfig]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return sortedData.slice(startIndex, endIndex);
+  }, [sortedData, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, selectedBatchDate, sortConfig]);
+
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => {
       // If clicking the same column, toggle direction
@@ -416,6 +442,74 @@ export default function SurplusInventoryPage() {
     setSortConfig({ key: "", direction: "asc" });
   }, []);
 
+  // Open spoilage modal
+  const handleTransferToSpoilage = (item: InventoryItem) => {
+    setItemToSpoilage(item);
+    setSpoilageQuantity("");
+    setSpoilageReason("");
+    setCustomSpoilageReason("");
+    setShowSpoilageModal(true);
+  };
+
+  // Spoilage mutation
+  const spoilageMutation = useMutation({
+    mutationFn: async ({
+      id,
+      batch,
+      quantity,
+      reason,
+    }: {
+      id: number;
+      batch: string;
+      quantity: number;
+      reason: string;
+    }) => {
+      await transferSurplusToSpoilage(id, batch, quantity, reason);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
+      setShowSpoilageModal(false);
+      setItemToSpoilage(null);
+      setSpoilageQuantity("");
+      setSpoilageReason("");
+      setCustomSpoilageReason("");
+    },
+    onError: (error) => {
+      // Optionally show error toast
+      console.error("Failed to transfer to spoilage:", error);
+    },
+  });
+
+  // Confirm spoilage transfer
+  const confirmSpoilage = () => {
+    if (
+      !itemToSpoilage ||
+      !spoilageQuantity ||
+      Number(spoilageQuantity) <= 0 ||
+      Number(spoilageQuantity) > itemToSpoilage.stock ||
+      spoilageMutation.status === "pending"
+    )
+      return;
+    let reason = spoilageReason;
+    if (spoilageReason === "Others" && customSpoilageReason.trim()) {
+      reason = customSpoilageReason.trim();
+    }
+    spoilageMutation.mutate({
+      id: itemToSpoilage.id,
+      batch: itemToSpoilage.batch,
+      quantity: Number(spoilageQuantity),
+      reason,
+    });
+  };
+
+  const handleCloseSpoilageModal = () => {
+    setShowSpoilageModal(false);
+    setItemToSpoilage(null);
+    setSpoilageQuantity("");
+    setSpoilageReason("");
+    setCustomSpoilageReason("");
+  };
+
   const columns = [
     { key: "id", label: "#" },
     { key: "name", label: "Name" },
@@ -423,7 +517,8 @@ export default function SurplusInventoryPage() {
     { key: "category", label: "Category" },
     { key: "status", label: "Status" },
     { key: "stock", label: "Stock" },
-    { key: "unit_price", label: "Unit Price" },
+    { key: "unit_cost", label: "Unit Cost" },
+    { key: "total_value", label: "Total Value" },
     { key: "added", label: "Procurement date" },
     { key: "expires", label: "Expiration Date" },
     { key: "actions", label: "Actions" },
@@ -470,8 +565,14 @@ export default function SurplusInventoryPage() {
                       onClick={handleRefresh}
                       className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
                     >
-                      <FiRefreshCw className={`text-xs xs:text-sm ${isFetching ? 'animate-spin' : ''}`} />
-                      <span className="sm:inline">{isFetching ? 'Syncing...' : 'Refresh'}</span>
+                      <FiRefreshCw
+                        className={`text-xs xs:text-sm ${
+                          isFetching ? "animate-spin" : ""
+                        }`}
+                      />
+                      <span className="sm:inline">
+                        {isFetching ? "Syncing..." : "Refresh"}
+                      </span>
                     </button>
                   </nav>
                 </div>
@@ -620,21 +721,18 @@ export default function SurplusInventoryPage() {
                 <div className="overflow-x-auto">
                   {isInventoryLoading || isFetching ? (
                     offlineError ? (
-                      <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
-                        <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-none bg-yellow-400/10 flex items-center justify-center">
-                          <MdWarning className="text-yellow-400 text-3xl" />
-                        </div>
-                        <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                      <div className="flex flex-col items-center gap-4 py-12">
+                        <MdWarning className="text-yellow-400 text-5xl" />
+                        <div className="text-yellow-400 text-lg font-medium text-center">
                           {offlineError}
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4 py-12">
-                        <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                        <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                          Loading inventory data...
-                        </div>
-                      </div>
+                      <TableLoading
+                        rows={itemsPerPage}
+                        columns={10}
+                        message="Loading inventory data..."
+                      />
                     )
                   ) : (
                     <>
@@ -686,8 +784,8 @@ export default function SurplusInventoryPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {sortedData.length > 0 ? (
-                            sortedData.map((item: InventoryItem, index) => (
+                          {paginatedData.length > 0 ? (
+                            paginatedData.map((item: InventoryItem, index) => (
                               <tr
                                 key={
                                   item.id ??
@@ -700,12 +798,15 @@ export default function SurplusInventoryPage() {
                                 }`}
                                 onClick={() => {
                                   router.push(
-                                    routes.ViewSurplusInventory(item.id, item.batch)
+                                    routes.ViewSurplusInventory(
+                                      item.id,
+                                      item.batch
+                                    )
                                   );
                                 }}
                               >
                                 <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
-                                  {index + 1}
+                                  {(currentPage - 1) * itemsPerPage + index + 1}
                                 </td>
                                 <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap">
                                   <div className="flex items-center gap-1 xs:gap-2 sm:gap-3">
@@ -749,10 +850,20 @@ export default function SurplusInventoryPage() {
                                       )}
                                   </span>
                                 </td>
-                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-green-300 text-xs xs:text-sm">
-                                  {item.unit_price !== undefined &&
-                                  item.unit_price !== null
-                                    ? `₱${Number(item.unit_price).toFixed(2)}`
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-blue-300 text-xs xs:text-sm">
+                                  {item.unit_cost !== undefined &&
+                                  item.unit_cost !== null
+                                    ? `₱${Number(item.unit_cost).toFixed(2)}`
+                                    : "-"}
+                                </td>
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-purple-300 text-xs xs:text-sm font-semibold">
+                                  {item.unit_cost !== undefined &&
+                                  item.unit_cost !== null &&
+                                  item.stock !== undefined
+                                    ? `₱${(
+                                        Number(item.unit_cost) *
+                                        Number(item.stock)
+                                      ).toFixed(2)}`
                                     : "-"}
                                 </td>
                                 <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm">
@@ -763,8 +874,8 @@ export default function SurplusInventoryPage() {
                                     ? formatDateOnly(item.expires)
                                     : "No Expiration Date"}
                                 </td>
-                                <td className="px-2 xl:px-3 py-3 md:py-4">
-                                  <div className="flex items-center justify-center gap-1 xl:gap-2">
+                                <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
+                                  <div className="flex items-center justify-center gap-2">
                                     {/* Only Owner, General Manager, Store Manager can delete */}
                                     {[
                                       "Owner",
@@ -772,6 +883,7 @@ export default function SurplusInventoryPage() {
                                       "Store Manager",
                                     ].includes(role || "") && (
                                       <button
+                                        type="button"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setItemToDelete(item.id);
@@ -784,33 +896,47 @@ export default function SurplusInventoryPage() {
                                         <FaTrash className="text-xs xs:text-sm" />
                                       </button>
                                     )}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleTransferToSpoilage(item);
+                                      }}
+                                      className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 hover:text-purple-400 transition-all duration-200 cursor-pointer border border-purple-500/20 hover:border-purple-500/40"
+                                      title="Transfer to Spoilage"
+                                      aria-label={`Transfer ${item.name} to spoilage`}
+                                    >
+                                      <FaExchangeAlt className="text-xs xs:text-sm" />
+                                    </button>
                                   </div>
                                 </td>
                               </tr>
                             ))
                           ) : (
                             <tr>
-                              <td
-                                colSpan={9}
-                                className="px-4 xl:px-6 py-12 xl:py-16 text-center"
-                              >
-                                <div className="flex flex-col items-center gap-4">
-                                  <MdInventory className="text-6xl text-gray-600" />
-                                  <div>
-                                    <h3 className="text-gray-400 font-medium mb-2">
-                                      No items found
-                                    </h3>
-                                    <p className="text-gray-500 text-sm">
-                                      Try adjusting your search or filter
-                                      criteria
-                                    </p>
-                                  </div>
-                                </div>
+                              <td colSpan={10}>
+                                <EmptyState
+                                  icon={<MdInventory className="text-6xl" />}
+                                  title="No items found"
+                                  message="Try adjusting your search or filter criteria"
+                                />
                               </td>
                             </tr>
                           )}
                         </tbody>
                       </table>
+
+                      {/* Pagination */}
+                      {sortedData.length > 0 && (
+                        <Pagination
+                          currentPage={currentPage}
+                          totalPages={totalPages}
+                          onPageChange={setCurrentPage}
+                          itemsPerPage={itemsPerPage}
+                          totalItems={sortedData.length}
+                          onItemsPerPageChange={setItemsPerPage}
+                        />
+                      )}
                     </>
                   )}
                 </div>
@@ -860,6 +986,132 @@ export default function SurplusInventoryPage() {
                 <button
                   type="button"
                   onClick={() => setShowDeleteModal(false)}
+                  className="group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold transition-all duration-300 order-1 sm:order-2 cursor-pointer text-xs xs:text-sm sm:text-base"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {showSpoilageModal && itemToSpoilage && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="spoilage-dialog-title"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <form
+              method="dialog"
+              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-gray-700/50 text-center space-y-4 sm:space-y-6 max-w-sm sm:max-w-md w-full"
+              onSubmit={(e) => e.preventDefault()}
+            >
+              <div className="flex justify-center mb-2 xs:mb-3 sm:mb-4">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-pink-500/20 rounded-full blur-lg xs:blur-xl"></div>
+                  <div className="relative bg-gradient-to-br from-pink-500 to-pink-600 p-2 xs:p-3 sm:p-4 rounded-full">
+                    <FaBiohazard className="text-white text-lg xs:text-xl sm:text-2xl md:text-3xl" />
+                  </div>
+                </div>
+              </div>
+              <h2
+                id="spoilage-dialog-title"
+                className="text-base xs:text-lg sm:text-xl md:text-2xl font-bold text-transparent bg-gradient-to-r from-pink-400 to-pink-500 bg-clip-text font-poppins"
+              >
+                Transfer to Spoilage
+              </h2>
+              <p className="text-gray-300 text-xs xs:text-sm sm:text-base">
+                Enter the quantity and reason for spoilage.
+              </p>
+              <div className="text-left space-y-1 xs:space-y-2">
+                <label
+                  className="block text-gray-300 font-medium text-xs xs:text-sm sm:text-base"
+                  htmlFor="spoilage-quantity"
+                >
+                  Quantity to Spoil <span className="text-red-400">*</span>
+                </label>
+                <input
+                  id="spoilage-quantity"
+                  type="number"
+                  min={1}
+                  max={itemToSpoilage.stock}
+                  value={spoilageQuantity}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/^0+/, "");
+                    setSpoilageQuantity(val === "" ? "" : val);
+                  }}
+                  placeholder={`Enter quantity (1-${itemToSpoilage.stock})`}
+                  className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
+                  aria-label="Quantity to spoil"
+                />
+                <label
+                  className="block text-gray-300 font-medium text-xs xs:text-sm sm:text-base mt-2"
+                  htmlFor="spoilage-reason"
+                >
+                  Reason <span className="text-red-400">*</span>
+                </label>
+                <select
+                  id="spoilage-reason"
+                  value={spoilageReason}
+                  onChange={(e) => setSpoilageReason(e.target.value)}
+                  className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20 transition-all text-xs xs:text-sm sm:text-base"
+                  aria-label="Spoilage reason"
+                >
+                  <option value="">Select reason</option>
+                  <option value="Quality Degradation">
+                    Quality Degradation
+                  </option>
+                  <option value="Pest Infestation">Pest Infestation</option>
+                  <option value="Spillage">Spillage</option>
+                  <option value="Contaminated">Contaminated</option>
+                  <option value="Others">Others</option>
+                </select>
+                {spoilageReason === "Others" && (
+                  <input
+                    type="text"
+                    value={customSpoilageReason}
+                    onChange={(e) => setCustomSpoilageReason(e.target.value)}
+                    placeholder="Please specify reason"
+                    className="w-full mt-2 px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
+                    aria-label="Specify other spoilage reason"
+                  />
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row justify-center gap-2 xs:gap-3 sm:gap-4 pt-1 xs:pt-2">
+                <button
+                  type="button"
+                  onClick={confirmSpoilage}
+                  disabled={
+                    !spoilageQuantity ||
+                    Number(spoilageQuantity) <= 0 ||
+                    Number(spoilageQuantity) > itemToSpoilage.stock ||
+                    spoilageMutation.status === "pending"
+                  }
+                  className={`group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl font-semibold transition-all duration-300 order-2 sm:order-1 text-xs xs:text-sm sm:text-base ${
+                    !spoilageQuantity ||
+                    Number(spoilageQuantity) <= 0 ||
+                    Number(spoilageQuantity) > itemToSpoilage.stock ||
+                    spoilageMutation.status === "pending"
+                      ? "bg-gray-600/50 text-gray-400 cursor-not-allowed border-2 border-gray-600/50"
+                      : "bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-400 hover:to-pink-500 text-white border-2 border-pink-500/70 hover:border-pink-400/70 cursor-pointer"
+                  }`}
+                >
+                  {spoilageMutation.status === "pending" ? (
+                    <>
+                      <div className="w-3 xs:w-4 h-3 xs:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Transferring...
+                    </>
+                  ) : (
+                    <>
+                      <FaBiohazard className="group-hover:rotate-180 transition-transform duration-300" />
+                      Transfer
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseSpoilageModal}
                   className="group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl border-2 border-gray-500/70 text-gray-400 hover:bg-gray-500 hover:text-white font-semibold transition-all duration-300 order-1 sm:order-2 cursor-pointer text-xs xs:text-sm sm:text-base"
                 >
                   Cancel

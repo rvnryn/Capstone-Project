@@ -45,7 +45,7 @@ export interface InventoryItem {
   expiration_date: string | null;
   created_at: string;
   updated_at: string;
-  unit_price?: number;
+  unit_cost?: number;
   // frontend-friendly aliases
   id?: string;
   name: string;
@@ -63,7 +63,7 @@ export type AddInventoryPayload = {
   stock_status: "Out Of Stock" | "Critical" | "Low" | "Normal";
   batch_date: string;
   expiration_date: string | null;
-  unit_price?: number;
+  unit_cost?: number;
 };
 
 export interface SpoilageItem {
@@ -638,7 +638,9 @@ export function useInventoryAPI() {
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+            throw new Error(
+              errorData.detail || `HTTP error! status: ${response.status}`
+            );
           }
 
           return await response.json();
@@ -678,7 +680,12 @@ export function useInventoryAPI() {
   }, []);
 
   const transferToSpoilage = useCallback(
-    async (id: string | number, quantity: number, reason?: string) => {
+    async (
+      id: string | number,
+      batch_date: string,
+      quantity: number,
+      reason?: string
+    ) => {
       return handleOfflineWriteOperation(
         async () => {
           const token =
@@ -686,7 +693,7 @@ export function useInventoryAPI() {
               ? localStorage.getItem("token")
               : null;
           const response = await fetch(
-            `${API_BASE_URL}/api/inventory/${id}/transfer-to-spoilage`,
+            `${API_BASE_URL}/api/inventory/${id}/${batch_date}/transfer-to-spoilage`,
             {
               method: "POST",
               headers: {
@@ -705,9 +712,9 @@ export function useInventoryAPI() {
         },
         {
           action: "transfer-to-spoilage",
-          endpoint: `${API_BASE_URL}/api/inventory/${id}/transfer-to-spoilage`,
+          endpoint: `${API_BASE_URL}/api/inventory/${id}/${batch_date}/transfer-to-spoilage`,
           method: "POST",
-          payload: { id, quantity, reason },
+          payload: { id, batch_date, quantity, reason },
         }
       );
     },
@@ -794,6 +801,86 @@ export function useInventoryAPI() {
     [handleOfflineWriteOperation]
   );
 
+  const transferTodayToSpoilage = useCallback(
+    async (
+      id: string | number,
+      batch_date: string,
+      quantity: number,
+      reason?: string
+    ) => {
+      return handleOfflineWriteOperation(
+        async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory-today/${id}/${batch_date}/transfer-to-spoilage`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
+              },
+              body: JSON.stringify({ quantity, reason }),
+            }
+          );
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return await response.json();
+        },
+        {
+          action: "transfer-today-to-spoilage",
+          endpoint: `${API_BASE_URL}/api/inventory-today/${id}/${batch_date}/transfer-to-spoilage`,
+          method: "POST",
+          payload: { id, batch_date, quantity, reason },
+        }
+      );
+    },
+    [handleOfflineWriteOperation, API_BASE_URL]
+  );
+
+  const transferSurplusToSpoilage = useCallback(
+    async (
+      id: string | number,
+      batch_date: string,
+      quantity: number,
+      reason?: string
+    ) => {
+      return handleOfflineWriteOperation(
+        async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory-surplus/${id}/${batch_date}/transfer-to-spoilage`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
+              },
+              body: JSON.stringify({ quantity, reason }),
+            }
+          );
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return await response.json();
+        },
+        {
+          action: "transfer-surplus-to-spoilage",
+          endpoint: `${API_BASE_URL}/api/inventory-surplus/${id}/${batch_date}/transfer-to-spoilage`,
+          method: "POST",
+          payload: { id, batch_date, quantity, reason },
+        }
+      );
+    },
+    [handleOfflineWriteOperation, API_BASE_URL]
+  );
+
   return {
     getItem,
     addItem,
@@ -821,6 +908,8 @@ export function useInventoryAPI() {
     deleteSpoilage,
 
     transferAnyToSpoilage,
+    transferTodayToSpoilage,
+    transferSurplusToSpoilage,
 
     getOfflineActions,
   };
