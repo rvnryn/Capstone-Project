@@ -74,7 +74,7 @@ try:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "https://localhost:3000"],
+        allow_origins=["http://localhost:3000", "https://localhost:3000", "https://www.cardiacdelights.app", "http://www.cardiacdelights.app"],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
