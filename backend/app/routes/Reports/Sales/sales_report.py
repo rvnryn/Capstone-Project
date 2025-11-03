@@ -573,11 +573,11 @@ async def get_sales_comparison(
         # Current period query
         current_query = text(
             """
-            SELECT 
+            SELECT
                 SUM(quantity) as total_items,
                 SUM(total_price) as total_revenue,
                 AVG(total_price) as avg_order_value
-            FROM sales_report 
+            FROM sales_report
             WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
         """
         )
@@ -642,4 +642,330 @@ async def get_sales_comparison(
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error generating sales comparison: {str(e)}"
+        )
+
+
+@limiter.limit("10/minute")
+@router.get("/comprehensive-sales-analytics")
+async def get_comprehensive_sales_analytics(
+    request: Request,
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Get comprehensive sales analytics including:
+    - Total Revenue
+    - Cost of Goods Sold (COGS)
+    - Gross Profit
+    - Loss/Spoilage Costs
+    - Net Profit
+    - Profit Margins
+    - Top Performing Items
+    - Category Breakdown
+    """
+    try:
+        # Default to last 30 days if no dates provided
+        if not start_date:
+            start_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
+        if not end_date:
+            end_date = datetime.utcnow().strftime("%Y-%m-%d")
+
+        start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
+        end_datetime = datetime.strptime(end_date, "%Y-%m-%d")
+
+        # 1. Get Total Revenue and Sales Summary
+        revenue_query = text(
+            """
+            SELECT
+                SUM(quantity) as total_items_sold,
+                SUM(total_price) as total_revenue,
+                AVG(unit_price) as avg_unit_price,
+                COUNT(DISTINCT item_name) as unique_items_sold,
+                COUNT(*) as total_transactions
+            FROM sales_report
+            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
+        """
+        )
+
+        revenue_result = await session.execute(
+            revenue_query,
+            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
+        )
+        revenue_row = revenue_result.fetchone()
+
+        total_revenue = float(revenue_row.total_revenue or 0)
+        total_items_sold = revenue_row.total_items_sold or 0
+        unique_items_sold = revenue_row.unique_items_sold or 0
+        total_transactions = revenue_row.total_transactions or 0
+        avg_unit_price = float(revenue_row.avg_unit_price or 0)
+
+        # 2. Calculate COGS (Cost of Goods Sold) from menu ingredients
+        # This calculates the cost based on ingredients used for sold menu items
+        cogs_query = text(
+            """
+            WITH sales_with_menu AS (
+                SELECT
+                    sr.item_name,
+                    sr.quantity as quantity_sold,
+                    m.menu_id
+                FROM sales_report sr
+                LEFT JOIN menu m ON LOWER(TRIM(sr.item_name)) = LOWER(TRIM(m.dish_name))
+                WHERE DATE(sr.sale_date) BETWEEN :start_date AND :end_date
+            ),
+            ingredient_costs AS (
+                SELECT
+                    swm.item_name,
+                    swm.quantity_sold,
+                    mi.ingredient_name,
+                    mi.quantity as ingredient_quantity_per_serving,
+                    COALESCE(
+                        (SELECT AVG(it.unit_price)
+                         FROM inventory_today it
+                         WHERE LOWER(TRIM(it.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                        ),
+                        (SELECT AVG(i.unit_price)
+                         FROM inventory i
+                         WHERE LOWER(TRIM(i.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                        ),
+                        (SELECT AVG(isp.unit_price)
+                         FROM inventory_spoilage isp
+                         WHERE LOWER(TRIM(isp.item_name)) = LOWER(TRIM(mi.ingredient_name))
+                        ),
+                        0
+                    ) as unit_cost
+                FROM sales_with_menu swm
+                LEFT JOIN menu_ingredients mi ON swm.menu_id = mi.menu_id
+                WHERE swm.menu_id IS NOT NULL AND mi.ingredient_name IS NOT NULL
+            )
+            SELECT
+                COALESCE(SUM(quantity_sold * ingredient_quantity_per_serving * unit_cost), 0) as total_cogs
+            FROM ingredient_costs
+        """
+        )
+
+        cogs_result = await session.execute(
+            cogs_query,
+            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
+        )
+        cogs_row = cogs_result.fetchone()
+        total_cogs = float(cogs_row.total_cogs or 0) if cogs_row else 0.0
+
+        # 3. Get Spoilage/Loss Costs
+        spoilage_query = text(
+            """
+            SELECT
+                SUM(quantity_spoiled * COALESCE(unit_price, 0)) as total_spoilage_cost,
+                SUM(quantity_spoiled) as total_quantity_spoiled,
+                COUNT(*) as total_spoilage_incidents,
+                COUNT(DISTINCT item_name) as unique_items_spoiled
+            FROM inventory_spoilage
+            WHERE DATE(spoilage_date) BETWEEN :start_date AND :end_date
+        """
+        )
+
+        spoilage_result = await session.execute(
+            spoilage_query,
+            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
+        )
+        spoilage_row = spoilage_result.fetchone()
+
+        total_spoilage_cost = float(spoilage_row.total_spoilage_cost or 0)
+        total_quantity_spoiled = spoilage_row.total_quantity_spoiled or 0
+        total_spoilage_incidents = spoilage_row.total_spoilage_incidents or 0
+        unique_items_spoiled = spoilage_row.unique_items_spoiled or 0
+
+        # 4. Calculate Profitability Metrics
+        gross_profit = total_revenue - total_cogs
+        net_profit = gross_profit - total_spoilage_cost
+
+        gross_profit_margin = (
+            (gross_profit / total_revenue * 100) if total_revenue > 0 else 0
+        )
+        net_profit_margin = (
+            (net_profit / total_revenue * 100) if total_revenue > 0 else 0
+        )
+        loss_percentage = (
+            (total_spoilage_cost / total_revenue * 100) if total_revenue > 0 else 0
+        )
+
+        # 5. Get Top Selling Items (Top 10)
+        top_items_query = text(
+            """
+            SELECT
+                item_name,
+                category,
+                SUM(quantity) as total_quantity_sold,
+                SUM(total_price) as total_revenue,
+                AVG(unit_price) as avg_price
+            FROM sales_report
+            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
+            GROUP BY item_name, category
+            ORDER BY total_revenue DESC
+            LIMIT 10
+        """
+        )
+
+        top_items_result = await session.execute(
+            top_items_query,
+            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
+        )
+
+        top_items = []
+        for row in top_items_result.fetchall():
+            top_items.append(
+                {
+                    "item_name": row.item_name or "",
+                    "category": row.category or "",
+                    "total_quantity_sold": row.total_quantity_sold or 0,
+                    "total_revenue": float(row.total_revenue or 0),
+                    "avg_price": float(row.avg_price or 0),
+                }
+            )
+
+        # 6. Get Category Breakdown
+        category_query = text(
+            """
+            SELECT
+                category,
+                SUM(quantity) as total_quantity,
+                SUM(total_price) as total_revenue,
+                COUNT(DISTINCT item_name) as unique_items,
+                AVG(unit_price) as avg_price
+            FROM sales_report
+            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
+            GROUP BY category
+            ORDER BY total_revenue DESC
+        """
+        )
+
+        category_result = await session.execute(
+            category_query,
+            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
+        )
+
+        categories = []
+        for row in category_result.fetchall():
+            cat_revenue = float(row.total_revenue or 0)
+            cat_percentage = (cat_revenue / total_revenue * 100) if total_revenue > 0 else 0
+
+            categories.append(
+                {
+                    "category": row.category or "Uncategorized",
+                    "total_quantity": row.total_quantity or 0,
+                    "total_revenue": cat_revenue,
+                    "revenue_percentage": round(cat_percentage, 2),
+                    "unique_items": row.unique_items or 0,
+                    "avg_price": float(row.avg_price or 0),
+                }
+            )
+
+        # 7. Get Spoilage Breakdown by Item (Top 10 most spoiled)
+        spoilage_items_query = text(
+            """
+            SELECT
+                item_name,
+                category,
+                SUM(quantity_spoiled) as total_spoiled,
+                SUM(quantity_spoiled * COALESCE(unit_price, 0)) as total_cost,
+                COUNT(*) as incidents,
+                STRING_AGG(DISTINCT reason, ', ') as reasons
+            FROM inventory_spoilage
+            WHERE DATE(spoilage_date) BETWEEN :start_date AND :end_date
+            GROUP BY item_name, category
+            ORDER BY total_cost DESC
+            LIMIT 10
+        """
+        )
+
+        spoilage_items_result = await session.execute(
+            spoilage_items_query,
+            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
+        )
+
+        spoilage_items = []
+        for row in spoilage_items_result.fetchall():
+            spoilage_items.append(
+                {
+                    "item_name": row.item_name or "",
+                    "category": row.category or "",
+                    "total_spoiled": row.total_spoiled or 0,
+                    "total_cost": float(row.total_cost or 0),
+                    "incidents": row.incidents or 0,
+                    "reasons": row.reasons or "",
+                }
+            )
+
+        # 8. Daily Trend (last 7 days within the period)
+        daily_trend_query = text(
+            """
+            SELECT
+                DATE(sale_date) as sale_day,
+                SUM(quantity) as daily_items,
+                SUM(total_price) as daily_revenue
+            FROM sales_report
+            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
+            GROUP BY DATE(sale_date)
+            ORDER BY sale_day DESC
+            LIMIT 7
+        """
+        )
+
+        daily_trend_result = await session.execute(
+            daily_trend_query,
+            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
+        )
+
+        daily_trend = []
+        for row in daily_trend_result.fetchall():
+            daily_trend.append(
+                {
+                    "date": row.sale_day.strftime("%Y-%m-%d") if row.sale_day else "",
+                    "total_items": row.daily_items or 0,
+                    "total_revenue": float(row.daily_revenue or 0),
+                }
+            )
+
+        # Return comprehensive analytics
+        return {
+            "period": f"{start_date} to {end_date}",
+            "summary": {
+                "total_revenue": round(total_revenue, 2),
+                "total_cogs": round(total_cogs, 2),
+                "gross_profit": round(gross_profit, 2),
+                "total_loss": round(total_spoilage_cost, 2),
+                "net_profit": round(net_profit, 2),
+                "total_items_sold": total_items_sold,
+                "unique_items_sold": unique_items_sold,
+                "total_transactions": total_transactions,
+                "avg_unit_price": round(avg_unit_price, 2),
+            },
+            "profitability": {
+                "gross_profit_margin": round(gross_profit_margin, 2),
+                "net_profit_margin": round(net_profit_margin, 2),
+                "loss_percentage": round(loss_percentage, 2),
+                "cogs_percentage": round(
+                    (total_cogs / total_revenue * 100) if total_revenue > 0 else 0, 2
+                ),
+            },
+            "loss_analysis": {
+                "total_spoilage_cost": round(total_spoilage_cost, 2),
+                "total_quantity_spoiled": total_quantity_spoiled,
+                "total_incidents": total_spoilage_incidents,
+                "unique_items_spoiled": unique_items_spoiled,
+                "spoilage_items": spoilage_items,
+            },
+            "top_performers": top_items,
+            "category_breakdown": categories,
+            "daily_trend": daily_trend,
+        }
+
+    except Exception as e:
+        import traceback
+
+        print("COMPREHENSIVE ANALYTICS ERROR:", e)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating comprehensive sales analytics: {str(e)}",
         )

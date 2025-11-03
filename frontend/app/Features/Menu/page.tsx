@@ -27,6 +27,7 @@ import { MdWarning, MdCheckCircle } from "react-icons/md";
 
 const columns = [
   { key: "menu_id", label: "Dish ID" },
+  { key: "itemcode", label: "Item Code" },
   { key: "dish_name", label: "Dish Name" },
   { key: "image_url", label: "Image" },
   { key: "category", label: "Category" },
@@ -74,18 +75,18 @@ const Menu: React.FC = () => {
   React.useEffect(() => {
     setMounted(true);
   }, []);
-    const [isOnline, setIsOnline] = useState(true);
-    React.useEffect(() => {
-      setIsOnline(navigator.onLine);
-      const handleOnline = () => setIsOnline(true);
-      const handleOffline = () => setIsOnline(false);
-      window.addEventListener("online", handleOnline);
-      window.addEventListener("offline", handleOffline);
-      return () => {
-        window.removeEventListener("online", handleOnline);
-        window.removeEventListener("offline", handleOffline);
-      };
-    }, []);
+  const [isOnline, setIsOnline] = useState(true);
+  React.useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
   const router = useRouter();
   const { fetchMenu, deleteMenu } = useMenuAPI();
   const queryClient = useQueryClient();
@@ -127,7 +128,9 @@ const Menu: React.FC = () => {
             return parsed;
           } else {
             setOfflineMenu(null);
-            setOfflineError("No cached menu data available. Please connect to the internet to load menu.");
+            setOfflineError(
+              "No cached menu data available. Please connect to the internet to load menu."
+            );
             return [];
           }
         }
@@ -143,7 +146,9 @@ const Menu: React.FC = () => {
   const shouldShowLoading =
     (isLoading || isFetching) &&
     !offlineError &&
-    (typeof window === "undefined" || navigator.onLine || !!localStorage.getItem("menuCache"));
+    (typeof window === "undefined" ||
+      navigator.onLine ||
+      !!localStorage.getItem("menuCache"));
 
   // Patch: Always reconstruct icons/actions from code when offline
   let displayMenu: MenuItemType[] = [];
@@ -529,9 +534,13 @@ const Menu: React.FC = () => {
                     <tbody>
                       {shouldShowLoading ? (
                         <tr>
-                          <td colSpan={columns.length} className="text-center py-8">
+                          <td
+                            colSpan={columns.length}
+                            className="text-center py-8"
+                          >
                             <div className="text-yellow-300 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
-                              {(typeof navigator !== "undefined" && navigator.onLine)
+                              {typeof navigator !== "undefined" &&
+                              navigator.onLine
                                 ? "Refreshing menu data..."
                                 : "Loading from offline cache..."}
                             </div>
@@ -539,7 +548,10 @@ const Menu: React.FC = () => {
                         </tr>
                       ) : offlineError ? (
                         <tr>
-                          <td colSpan={columns.length} className="text-center py-8">
+                          <td
+                            colSpan={columns.length}
+                            className="text-center py-8"
+                          >
                             <div className="flex flex-col items-center gap-2">
                               <MdWarning className="text-yellow-400 text-3xl mx-auto" />
                               <div className="text-yellow-400 text-base sm:text-lg md:text-xl font-semibold tracking-wide">
@@ -578,7 +590,9 @@ const Menu: React.FC = () => {
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
                               {dish.menu_id}
                             </td>
-
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
+                              {dish.itemcode || "-"}
+                            </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap">
                               <div className="flex items-center gap-1 xs:gap-2 sm:gap-3">
                                 <div className="w-1.5 xs:w-2 h-1.5 xs:h-2 rounded-full bg-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>

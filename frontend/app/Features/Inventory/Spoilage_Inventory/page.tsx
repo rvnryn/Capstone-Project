@@ -101,9 +101,11 @@ export default function SpoilageInventoryPage() {
       return mapped;
     },
     staleTime: 1000 * 60 * 5,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
+    refetchInterval: 5000, // Poll every 5 seconds for real-time updates
+    refetchIntervalInBackground: false, // Only poll when tab is active
     retry: 1,
   });
 
@@ -227,11 +229,10 @@ export default function SpoilageInventoryPage() {
   }, []);
 
   const columns = [
-    { key: "spoilage_id", label: "ID" },
-    { key: "item_id", label: "Item ID" },
+    { key: "spoilage_id", label: "#" },
+    { key: "item_name", label: "Name" },
     { key: "batch_date", label: "Batch Date" },
     { key: "category", label: "Category" },
-    { key: "item_name", label: "Name" },
     { key: "quantity_spoiled", label: "Quantity Spoiled" },
     { key: "unit_price", label: "Unit Price" },
     { key: "expiration_date", label: "Expiration Date" },
@@ -297,8 +298,8 @@ export default function SpoilageInventoryPage() {
                       onClick={handleRefresh}
                       className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
                     >
-                      <FiRefreshCw className="text-xs xs:text-sm" />
-                      <span className="sm:inline">Refresh</span>
+                      <FiRefreshCw className={`text-xs xs:text-sm ${isFetching ? 'animate-spin' : ''}`} />
+                      <span className="sm:inline">{isFetching ? 'Syncing...' : 'Refresh'}</span>
                     </button>
                   </nav>
                 </div>
@@ -326,11 +327,18 @@ export default function SpoilageInventoryPage() {
                     </div>
                     <input
                       type="text"
-                      placeholder="Search by name, reason, or ID..."
+                      placeholder="Search by name"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-gray-800/50 backdrop-blur-sm text-white placeholder-gray-400 rounded-xl px-12 py-3 shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-400/50 border border-gray-600/50 hover:border-gray-500 transition-all text-sm sm:text-base"
-                      aria-label="Search spoilage"
+                      onChange={(e) => {
+                        // Only allow letters and spaces
+                        const value = e.target.value.replace(
+                          /[^a-zA-Z\s]/g,
+                          ""
+                        );
+                        setSearchQuery(value);
+                      }}
+                      className="w-full bg-gray-800/50 text-white placeholder-gray-400 rounded-xl px-12 py-3 shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-400/50 border border-gray-600/50 hover:border-gray-500 transition-all text-sm sm:text-base"
+                      aria-label="Search inventory"
                     />
                     {searchQuery && (
                       <button
@@ -441,7 +449,7 @@ export default function SpoilageInventoryPage() {
                                     )
                                   }
                                 >
-                                  {item.spoilage_id}
+                                  {index + 1}
                                 </td>
                                 <td
                                   className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap"
@@ -453,7 +461,7 @@ export default function SpoilageInventoryPage() {
                                     )
                                   }
                                 >
-                                  {item.item_id}
+                                  {item.item_name}
                                 </td>
                                 <td
                                   className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm"
@@ -480,18 +488,6 @@ export default function SpoilageInventoryPage() {
                                   }
                                 >
                                   {item.category || "-"}
-                                </td>
-                                <td
-                                  className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap"
-                                  onClick={() =>
-                                    router.push(
-                                      routes.ViewSpoilageInventory(
-                                        item.spoilage_id
-                                      )
-                                    )
-                                  }
-                                >
-                                  {item.item_name}
                                 </td>
                                 <td
                                   className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-white font-semibold text-sm xs:text-base sm:text-lg"

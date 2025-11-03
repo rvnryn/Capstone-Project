@@ -91,6 +91,7 @@ export default function EditMenuPage() {
     };
   }, []);
   const [formData, setFormData] = useState({
+    itemcode: "",
     dish_name: "",
     category: "",
     price: "",
@@ -128,6 +129,7 @@ export default function EditMenuPage() {
   useEffect(() => {
     if (menu) {
       setFormData({
+        itemcode: menu.itemcode || "",
         dish_name: menu.dish_name,
         category: menu.category,
         price: menu.price.toString(),
@@ -391,6 +393,23 @@ export default function EditMenuPage() {
                 >
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8">
                     <div className="space-y-4">
+                      <div className="group">
+                        <label
+                          htmlFor="itemcode"
+                          className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                        >
+                          Item Code
+                        </label>
+                        <input
+                          type="text"
+                          id="itemcode"
+                          name="itemcode"
+                          value={formData.itemcode}
+                          disabled
+                          readOnly
+                          className="w-full bg-gray-700 text-gray-400 rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base border-gray-600/50 cursor-not-allowed"
+                        />
+                      </div>
                       {/* Dish Name */}
                       <div className="group">
                         <label
@@ -620,14 +639,19 @@ export default function EditMenuPage() {
                             disabled={itemNamesLoading || !isOnline}
                           >
                             <option value="">Select Ingredient</option>
-                            {items.map((item) => (
-                              <option
-                                key={item.item_name}
-                                value={item.item_name}
-                              >
-                                {item.item_name}
-                              </option>
-                            ))}
+                            {items
+                              .filter(
+                                (item) =>
+                                  item.category !== "Seasonings & Condiments"
+                              )
+                              .map((item) => (
+                                <option
+                                  key={item.item_name}
+                                  value={item.item_name}
+                                >
+                                  {item.item_name}
+                                </option>
+                              ))}
                           </select>
                           <input
                             type="number"

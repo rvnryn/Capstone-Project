@@ -89,6 +89,7 @@ export default function EditInventoryItem() {
           batch: data.batch_date,
           category: data.category,
           stock: data.stock_quantity,
+          unit_price: data.unit_price || "",
           status: data.stock_status,
           added: new Date(data.created_at),
           expiration_date: data.expiration_date?.split("T")[0] || "",
@@ -209,6 +210,7 @@ export default function EditInventoryItem() {
         category: formData.category,
         batch_date: formData.batch,
         stock_quantity: formData.stock,
+        unit_price: Number(formData.unit_price),
         expiration_date: formData.expiration_date || null,
       });
 
@@ -526,57 +528,89 @@ export default function EditInventoryItem() {
                     )}
                   </div>
 
-                  {/* Stock Quantity Field */}
-                  <div className="group lg:col-span-2">
-                    <label
-                      htmlFor="stock"
-                      className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                    >
-                      <FiHash className="text-yellow-400" />
-                      Quantity In Stock
-                      <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative max-w-md">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          id="stock"
-                          name="stock"
-                          required
-                          min={1}
-                          value={formData.stock === 0 ? "" : formData.stock}
-                          onChange={handleChange}
-                          onFocus={() => handleFocus("stock")}
-                          onBlur={handleBlur}
-                          placeholder="Enter quantity..."
-                          className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
-                            isSubmitted && errors.stock
-                              ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                              : focusedField === "stock"
-                              ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                              : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                          }`}
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                        />
-                        {unit && (
-                          <span className="text-gray-400 text-xs xs:text-sm font-normal">
-                            {unit}
-                          </span>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8">
+                    {/* Stock Quantity Field */}
+                    <div className="group">
+                      <label
+                        htmlFor="stock"
+                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                      >
+                        <FiHash className="text-yellow-400" />
+                        Quantity In Stock
+                        <span className="text-red-400">*</span>
+                      </label>
+                      <div className="relative max-w-md">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            id="stock"
+                            name="stock"
+                            required
+                            min={1}
+                            value={formData.stock === 0 ? "" : formData.stock}
+                            onChange={handleChange}
+                            onFocus={() => handleFocus("stock")}
+                            onBlur={handleBlur}
+                            placeholder="Enter quantity..."
+                            className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
+                              isSubmitted && errors.stock
+                                ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                                : focusedField === "stock"
+                                ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                                : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                            }`}
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                          />
+                          {unit && (
+                            <span className="text-gray-400 text-xs xs:text-sm font-normal">
+                              {unit}
+                            </span>
+                          )}
+                        </div>
+                        {focusedField === "stock" && !errors.stock && (
+                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                          </div>
                         )}
                       </div>
-                      {focusedField === "stock" && !errors.stock && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                      {isSubmitted && errors.stock && (
+                        <div className="flex items-center gap-2 mt-2 text-red-400 text-xs sm:text-sm">
+                          <FiAlertCircle className="flex-shrink-0" />
+                          {errors.stock}
                         </div>
                       )}
                     </div>
-                    {isSubmitted && errors.stock && (
-                      <div className="flex items-center gap-2 mt-2 text-red-400 text-xs sm:text-sm">
-                        <FiAlertCircle className="flex-shrink-0" />
-                        {errors.stock}
+
+                    <div className="group">
+                      <label
+                        htmlFor="unit_price"
+                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base"
+                      >
+                        <FiTag className="text-yellow-400" />
+                        Unit Price
+                        <span className="text-red-400">*</span>
+                      </label>
+                      <div className="relative max-w-md">
+                        <input
+                          type="number"
+                          id="unit_price"
+                          name="unit_price"
+                          required
+                          min={0}
+                          step="0.01"
+                          value={formData.unit_price}
+                          onChange={handleChange}
+                          onFocus={() => handleFocus("unit_price")}
+                          onBlur={handleBlur}
+                          placeholder="0.00"
+                          className="w-full pl-7 bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                          inputMode="decimal"
+                          pattern="[0-9.]*"
+                          disabled
+                        />
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
 

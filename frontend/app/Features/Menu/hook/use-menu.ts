@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 
 export interface MenuItem {
   menu_id: number;
+  itemcode: string;
   dish_name: string;
   image_url: string;
   category: string;

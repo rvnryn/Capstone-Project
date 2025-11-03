@@ -416,6 +416,11 @@ export default function ViewMenu() {
               <div className="space-y-2 sm:space-y-3 md:space-y-4"></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-4">
                 <ItemRow
+                  icon={<FiHash className="text-gray-400" />} // <-- Add this block
+                  label="Item Code"
+                  value={menu.itemcode || "-"}
+                />
+                <ItemRow
                   icon={<FiHash className="text-yellow-400" />}
                   label="Menu ID"
                   value={menu.menu_id?.toString() || "-"}

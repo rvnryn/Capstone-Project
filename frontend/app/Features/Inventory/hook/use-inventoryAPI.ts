@@ -405,11 +405,17 @@ export function useInventoryAPI() {
   }, []);
 
   // INVENTORY SURPLUS
+  // Updated: require both id and batch_date
   const getSurplusItem = useCallback(
     async (id: string | number, batch_date: string) => {
       try {
         const token =
           typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        if (!batch_date) {
+          throw new Error(
+            "batch_date is required to fetch surplus inventory item"
+          );
+        }
         const response = await fetch(
           `${API_BASE_URL}/api/inventory-surplus/${id}/${batch_date}`,
           {
@@ -610,6 +616,44 @@ export function useInventoryAPI() {
     [handleOfflineWriteOperation]
   );
 
+  const fifoTransferToToday = useCallback(
+    async (item_name: string, quantity: number) => {
+      return handleOfflineWriteOperation(
+        async () => {
+          const token =
+            typeof window !== "undefined"
+              ? localStorage.getItem("token")
+              : null;
+          const response = await fetch(
+            `${API_BASE_URL}/api/inventory/fifo-transfer-to-today`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token && { Authorization: `Bearer ${token}` }),
+              },
+              body: JSON.stringify({ item_name, quantity }),
+            }
+          );
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+          }
+
+          return await response.json();
+        },
+        {
+          action: "fifo-transfer-to-today",
+          endpoint: `${API_BASE_URL}/api/inventory/fifo-transfer-to-today`,
+          method: "POST",
+          payload: { item_name, quantity },
+        }
+      );
+    },
+    [handleOfflineWriteOperation, API_BASE_URL]
+  );
+
   const listSpoilage = useCallback(async () => {
     try {
       const token =
@@ -770,6 +814,7 @@ export function useInventoryAPI() {
     listSurplusItems,
 
     transferToToday,
+    fifoTransferToToday,
 
     listSpoilage,
     transferToSpoilage,

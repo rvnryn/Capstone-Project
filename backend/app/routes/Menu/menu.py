@@ -77,6 +77,7 @@ class MenuItem:
 @router.post("/menu/create-with-image-and-ingredients")
 async def create_menu_with_ingredients(
     request: Request,
+    itemcode: str = Form(...),
     dish_name: str = Form(...),
     category: str = Form(...),
     price: float = Form(...),
@@ -192,6 +193,7 @@ async def create_menu_with_ingredients(
         now = datetime.utcnow().isoformat()
 
         menu_data = {
+            "itemcode": itemcode, 
             "dish_name": dish_name,
             "image_url": public_url,
             "category": category,
@@ -509,6 +511,7 @@ async def update_menu(
 
     # Only allow updating certain fields
     allowed_fields = {
+        "itemcode",
         "dish_name",
         "image_url",
         "category",
@@ -711,6 +714,7 @@ async def delete_menu(
 @router.patch("/menu/{menu_id}/update-with-image-and-ingredients")
 async def update_menu_with_image_and_ingredients(
     menu_id: int,
+    itemcode: Optional[str] = Form(None),
     dish_name: str = Form(...),
     category: str = Form(...),
     price: float = Form(...),
@@ -748,6 +752,8 @@ async def update_menu_with_image_and_ingredients(
             "stock_status": stock_status,
             "updated_at": datetime.utcnow().isoformat(),
         }
+        if itemcode is not None:  # <-- Add this block
+            update_data["itemcode"] = itemcode
         if public_url:
             update_data["image_url"] = public_url
 

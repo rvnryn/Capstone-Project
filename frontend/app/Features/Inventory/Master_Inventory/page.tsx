@@ -293,6 +293,8 @@ export default function InventoryPage() {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchOnMount: true,
+    refetchInterval: 5000, // Poll every 5 seconds for real-time updates
+    refetchIntervalInBackground: false, // Only poll when tab is active
   });
 
   // Delete mutation with optimistic UI and offline support
@@ -664,12 +666,13 @@ export default function InventoryPage() {
   };
 
   const columns = [
-    { key: "id", label: "ID" },
+    { key: "id", label: "#" },
     { key: "name", label: "Name" },
     { key: "batch", label: "Batch Date" },
     { key: "category", label: "Category" },
     { key: "status", label: "Status" },
     { key: "stock", label: "Stock" },
+    { key: "unit_price", label: "Unit Price" },
     { key: "added", label: "Added Date" },
     { key: "expires", label: "Expiration Date" },
     { key: "actions", label: "Actions" },
@@ -726,8 +729,8 @@ export default function InventoryPage() {
                       onClick={handleRefresh}
                       className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-300 hover:to-blue-400 text-black px-2 xs:px-3 sm:px-4 md:px-6 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl font-semibold shadow-lg transition-all duration-200 flex items-center justify-center gap-1 xs:gap-2 cursor-pointer text-xs xs:text-sm sm:text-base whitespace-nowrap"
                     >
-                      <FiRefreshCw className="text-xs xs:text-sm" />
-                      <span className="sm:inline">Refresh</span>
+                      <FiRefreshCw className={`text-xs xs:text-sm ${isFetching ? 'animate-spin' : ''}`} />
+                      <span className="sm:inline">{isFetching ? 'Syncing...' : 'Refresh'}</span>
                     </button>
 
                     {["Owner", "General Manager", "Store Manager"].includes(
@@ -840,11 +843,18 @@ export default function InventoryPage() {
                       <FaSearch className="text-sm" />
                     </div>
                     <input
-                      type="search"
-                      placeholder="Search by name, category, status, ID, or stock quantity..."
+                      type="text"
+                      placeholder="Search by name"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-gray-800/50 backdrop-blur-sm text-white placeholder-gray-400 rounded-xl px-12 py-3 shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-400/50 border border-gray-600/50 hover:border-gray-500 transition-all text-sm sm:text-base"
+                      onChange={(e) => {
+                        // Only allow letters and spaces
+                        const value = e.target.value.replace(
+                          /[^a-zA-Z\s]/g,
+                          ""
+                        );
+                        setSearchQuery(value);
+                      }}
+                      className="w-full bg-gray-800/50 text-white placeholder-gray-400 rounded-xl px-12 py-3 shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-400/50 border border-gray-600/50 hover:border-gray-500 transition-all text-sm sm:text-base"
                       aria-label="Search inventory"
                     />
                     {searchQuery && (
@@ -940,37 +950,6 @@ export default function InventoryPage() {
                             {date}
                           </option>
                         ))}
-                      </select>
-                    </div>
-                    <div className="flex-1">
-                      <label
-                        className="block text-gray-300 text-xs sm:text-sm font-medium mb-2"
-                        htmlFor="sort-filter"
-                      >
-                        Sort By
-                      </label>
-                      <select
-                        id="sort-filter"
-                        value={sortConfig.key}
-                        onChange={(e) => {
-                          const key = e.target.value;
-                          setSortConfig((prev) => ({
-                            key,
-                            direction:
-                              prev.key === key && prev.direction === "asc"
-                                ? "desc"
-                                : "asc",
-                          }));
-                        }}
-                        className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
-                      >
-                        <option value="">Default Order</option>
-                        <option value="name">Name</option>
-                        <option value="category">Category</option>
-                        <option value="status">Status</option>
-                        <option value="stock">Stock Quantity</option>
-                        <option value="added">Date Added</option>
-                        <option value="expires">Expiration Date</option>
                       </select>
                     </div>
                   </fieldset>
@@ -1072,7 +1051,7 @@ export default function InventoryPage() {
                             }}
                           >
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
-                              {item.id}
+                              {index + 1}
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap">
                               <div className="flex items-center gap-1 xs:gap-2 sm:gap-3">
@@ -1114,6 +1093,12 @@ export default function InventoryPage() {
                                   </span>
                                 )}
                               </span>
+                            </td>
+                            <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-green-300 text-xs xs:text-sm">
+                              {item.unit_price !== undefined &&
+                              item.unit_price !== null
+                                ? `₱${Number(item.unit_price).toFixed(2)}`
+                                : "-"}
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-gray-300 text-xs xs:text-sm">
                               {formatDateTime(item.added)}

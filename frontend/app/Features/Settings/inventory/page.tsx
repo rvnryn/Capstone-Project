@@ -471,14 +471,11 @@ export default function InventorySettings() {
                         </option>
                         <option value="kg">kg</option>
                         <option value="g">g</option>
-                        <option value="lbs">lbs</option>
                         <option value="oz">oz</option>
                         <option value="l">L</option>
                         <option value="ml">ml</option>
                         <option value="pcs">pcs</option>
                         <option value="pack">pack</option>
-                        <option value="case">case</option>
-                        <option value="dozen">dozen</option>
                       </select>
                       {/* Custom dropdown arrow */}
                       <div className="absolute inset-y-0 top-7 right-0 flex items-center pr-3 pointer-events-none">

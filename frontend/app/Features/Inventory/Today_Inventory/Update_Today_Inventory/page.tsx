@@ -620,6 +620,7 @@ export default function EditTodayInventoryItem() {
                         }`}
                         inputMode="decimal"
                         pattern="[0-9]*"
+                        disabled
                       />
                       {focusedField === "unit_price" && !errors.unit_price && (
                         <div className="absolute right-3 top-1/2 transform -translate-y-1/2">

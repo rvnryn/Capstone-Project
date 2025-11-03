@@ -43,6 +43,242 @@ def log_user_activity(db, user, action_type, description):
     except Exception as e:
         logger.warning(f"Failed to record user activity ({action_type}): {e}")
 
+
+async def fifo_transfer_to_today_with_surplus_first(item_name: str, quantity_needed: float):
+    """
+    Transfer items to today's inventory using FIFO with surplus-first priority.
+
+    Priority:
+    1. Surplus inventory (oldest batch first)
+    2. Master inventory (oldest batch first)
+
+    Returns:
+        dict with transfer details and any errors
+    """
+    now = datetime.utcnow().isoformat()
+    remaining_quantity = quantity_needed
+    transfers = []
+    errors = []
+
+    try:
+        # Step 1: Check Surplus Inventory first (FIFO - oldest batch_date first)
+        @run_blocking
+        def _fetch_surplus():
+            return (
+                postgrest_client.table("inventory_surplus")
+                .select("*")
+                .ilike("item_name", item_name)
+                .order("batch_date", desc=False)  # FIFO: oldest first
+                .execute()
+            )
+
+        surplus_response = await _fetch_surplus()
+        surplus_items = surplus_response.data if surplus_response else []
+
+        # Deduct from surplus inventory (FIFO)
+        for surplus_item in surplus_items:
+            if remaining_quantity <= 0:
+                break
+
+            available_qty = float(surplus_item.get("stock_quantity", 0))
+            if available_qty <= 0:
+                continue
+
+            # Determine how much to take from this batch
+            transfer_qty = min(remaining_quantity, available_qty)
+            new_surplus_qty = available_qty - transfer_qty
+
+            threshold = await get_threshold_for_item(item_name)
+            batch_date_str = str(surplus_item.get("batch_date")) if surplus_item.get("batch_date") else None
+
+            # Update or delete from surplus
+            if new_surplus_qty <= 0:
+                @run_blocking
+                def _delete_surplus():
+                    return (
+                        postgrest_client.table("inventory_surplus")
+                        .delete()
+                        .eq("item_id", surplus_item["item_id"])
+                        .eq("batch_date", batch_date_str)
+                        .execute()
+                    )
+                await _delete_surplus()
+            else:
+                new_surplus_status = calculate_stock_status(new_surplus_qty, threshold)
+
+                @run_blocking
+                def _update_surplus():
+                    return (
+                        postgrest_client.table("inventory_surplus")
+                        .update({
+                            "stock_quantity": new_surplus_qty,
+                            "stock_status": new_surplus_status,
+                            "updated_at": now,
+                        })
+                        .eq("item_id", surplus_item["item_id"])
+                        .eq("batch_date", batch_date_str)
+                        .execute()
+                    )
+                await _update_surplus()
+
+            # Add to today's inventory (upsert)
+            transfer_status = calculate_stock_status(transfer_qty, threshold)
+            payload = {
+                "item_id": surplus_item["item_id"],
+                "item_name": surplus_item["item_name"],
+                "batch_date": batch_date_str,
+                "category": surplus_item.get("category"),
+                "stock_status": transfer_status,
+                "stock_quantity": transfer_qty,
+                "expiration_date": surplus_item.get("expiration_date"),
+                "created_at": now,
+                "updated_at": now,
+                "unit_price": surplus_item.get("unit_price"),
+            }
+
+            @run_blocking
+            def _upsert_today():
+                return (
+                    postgrest_client.table("inventory_today")
+                    .upsert([payload], on_conflict=["item_id", "batch_date"])
+                    .execute()
+                )
+
+            try:
+                await _upsert_today()
+            except APIError as e:
+                errors.append(f"Failed to upsert to today inventory: {str(e)}")
+
+            transfers.append({
+                "source": "surplus",
+                "batch_date": batch_date_str,
+                "quantity": transfer_qty,
+                "item_id": surplus_item["item_id"]
+            })
+
+            remaining_quantity -= transfer_qty
+
+        # Step 2: If still need more, check Master Inventory (FIFO - oldest batch_date first)
+        if remaining_quantity > 0:
+            @run_blocking
+            def _fetch_master():
+                return (
+                    postgrest_client.table("inventory")
+                    .select("*")
+                    .ilike("item_name", item_name)
+                    .order("batch_date", desc=False)  # FIFO: oldest first
+                    .execute()
+                )
+
+            master_response = await _fetch_master()
+            master_items = master_response.data if master_response else []
+
+            # Deduct from master inventory (FIFO)
+            for master_item in master_items:
+                if remaining_quantity <= 0:
+                    break
+
+                available_qty = float(master_item.get("stock_quantity", 0))
+                if available_qty <= 0:
+                    continue
+
+                # Determine how much to take from this batch
+                transfer_qty = min(remaining_quantity, available_qty)
+                new_master_qty = available_qty - transfer_qty
+
+                threshold = await get_threshold_for_item(item_name)
+                batch_date_str = str(master_item.get("batch_date")) if master_item.get("batch_date") else None
+
+                # Update or delete from master
+                if new_master_qty <= 0:
+                    @run_blocking
+                    def _delete_master():
+                        return (
+                            postgrest_client.table("inventory")
+                            .delete()
+                            .eq("item_id", master_item["item_id"])
+                            .execute()
+                        )
+                    await _delete_master()
+                else:
+                    new_master_status = calculate_stock_status(new_master_qty, threshold)
+
+                    @run_blocking
+                    def _update_master():
+                        return (
+                            postgrest_client.table("inventory")
+                            .update({
+                                "stock_quantity": new_master_qty,
+                                "stock_status": new_master_status,
+                                "updated_at": now,
+                            })
+                            .eq("item_id", master_item["item_id"])
+                            .execute()
+                        )
+                    await _update_master()
+
+                # Add to today's inventory (upsert)
+                transfer_status = calculate_stock_status(transfer_qty, threshold)
+                payload = {
+                    "item_id": master_item["item_id"],
+                    "item_name": master_item["item_name"],
+                    "batch_date": batch_date_str,
+                    "category": master_item.get("category"),
+                    "stock_status": transfer_status,
+                    "stock_quantity": transfer_qty,
+                    "expiration_date": master_item.get("expiration_date"),
+                    "created_at": now,
+                    "updated_at": now,
+                    "unit_price": master_item.get("unit_price"),
+                }
+
+                @run_blocking
+                def _upsert_today():
+                    return (
+                        postgrest_client.table("inventory_today")
+                        .upsert([payload], on_conflict=["item_id", "batch_date"])
+                        .execute()
+                    )
+
+                try:
+                    await _upsert_today()
+                except APIError as e:
+                    errors.append(f"Failed to upsert to today inventory: {str(e)}")
+
+                transfers.append({
+                    "source": "master",
+                    "batch_date": batch_date_str,
+                    "quantity": transfer_qty,
+                    "item_id": master_item["item_id"]
+                })
+
+                remaining_quantity -= transfer_qty
+
+        # Check if we could fulfill the entire request
+        transferred_qty = quantity_needed - remaining_quantity
+
+        return {
+            "requested_quantity": quantity_needed,
+            "transferred_quantity": transferred_qty,
+            "remaining_shortage": remaining_quantity,
+            "transfers": transfers,
+            "errors": errors if errors else None,
+            "summary": {
+                "from_surplus": sum(t["quantity"] for t in transfers if t["source"] == "surplus"),
+                "from_master": sum(t["quantity"] for t in transfers if t["source"] == "master"),
+            }
+        }
+
+    except Exception as e:
+        logger.exception(f"Error in fifo_transfer_to_today_with_surplus_first for {item_name}")
+        return {
+            "requested_quantity": quantity_needed,
+            "transferred_quantity": 0,
+            "remaining_shortage": quantity_needed,
+            "transfers": [],
+            "errors": [str(e)]
+        }
+
 async def wait_until_6am():
     now = datetime.now()
     today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=15, minutes=34)
@@ -53,7 +289,7 @@ async def wait_until_6am():
 
 async def wait_until_10pm():
     now = datetime.now()
-    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=15, minutes=32)
+    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=2, minutes=38)
     if now >= today_10pm:
         today_10pm += timedelta(days=1)
     seconds_until_10pm = (today_10pm - now).total_seconds()
