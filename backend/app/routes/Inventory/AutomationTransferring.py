@@ -71,7 +71,6 @@ async def fifo_transfer_to_today_with_surplus_first(item_name: str, quantity_nee
                 .order("batch_date", desc=False)  # FIFO: oldest first
                 .execute()
             )
-
         surplus_response = await _fetch_surplus()
         surplus_items = surplus_response.data if surplus_response else []
 
