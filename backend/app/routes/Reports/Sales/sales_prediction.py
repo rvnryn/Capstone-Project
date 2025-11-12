@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from typing import List, Dict, Any
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from app.supabase import get_db
 
 # ML imports
@@ -15,21 +15,40 @@ import numpy as np
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 
-async def get_sales_data(session: AsyncSession, days: int = 90):
-    since = datetime.utcnow() - timedelta(days=days)
-    print(f"[DEBUG] Fetching sales data since: {since}")
-    query = text(
+async def get_sales_data(session: AsyncSession, days: int = 90, start_date: str = None, end_date: str = None):
+    # Use specific date range if provided, otherwise use days
+    if start_date and end_date:
+        # Convert string dates to date objects for asyncpg
+        start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+        print(f"[DEBUG] Fetching sales data from {start_date_obj} to {end_date_obj}")
+        query = text(
+            """
+            SELECT item_name as item,
+                   DATE(sale_date) as date,
+                   SUM(quantity) as sales
+            FROM sales_report
+            WHERE DATE(sale_date) >= :start_date AND DATE(sale_date) <= :end_date
+            GROUP BY item_name, DATE(sale_date)
+            ORDER BY DATE(sale_date) DESC, SUM(quantity) DESC
         """
-        SELECT item_name as item,
-               DATE(sale_date) as date,
-               SUM(quantity) as sales
-        FROM sales_report
-        WHERE sale_date >= :since
-        GROUP BY item_name, DATE(sale_date)
-        ORDER BY DATE(sale_date) DESC, SUM(quantity) DESC
-    """
-    )
-    result = await session.execute(query, {"since": str(since)})
+        )
+        result = await session.execute(query, {"start_date": start_date_obj, "end_date": end_date_obj})
+    else:
+        since = datetime.utcnow() - timedelta(days=days)
+        print(f"[DEBUG] Fetching sales data since: {since}")
+        query = text(
+            """
+            SELECT item_name as item,
+                   DATE(sale_date) as date,
+                   SUM(quantity) as sales
+            FROM sales_report
+            WHERE sale_date >= :since
+            GROUP BY item_name, DATE(sale_date)
+            ORDER BY DATE(sale_date) DESC, SUM(quantity) DESC
+        """
+        )
+        result = await session.execute(query, {"since": str(since)})
     rows = result.fetchall()
     print(f"[DEBUG] Raw query results: {len(rows)} rows")
 
@@ -444,10 +463,12 @@ async def get_top_sales_historical(
 async def get_historical_analysis(
     request: Request,
     days: int = Query(90, description="Number of days to analyze"),
+    start_date: str = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: str = Query(None, description="End date (YYYY-MM-DD)"),
     session: AsyncSession = Depends(get_db),
 ):
     """Get simple historical sales analysis"""
-    sales_data = await get_sales_data(session, days)
+    sales_data = await get_sales_data(session, days, start_date, end_date)
 
     if not sales_data:
         return {"error": "No sales data found for analysis"}

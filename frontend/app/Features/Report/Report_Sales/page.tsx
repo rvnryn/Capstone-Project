@@ -1,7 +1,5 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { isOnline } from "@/app/utils/offlineUtils";
-import OfflineDataBanner from "@/app/components/OfflineDataBanner";
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import {
@@ -15,18 +13,27 @@ import {
   FaChartBar,
   FaFileImport,
   FaMoneyBillWave,
+  FaCalendarAlt,
 } from "react-icons/fa";
-import { MdCheckCircle, MdTrendingUp, MdInsights } from "react-icons/md";
+import {
+  MdCheckCircle,
+  MdTrendingUp,
+  MdInsights,
+  MdAssessment,
+} from "react-icons/md";
 import { BiImport, BiExport } from "react-icons/bi";
 import { FiBarChart, FiUpload } from "react-icons/fi";
 import { TbReportAnalytics } from "react-icons/tb";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
-import { useSimpleSalesReport } from "./hooks/useSimpleSalesReport";
+import {
+  useComprehensiveSalesReport,
+  useImportSalesData,
+  useLogExport,
+} from "../hooks/use-reportQuery";
 import { useSalesAnalytics } from "../../Dashboard/hook/useSalesPrediction";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { saveAs } from "file-saver";
-import { supabase } from "@/app/utils/Server/supabaseClient";
 import { useComprehensiveAnalytics } from "./hooks/useComprehensiveAnalytics";
 import { FaDollarSign, FaExclamationTriangle, FaTrophy } from "react-icons/fa";
 import { MdTrendingDown } from "react-icons/md";
@@ -97,20 +104,29 @@ export default function ReportSales() {
     key: "",
     direction: "asc" as "asc" | "desc",
   });
-  const [offlineData, setOfflineData] = useState<any>(null);
-  const [offlineError, setOfflineError] = useState<string | null>(null);
-  const [isOffline, setIsOffline] = useState(false);
 
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importedRows, setImportedRows] = useState<any[]>([]);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importSuccess, setImportSuccess] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
-    start: "",
-    end: "",
+  const autoDeduct = true; // Always auto-deduct from today's inventory
+  // Initialize with "All Time" date range
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
+    const now = new Date();
+    const todayStr = now.getFullYear() + '-' +
+      String(now.getMonth() + 1).padStart(2, '0') + '-' +
+      String(now.getDate()).padStart(2, '0');
+    return {
+      start: "2000-01-01", // Far back to capture all data
+      end: todayStr
+    };
   });
+  const [timePeriod, setTimePeriod] = useState<
+    "all" | "today" | "week" | "month" | "year" | "custom"
+  >("all");
   const [viewMode, setViewMode] = useState<"detailed" | "summary">("detailed");
+  // Track if date range was changed manually
+  const [dateRangeManual, setDateRangeManual] = useState(false);
 
   // Fetch comprehensive analytics using unified date range with auto-refresh (30 seconds)
   const {
@@ -122,10 +138,27 @@ export default function ReportSales() {
     refetch: refetchAnalytics,
   } = useComprehensiveAnalytics(
     dateRange.start ||
-      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0],
-    dateRange.end || new Date().toISOString().split("T")[0],
+      (() => {
+        const today = new Date();
+        return (
+          today.getFullYear() +
+          "-" +
+          String(today.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(today.getDate()).padStart(2, "0")
+        );
+      })(), // Today as default
+    dateRange.end ||
+      (() => {
+        const today = new Date();
+        return (
+          today.getFullYear() +
+          "-" +
+          String(today.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(today.getDate()).padStart(2, "0")
+        );
+      })(), // Local date, no timezone issues
     30000 // Auto-refresh every 30 seconds
   );
 
@@ -133,66 +166,30 @@ export default function ReportSales() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Use the sales report hook
-  const {
-    data: reportData,
-    loading: isLoading,
-    error,
-    fetchReportData,
-    fetchTodayReport,
-    fetchWeekReport,
-    fetchMonthReport,
-    importSalesData,
-  } = useSimpleSalesReport();
-
-  // Offline/online detection and fallback logic
-  useEffect(() => {
-    function handleOnline() {
-      setIsOffline(false);
-      setOfflineError(null);
-    }
-    function handleOffline() {
-      setIsOffline(true);
-    }
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    setIsOffline(!isOnline());
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
+  // Use React Query hooks with auto-refresh every 5 minutes
+  const reportParams = useMemo(() => {
+    // Helper to get local date string without timezone issues
+    const getLocalDateStr = (date: Date) => {
+      return (
+        date.getFullYear() +
+        "-" +
+        String(date.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(date.getDate()).padStart(2, "0")
+      );
     };
-  }, []);
 
-  // Fetch report data on mount and when period changes
-  useEffect(() => {
-    if (!isOffline) {
-      // Online: fetch all data and cache
-      fetchReportData().then((data) => {
-        try {
-          localStorage.setItem("salesReportCache", JSON.stringify(data));
-        } catch {}
-        setOfflineData(null);
-        setOfflineError(null);
-      });
-    } else {
-      // Offline: try to load from cache
-      try {
-        const cached = localStorage.getItem("salesReportCache");
-        if (cached) {
-          setOfflineData(JSON.parse(cached));
-          setOfflineError(null);
-        } else {
-          setOfflineData(null);
-          setOfflineError(
-            "No cached sales report data available. Please connect to the internet to load report."
-          );
-        }
-      } catch {
-        setOfflineData(null);
-        setOfflineError("Failed to load cached sales report data.");
-      }
-    }
-  }, [isOffline, fetchReportData]);
+    const todayStr = getLocalDateStr(new Date());
+    return {
+      start_date: dateRange.start || todayStr, // Today as default
+      end_date: dateRange.end || todayStr, // Today in local timezone
+    };
+  }, [dateRange]);
+
+  const { data: reportData, isLoading } =
+    useComprehensiveSalesReport(reportParams);
+  const importMutation = useImportSalesData();
+  const logExportMutation = useLogExport();
 
   function normalizeDate(dateStr: string) {
     // If already in YYYY-MM-DD format
@@ -299,36 +296,23 @@ export default function ReportSales() {
 
   useEffect(() => {
     console.log("[ReportSales] reportData:", reportData);
-    console.log("[ReportSales] error:", error);
-  }, [reportData, error]);
+  }, [reportData]);
 
   const categories = [
-    "Rice Toppings",
+    "Bagnet Meals",
     "Sizzlers",
-    "Dessert",
-    "Soups & Noodles",
+    "Unli Rice w/ Bone Marrow",
+    "Soups w/ Bone Marrow",
+    "Combo",
+    "For Sharing",
+    "Noodles",
     "Desserts",
-    "Soup",
-    "Beverages",
-    "Extras",
+    "Sides",
+    "Drinks",
   ];
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("order_items_changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "order_items" },
-        (payload) => {
-          // Refresh sales data on any insert/update/delete
-          fetchReportData();
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchTodayReport, fetchWeekReport, fetchMonthReport, fetchReportData]);
+  // React Query auto-refresh handles real-time updates (every 5 minutes)
+  // No manual subscription needed
 
   // Handler for search input Enter key
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -337,22 +321,159 @@ export default function ReportSales() {
     }
   };
 
+  // Handler for time period changes
+  const handleTimePeriodChange = useCallback(
+    (period: "all" | "today" | "week" | "month" | "year" | "custom") => {
+      setTimePeriod(period);
+      setDateRangeManual(false); // Reset manual flag when preset selected
+
+      const now = new Date();
+
+      // Helper function to get local date string without timezone issues
+      const getLocalDateStr = (date: Date) => {
+        return (
+          date.getFullYear() +
+          "-" +
+          String(date.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(date.getDate()).padStart(2, "0")
+        );
+      };
+
+      const today = getLocalDateStr(now);
+
+      switch (period) {
+        case "today":
+          setDateRange({ start: today, end: today });
+          break;
+
+        case "week": {
+          // Create a "local" copy so timezone doesn't affect ISO conversion
+          const localDate = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate()
+          );
+
+          // Get the current day of the week (0=Sunday, 1=Monday, ..., 6=Saturday)
+          const dayOfWeek = localDate.getDay();
+
+          // Calculate Monday (if Sunday, go back 6 days)
+          const monday = new Date(localDate);
+          monday.setDate(
+            localDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)
+          );
+
+          // Calculate Sunday (6 days after Monday)
+          const sunday = new Date(monday);
+          sunday.setDate(monday.getDate() + 6);
+
+          setDateRange({
+            start: getLocalDateStr(monday),
+            end: getLocalDateStr(sunday),
+          });
+          break;
+        }
+
+        case "month": {
+          // Use local midnight date objects
+          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+          const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+          setDateRange({
+            start: getLocalDateStr(firstDay),
+            end: getLocalDateStr(lastDay),
+          });
+          break;
+        }
+
+        case "year": {
+          const firstOfYear = new Date(now.getFullYear(), 0, 1);
+          const lastOfYear = new Date(now.getFullYear(), 11, 31);
+
+          setDateRange({
+            start: getLocalDateStr(firstOfYear),
+            end: getLocalDateStr(lastOfYear),
+          });
+          break;
+        }
+
+        case "all":
+          // Use a very old start date to capture ALL data
+          setDateRange({ start: "2000-01-01", end: getLocalDateStr(now) });
+          break;
+
+        case "custom":
+          // Don't change date range, user will set manually
+          break;
+      }
+    },
+    []
+  );
+
   // Helper functions
   const handleClear = useCallback(() => {
     setSearchQuery("");
     setCategoryFilter("");
     setPriceRangeFilter("");
     setDateRange({ start: "", end: "" });
+    setTimePeriod("all");
     setSortConfig({ key: "", direction: "asc" });
   }, []);
 
   const clearSearch = useCallback(() => setSearchQuery(""), []);
   const clearCategory = useCallback(() => setCategoryFilter(""), []);
-  const clearDateRange = useCallback(
-    () => setDateRange({ start: "", end: "" }),
-    []
-  );
+  const clearDateRange = useCallback(() => {
+    setDateRange({ start: "", end: "" });
+    setTimePeriod("all");
+  }, []);
   const clearPriceRangeFilter = useCallback(() => setPriceRangeFilter(""), []);
+
+  // Sync time period when user manually changes date range
+  // DISABLED: This was causing conflicts with handleTimePeriodChange
+  // The time period is already set explicitly when using the dropdown
+  // useEffect(() => {
+  //   // Only update timePeriod if not manual
+  //   if (!dateRangeManual && (dateRange.start || dateRange.end)) {
+  //     const now = new Date();
+  //     // Helper to get local date string
+  //     const getLocalDateStr = (date: Date) => {
+  //       return (
+  //         date.getFullYear() +
+  //         "-" +
+  //         String(date.getMonth() + 1).padStart(2, "0") +
+  //         "-" +
+  //         String(date.getDate()).padStart(2, "0")
+  //       );
+  //     };
+
+  //     const today = getLocalDateStr(now);
+  //     // Calculate preset ranges
+  //     const weekAgo = getLocalDateStr(
+  //       new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  //     );
+  //     const monthAgo = getLocalDateStr(
+  //       new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  //     );
+  //     const yearAgo = getLocalDateStr(
+  //       new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
+  //     );
+
+  //     if (dateRange.start === today && dateRange.end === today) {
+  //       setTimePeriod("today");
+  //     } else if (dateRange.start === weekAgo && dateRange.end === today) {
+  //       setTimePeriod("week");
+  //     } else if (dateRange.start === monthAgo && dateRange.end === today) {
+  //       setTimePeriod("month");
+  //     } else if (dateRange.start === yearAgo && dateRange.end === today) {
+  //       setTimePeriod("year");
+  //     } else if (!dateRange.start && !dateRange.end) {
+  //       setTimePeriod("all");
+  //     } else {
+  //       setTimePeriod("custom");
+  //     }
+  //   }
+  // }, [dateRange.start, dateRange.end, dateRangeManual]);
 
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => ({
@@ -361,46 +482,35 @@ export default function ReportSales() {
     }));
   }, []);
 
-  // Choose the correct report data source (online or offline)
-  const effectiveReportData =
-    isOffline && offlineData ? offlineData : reportData;
+  // Use the report data
+  const effectiveReportData = reportData;
 
   // Convert hook data to the format expected by the component
   const salesData = useMemo(() => {
-    if (!effectiveReportData) {
-      console.log("[SalesData] No effective report data");
+    if (!effectiveReportData || !Array.isArray(effectiveReportData.topItems)) {
       return [];
     }
-
-    console.log("[SalesData] effectiveReportData:", effectiveReportData);
-    console.log("[SalesData] topItems:", effectiveReportData.topItems);
-
-    const mapped =
-      effectiveReportData.topItems?.map((item: any) => ({
-        name: item.name,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice || item.revenue / item.quantity,
-        totalRevenue: item.revenue,
-        category: item.category || "",
-        report_date: "",
-        // New detailed fields
-        subtotal: item.subtotal || 0,
-        discount_percentage: item.discount_percentage || 0,
-        sale_date: item.sale_date || "",
-        order_number: item.order_number || "",
-        transaction_number: item.transaction_number || "",
-        dine_type: item.dine_type || "",
-        order_taker: item.order_taker || "",
-        cashier: item.cashier || "",
-        terminal_no: item.terminal_no || "",
-        member: item.member || "",
-      })) || [];
-
-    console.log("[SalesData] Mapped data:", mapped);
-    return mapped;
+    return effectiveReportData.topItems.map((item: any) => ({
+      name: item?.item_name ?? "",
+      quantity: Number(item?.quantity ?? 0),
+      unitPrice:
+        typeof item?.unit_price === "number"
+          ? item.unit_price
+          : Number(item?.total_price ?? 0) / (Number(item?.quantity ?? 1) || 1),
+      totalRevenue: Number(item?.total_price ?? 0),
+      category: item?.category ?? "",
+      report_date: item?.report_date ?? "",
+      subtotal: Number(item?.subtotal ?? 0),
+      discount_percentage: Number(item?.discount_percentage ?? 0),
+      sale_date: item?.sale_date ?? "",
+      transaction_number: item?.transaction_number ?? "",
+      dine_type: item?.dine_type ?? "",
+      cashier: item?.cashier ?? "",
+      terminal_no: item?.terminal_no ?? "",
+      member: item?.member ?? "",
+    }));
   }, [effectiveReportData]);
 
-  // Aggregate data for summary view (group by item name)
   const summarizedSalesData = useMemo(() => {
     if (viewMode === "detailed") return salesData;
 
@@ -438,6 +548,42 @@ export default function ReportSales() {
     }));
   }, [salesData, viewMode]);
 
+  // Always aggregated data for charts (regardless of view mode)
+  const chartSalesData = useMemo(() => {
+    const grouped: { [key: string]: any } = {};
+
+    salesData.forEach((item: any) => {
+      const key = item.name;
+      if (!grouped[key]) {
+        grouped[key] = {
+          name: item.name,
+          category: item.category,
+          quantity: 0,
+          totalRevenue: 0,
+          subtotal: 0,
+          discountAmount: 0,
+          transactions: 0,
+        };
+      }
+
+      grouped[key].quantity += item.quantity;
+      grouped[key].totalRevenue += item.totalRevenue;
+      grouped[key].subtotal += item.subtotal;
+      grouped[key].discountAmount += item.subtotal - item.totalRevenue;
+      grouped[key].transactions += 1;
+    });
+
+    return Object.values(grouped).map((item: any) => ({
+      ...item,
+      unitPrice:
+        item.quantity > 0 ? (item.totalRevenue / item.quantity).toFixed(2) : 0,
+      avgDiscount:
+        item.transactions > 0
+          ? ((item.discountAmount / item.subtotal) * 100).toFixed(2)
+          : 0,
+    }));
+  }, [salesData]);
+
   // Use the appropriate data based on view mode
   const displaySalesData =
     viewMode === "summary" ? summarizedSalesData : salesData;
@@ -451,6 +597,7 @@ export default function ReportSales() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportClick = () => {
+    setImportModalOpen(true); // Always open modal when clicking import button
     if (fileInputRef.current) fileInputRef.current.click();
   };
 
@@ -496,7 +643,6 @@ export default function ReportSales() {
           typeof row.time === "number" ? excelTimeToJSTime(row.time) : row.time,
       }));
       setImportedRows(convertedRows);
-      setImportModalOpen(true);
     };
     reader.readAsBinaryString(file);
   };
@@ -539,7 +685,11 @@ export default function ReportSales() {
       if (dateRange.start && dateRange.end && item.sale_date) {
         const itemDate = new Date(item.sale_date);
         const startDate = new Date(dateRange.start);
+        startDate.setHours(0, 0, 0, 0); // Start of day
+
         const endDate = new Date(dateRange.end);
+        endDate.setHours(23, 59, 59, 999); // End of day
+
         matchesDateRange = itemDate >= startDate && itemDate <= endDate;
       }
 
@@ -1123,7 +1273,6 @@ export default function ReportSales() {
       "Unit Price",
       "Total Revenue",
       "Date",
-      "Order #",
       "Payment Method",
     ];
     worksheet.getRow(currentRow).values = detailHeaders;
@@ -1160,7 +1309,6 @@ export default function ReportSales() {
           maximumFractionDigits: 2,
         })}`,
         item.sale_date || item.report_date || "N/A",
-        item.order_number || item.transaction_number || "N/A",
         item.dine_type || "N/A",
       ];
       worksheet.getRow(currentRow).values = rowData;
@@ -1211,7 +1359,6 @@ export default function ReportSales() {
       { width: 15 }, // E - Unit Price
       { width: 18 }, // F - Total Revenue
       { width: 15 }, // G - Date
-      { width: 15 }, // H - Order #
       { width: 18 }, // I - Payment Method
     ];
 
@@ -1241,12 +1388,20 @@ export default function ReportSales() {
     // Log export activity to backend
     try {
       const token = localStorage.getItem("access_token");
-      const startDate =
-        dateRange.start ||
-        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .split("T")[0];
-      const endDate = dateRange.end || new Date().toISOString().split("T")[0];
+      // Helper to get local date string
+      const getLocalDateStr = (date: Date) => {
+        return (
+          date.getFullYear() +
+          "-" +
+          String(date.getMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(date.getDate()).padStart(2, "0")
+        );
+      };
+
+      const todayStr = getLocalDateStr(new Date());
+      const startDate = dateRange.start || todayStr; // Today as default
+      const endDate = dateRange.end || todayStr;
 
       await fetch(
         `${API_BASE_URL}/api/export-sales?start_date=${startDate}&end_date=${endDate}&export_type=${viewMode}`,
@@ -1304,12 +1459,20 @@ export default function ReportSales() {
         const API_BASE_URL =
           process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const token = localStorage.getItem("access_token");
-        const startDate =
-          dateRange.start ||
-          new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split("T")[0];
-        const endDate = dateRange.end || new Date().toISOString().split("T")[0];
+        // Helper to get local date string
+        const getLocalDateStr = (date: Date) => {
+          return (
+            date.getFullYear() +
+            "-" +
+            String(date.getMonth() + 1).padStart(2, "0") +
+            "-" +
+            String(date.getDate()).padStart(2, "0")
+          );
+        };
+
+        const todayStr = getLocalDateStr(new Date());
+        const startDate = dateRange.start || todayStr; // Today as default
+        const endDate = dateRange.end || todayStr;
 
         await fetch(
           `${API_BASE_URL}/api/export-sales?start_date=${startDate}&end_date=${endDate}&export_type=${viewMode}`,
@@ -1419,6 +1582,11 @@ export default function ReportSales() {
     }
   }, [importSuccess]);
 
+  const handleCustomDateChange = (field: "start" | "end", value: string) => {
+    setDateRange((prev) => ({ ...prev, [field]: value }));
+    setTimePeriod("custom");
+    setDateRangeManual(true);
+  };
   return (
     <GoogleOAuthProvider clientId={CLIENT_ID}>
       <section className="min-h-screen bg-yellow-600 text-white font-poppins">
@@ -1476,6 +1644,34 @@ export default function ReportSales() {
                           <BiExport className="text-xs sm:text-sm" />
                           <span>Export Report</span>
                         </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Report Metadata */}
+                  <div className="bg-gray-800/20 backdrop-blur-sm rounded-lg 2xs:rounded-xl xs:rounded-xl p-2 2xs:p-3 xs:p-4 border border-gray-700/30">
+                    <div className="flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2 2xs:gap-3 xs:gap-4">
+                      <div className="flex flex-col xs:flex-row xs:items-center gap-2 xs:gap-4 w-full xs:w-auto">
+                        <div className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-gray-300">
+                          <FaCalendarAlt className="text-yellow-400 text-xs 2xs:text-sm flex-shrink-0" />
+                          <span className="text-2xs 2xs:text-xs xs:text-sm truncate">
+                            Report Generated: {new Date().toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-gray-300">
+                          <MdAssessment className="text-yellow-400 text-xs 2xs:text-sm flex-shrink-0" />
+                          <span className="text-2xs 2xs:text-xs xs:text-sm truncate">
+                            Sales Records: {reportData?.totalItems || 0}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-2xs 2xs:text-xs xs:text-sm text-gray-400 w-full xs:w-auto justify-end">
+                        <span className="truncate">Last Updated:</span>
+                        <span className="text-yellow-400 font-medium truncate">
+                          {analyticsLastUpdated
+                            ? analyticsLastUpdated.toLocaleTimeString()
+                            : new Date().toLocaleTimeString()}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1878,9 +2074,9 @@ export default function ReportSales() {
                             <FaTrophy className="text-green-400" />
                             Top 5 Performing Items (By Revenue)
                           </h4>
-                          {sortedSales.length > 0 ? (
+                          {chartSalesData.length > 0 ? (
                             <div className="space-y-3">
-                              {[...sortedSales]
+                              {[...chartSalesData]
                                 .sort((a, b) => b.totalRevenue - a.totalRevenue)
                                 .slice(0, 5)
                                 .map((item, idx) => (
@@ -1933,9 +2129,9 @@ export default function ReportSales() {
                             <FaChartBar className="text-blue-400" />
                             Top 5 Selling Items (By Quantity)
                           </h4>
-                          {sortedSales.length > 0 ? (
+                          {chartSalesData.length > 0 ? (
                             <div className="space-y-3">
-                              {[...sortedSales]
+                              {[...chartSalesData]
                                 .sort((a, b) => b.quantity - a.quantity)
                                 .slice(0, 5)
                                 .map((item, idx) => (
@@ -2312,7 +2508,7 @@ export default function ReportSales() {
                       value={pendingSearch}
                       onChange={(e) => setPendingSearch(e.target.value)}
                       onKeyDown={handleSearchKeyDown}
-                      className="w-full bg-gray-800/50 backdrop-blur-sm text-white placeholder-gray-400 rounded-md xs:rounded-lg sm:rounded-xl px-6 xs:px-8 sm:px-12 py-2 xs:py-2.5 sm:py-3 lg:py-4 shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-400/50 border border-gray-600/50 hover:border-gray-500 transition-all text-2xs xs:text-xs sm:text-sm md:text-base custom-scrollbar touch-target"
+                      className="w-full bg-gray-800/50 text-white placeholder-gray-400 rounded-md xs:rounded-lg sm:rounded-xl px-6 xs:px-8 sm:px-12 py-2 xs:py-2.5 sm:py-3 lg:py-4 shadow-inner focus:outline-none focus:ring-2 focus:ring-yellow-400/50 border border-gray-600/50 hover:border-gray-500 transition-all text-2xs xs:text-xs sm:text-sm md:text-base custom-scrollbar touch-target"
                     />
                     {pendingSearch && (
                       <div className="absolute right-1.5 xs:right-2 sm:right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -2334,7 +2530,36 @@ export default function ReportSales() {
                   {/* Filter Controls */}
                   <div className="bg-gray-800/30 backdrop-blur-sm rounded-lg xs:rounded-xl p-2 xs:p-3 sm:p-4 border border-gray-700/50">
                     {/* Primary Filters Row */}
-                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2 xs:gap-3 sm:gap-4 mb-4">
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 xs:gap-3 sm:gap-4 mb-4">
+                      <div>
+                        <label className="flex items-center gap-1.5 xs:gap-2 text-gray-300 text-xs xs:text-xs sm:text-sm font-medium mb-1.5 xs:mb-2">
+                          <FaCalendarAlt className="text-yellow-400 text-xs flex-shrink-0" />
+                          <span className="truncate">Time Period</span>
+                        </label>
+                        <select
+                          value={timePeriod}
+                          onChange={(e) =>
+                            handleTimePeriodChange(
+                              e.target.value as
+                                | "all"
+                                | "today"
+                                | "week"
+                                | "month"
+                                | "year"
+                                | "custom"
+                            )
+                          }
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-2 xs:px-3 py-2 xs:py-2.5 sm:py-3 border border-gray-600/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 cursor-pointer text-xs xs:text-sm transition-all"
+                        >
+                          <option value="all">All Time</option>
+                          <option value="today">Today</option>
+                          <option value="week">This Week</option>
+                          <option value="month">This Month</option>
+                          <option value="year">This Year</option>
+                          <option value="custom">Custom Range</option>
+                        </select>
+                      </div>
+
                       <div>
                         <label className="flex items-center gap-1.5 xs:gap-2 text-gray-300 text-xs xs:text-xs sm:text-sm font-medium mb-1.5 xs:mb-2">
                           <FaBoxes className="text-yellow-400 text-xs flex-shrink-0" />
@@ -2371,45 +2596,46 @@ export default function ReportSales() {
                           <option value="premium">Premium (&gt;₱300)</option>
                         </select>
                       </div>
+                    </div>
 
-                      <div className="xs:col-span-2 lg:col-span-1">
-                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
-                          Date Range
+                    {/* Custom Date Range (shown when Custom is selected) */}
+                    {timePeriod === "custom" && (
+                      <div className="mb-4 pb-4 border-b border-gray-700/30">
+                        <label className="flex items-center gap-1.5 xs:gap-2 text-gray-300 text-xs xs:text-xs sm:text-sm font-medium mb-1.5 xs:mb-2">
+                          <FaCalendarAlt className="text-yellow-400 text-xs flex-shrink-0" />
+                          <span className="truncate">Custom Date Range</span>
                         </label>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col xs:flex-row gap-2 items-center">
                           <input
                             type="date"
                             value={dateRange.start}
                             onChange={(e) =>
-                              setDateRange((prev) => ({
-                                ...prev,
-                                start: e.target.value,
-                              }))
+                              handleCustomDateChange("start", e.target.value)
                             }
-                            className="bg-gray-700/50 text-white rounded-md px-2 py-2 border border-gray-600/50 focus:border-yellow-400"
+                            className="w-full xs:w-auto bg-gray-700/50 text-white rounded-md xs:rounded-lg px-2 xs:px-3 py-2 xs:py-2.5 border border-gray-600/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 text-xs xs:text-sm"
+                            placeholder="Start date"
                           />
-                          <span className="text-gray-400">to</span>
+                          <span className="text-gray-400 text-xs xs:text-sm">
+                            to
+                          </span>
                           <input
                             type="date"
                             value={dateRange.end}
                             onChange={(e) =>
-                              setDateRange((prev) => ({
-                                ...prev,
-                                end: e.target.value,
-                              }))
+                              handleCustomDateChange("end", e.target.value)
                             }
-                            className="bg-gray-700/50 text-white rounded-md px-2 py-2 border border-gray-600/50 focus:border-yellow-400"
+                            className="w-full xs:w-auto bg-gray-700/50 text-white rounded-md xs:rounded-lg px-2 xs:px-3 py-2 xs:py-2.5 border border-gray-600/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 text-xs xs:text-sm"
+                            placeholder="End date"
                           />
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Clear All Button inside filter controls */}
                     {(searchQuery ||
                       categoryFilter ||
                       priceRangeFilter ||
-                      dateRange.start ||
-                      dateRange.end ||
+                      timePeriod !== "all" ||
                       sortConfig.key !== "") && (
                       <div className="mt-3 xs:mt-4 pt-3 xs:pt-4 border-t border-gray-700/30">
                         <div className="flex justify-center">
@@ -2433,12 +2659,38 @@ export default function ReportSales() {
                         {!searchQuery &&
                         !categoryFilter &&
                         !priceRangeFilter &&
-                        !dateRange.start &&
-                        !dateRange.end &&
+                        timePeriod === "all" &&
                         sortConfig.key === "" ? (
                           <span className="text-gray-500 italic">None</span>
                         ) : (
                           <>
+                            {timePeriod !== "all" && (
+                              <div className="flex items-center gap-1 bg-green-500/20 text-green-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-green-500/30 max-w-full">
+                                <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
+                                  Period:{" "}
+                                  {timePeriod === "today"
+                                    ? "Today"
+                                    : timePeriod === "week"
+                                    ? "Week"
+                                    : timePeriod === "month"
+                                    ? "Month"
+                                    : timePeriod === "year"
+                                    ? "Year"
+                                    : timePeriod === "custom"
+                                    ? "Custom"
+                                    : timePeriod}
+                                </span>
+                                <button
+                                  onClick={() =>
+                                    handleTimePeriodChange("all")
+                                  }
+                                  className="text-green-300 hover:text-white transition-colors ml-1 flex-shrink-0"
+                                  title="Clear time period"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
                             {searchQuery && (
                               <div className="flex items-center gap-1 bg-yellow-500/20 text-yellow-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-yellow-500/30 max-w-full">
                                 <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
@@ -2470,7 +2722,7 @@ export default function ReportSales() {
                             {(dateRange.start || dateRange.end) && (
                               <div className="flex items-center gap-1 bg-blue-500/20 text-blue-400 px-1.5 xs:px-2 py-0.5 xs:py-1 rounded border border-blue-500/30 max-w-full">
                                 <span className="truncate max-w-[100px] xs:max-w-[150px] sm:max-w-none">
-                                  Date: {dateRange.start || "..."} to{" "}
+                                  Range: {dateRange.start || "..."} to{" "}
                                   {dateRange.end || "..."}
                                 </span>
                                 <button
@@ -2547,7 +2799,7 @@ export default function ReportSales() {
                                   className="text-white font-semibold text-2xs truncate flex-1"
                                   title={item.name}
                                 >
-                                  {item.name.substring(0, 12)}...
+                                  {(item.name ?? "").substring(0, 12)}...
                                 </span>
                                 <span className="text-yellow-400 font-bold text-2xs">
                                   ₱{item.totalRevenue.toLocaleString()}
@@ -2590,7 +2842,7 @@ export default function ReportSales() {
                                     className="text-white font-semibold text-xs truncate block"
                                     title={item.name}
                                   >
-                                    {item.name}
+                                    {(item.name ?? "-").substring(0, 24)}
                                   </span>
                                   <span className="text-yellow-400 text-2xs">
                                     Sales Item
@@ -2728,7 +2980,6 @@ export default function ReportSales() {
                           {(viewMode === "detailed"
                             ? [
                                 { key: "sale_date", label: "Date & Time" },
-                                { key: "order_number", label: "Order #" },
                                 { key: "name", label: "Item Name" },
                                 { key: "category", label: "Category" },
                                 { key: "quantity", label: "Qty" },
@@ -2740,7 +2991,6 @@ export default function ReportSales() {
                                 },
                                 { key: "totalRevenue", label: "Final Amount" },
                                 { key: "dine_type", label: "Dine Type" },
-                                { key: "order_taker", label: "Order Taker" },
                                 { key: "cashier", label: "Cashier" },
                               ]
                             : [
@@ -2843,9 +3093,7 @@ export default function ReportSales() {
                                     <td className="px-2 lg:px-3 py-3 whitespace-nowrap text-gray-400 text-xs">
                                       {item.sale_date || "-"}
                                     </td>
-                                    <td className="px-2 lg:px-3 py-3 whitespace-nowrap text-blue-400 font-mono text-xs">
-                                      {item.order_number || "-"}
-                                    </td>
+
                                     <td className="px-2 lg:px-3 py-3 font-medium">
                                       <div className="flex items-center gap-2 min-w-0">
                                         <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"></div>
@@ -2853,7 +3101,7 @@ export default function ReportSales() {
                                           className="text-white group-hover:text-yellow-400 transition-colors truncate text-xs"
                                           title={item.name}
                                         >
-                                          {item.name}
+                                          {item.name ?? "-"}
                                         </span>
                                       </div>
                                     </td>
@@ -2907,9 +3155,6 @@ export default function ReportSales() {
                                       )}
                                     </td>
                                     <td className="px-2 lg:px-3 py-3 whitespace-nowrap text-gray-400 text-xs">
-                                      {item.order_taker || "-"}
-                                    </td>
-                                    <td className="px-2 lg:px-3 py-3 whitespace-nowrap text-gray-400 text-xs">
                                       {item.cashier || "-"}
                                     </td>
                                   </>
@@ -2923,7 +3168,7 @@ export default function ReportSales() {
                                           className="text-white group-hover:text-yellow-400 transition-colors truncate text-sm"
                                           title={item.name}
                                         >
-                                          {item.name}
+                                          {item.name ?? "-"}
                                         </span>
                                       </div>
                                     </td>
@@ -3065,7 +3310,7 @@ export default function ReportSales() {
                                       className="text-white group-hover:text-yellow-400 transition-colors text-sm font-semibold truncate"
                                       title={item.name}
                                     >
-                                      {item.name}
+                                      {item.name ?? "-"}
                                     </span>
                                     <span className="text-gray-400 text-xs">
                                       ₱{item.unitPrice} each
@@ -3169,7 +3414,7 @@ export default function ReportSales() {
                                   className="text-white font-semibold text-sm xs:text-base mb-1 truncate"
                                   title={item.name}
                                 >
-                                  {item.name}
+                                  {(item.name ?? "-").substring(0, 24)}
                                 </h3>
                                 <div className="flex flex-wrap gap-1 xs:gap-1.5 mb-1 xs:mb-2">
                                   <span className="px-1.5 xs:px-2 py-0.5 xs:py-1 bg-yellow-600/20 rounded text-xs font-medium text-yellow-300 whitespace-nowrap">
@@ -3588,7 +3833,6 @@ export default function ReportSales() {
                             ? "border-green-500/50 bg-green-900/10"
                             : "border-gray-600 hover:border-yellow-500 bg-gray-800/30 hover:bg-gray-800/50"
                         }`}
-                        onClick={handleImportClick}
                         onDragOver={(e) => {
                           e.preventDefault();
                           e.currentTarget.classList.add(
@@ -3841,7 +4085,38 @@ export default function ReportSales() {
                     </div>
 
                     {/* Footer Actions - Sticky at bottom */}
-                    <div className="border-t border-gray-700/50 pt-4 mt-4 flex flex-wrap justify-between items-center gap-3">
+                    <div className="border-t border-gray-700/50 pt-4 mt-4 space-y-4">
+                      {/* Auto-deduction Info - Always active */}
+                      {importedRows.length > 0 && (
+                        <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg">
+                          <div className="flex items-start gap-3">
+                            <svg
+                              className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-semibold text-xs sm:text-sm">
+                                Auto-deduction enabled
+                              </p>
+                              <p className="text-gray-400 text-xs mt-1">
+                                Today's sales will automatically deduct from inventory. Historical sales will be skipped.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Buttons row */}
+                      <div className="flex flex-wrap justify-between items-center gap-3">
                       <div className="text-xs sm:text-sm text-gray-400">
                         {importedRows.length > 0 ? (
                           <span className="flex items-center gap-2">
@@ -3905,28 +4180,38 @@ export default function ReportSales() {
                           Cancel
                         </button>
                         <button
-                          disabled={importedRows.length === 0 || isImporting}
+                          disabled={
+                            importedRows.length === 0 ||
+                            importMutation.isPending
+                          }
                           onClick={async () => {
-                            setIsImporting(true);
-                            try {
-                              await importSalesData(importedRows);
-                              setImportModalOpen(false);
-                              setImportedRows([]);
-                              setImportFile(null);
-                              setImportSuccess(true);
-                            } catch (error) {
-                              console.error("Import failed:", error);
-                            } finally {
-                              setIsImporting(false);
-                            }
+                            console.log("[DEBUG] Import mutation params:", {
+                              rows: importedRows.length,
+                              auto_deduct: autoDeduct,
+                            });
+                            importMutation.mutate(
+                              { rows: importedRows, auto_deduct: autoDeduct },
+                              {
+                                onSuccess: () => {
+                                  setImportModalOpen(false);
+                                  setImportedRows([]);
+                                  setImportFile(null);
+                                  setImportSuccess(true);
+                                },
+                                onError: (error) => {
+                                  console.error("Import failed:", error);
+                                },
+                              }
+                            );
                           }}
                           className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-bold shadow-lg transition-all flex items-center justify-center gap-2 min-w-[180px] ${
-                            importedRows.length === 0 || isImporting
+                            importedRows.length === 0 ||
+                            importMutation.isPending
                               ? "bg-gray-600 text-gray-400 cursor-not-allowed opacity-50"
                               : "bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white hover:shadow-xl hover:scale-105"
                           }`}
                         >
-                          {isImporting ? (
+                          {importMutation.isPending ? (
                             <>
                               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                               <span>Importing...</span>
@@ -3938,6 +4223,7 @@ export default function ReportSales() {
                             </>
                           )}
                         </button>
+                      </div>
                       </div>
                     </div>
                   </div>

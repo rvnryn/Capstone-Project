@@ -23,6 +23,7 @@ try:
         spoilage_inventory,
         AutomationTransferring,
         inventory_settings,
+        aggregate_status,
     )
     from .routes.Dashboard import (
         dashboard, 
@@ -41,7 +42,7 @@ try:
         salesCalculation,
         salesimport,
     )
-    from .routes.Reports.Inventory import inventory_log, inventory_analytics
+    from .routes.Reports.Inventory import inventory_log, inventory_analytics, inventory_analytics_v2, inventory_snapshot_scheduler
     from .routes.Reports.UserActivity import userActivity
 
     from .routes.backup_restore import (
@@ -121,19 +122,20 @@ try:
 
     # Routers (use a list for cleaner code)
     routers = [
-        auth_routes.router, 
-        dashboard.router, 
-        sales_prediction.router, 
+        auth_routes.router,
+        dashboard.router,
+        sales_prediction.router,
         sales_report.router,
-        salesCalculation.router, 
-        salesimport.router, 
-        general_Inventory.router, 
+        salesCalculation.router,
+        salesimport.router,
+        aggregate_status.router,  # Multi-batch stock status management (MUST be before master_inventory to avoid route conflicts)
+        general_Inventory.router,
         master_inventory.router,
-        today_inventory.router, 
-        surplus_inventory.router, 
-        spoilage_inventory.router, 
+        today_inventory.router,
+        surplus_inventory.router,
+        spoilage_inventory.router,
         menu.router,
-        supplier.router, 
+        supplier.router,
         notification.router,
         users.router,
         inventory_settings.router,
@@ -143,6 +145,8 @@ try:
         backup.router,
         inventory_log.router,
         inventory_analytics.router,
+        inventory_analytics_v2.router,
+        inventory_snapshot_scheduler.router,
         userActivity.router,
         custom_holiday.router,
         ph_holidays.router,

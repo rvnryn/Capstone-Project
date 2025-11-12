@@ -81,20 +81,29 @@ export function useComprehensiveAnalytics(
       const token = localStorage.getItem("token");
       const apiBaseUrl =
         process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-      const response = await fetch(
-        `${apiBaseUrl}/api/comprehensive-sales-analytics?start_date=${startDate}&end_date=${endDate}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const url = `${apiBaseUrl}/api/comprehensive-sales-analytics?start_date=${startDate}&end_date=${endDate}`;
+
+      console.log("[DEBUG] Fetching comprehensive analytics:", {
+        startDate,
+        endDate,
+        url,
+      });
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         throw new Error("Failed to fetch analytics");
       }
 
       const data = await response.json();
+      console.log("[DEBUG] Analytics response:", {
+        loss_analysis: data.loss_analysis,
+        spoilage_items: data.loss_analysis?.spoilage_items?.length || 0,
+      });
       setAnalytics(data);
       setLastUpdated(new Date());
     } catch (err: any) {

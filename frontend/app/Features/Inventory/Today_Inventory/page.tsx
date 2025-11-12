@@ -32,7 +32,10 @@ import { GiCardboardBoxClosed } from "react-icons/gi";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useAuth } from "@/app/context/AuthContext";
-import { useInventoryAPI } from "../hook/use-inventoryAPI";
+import {
+  useDeleteTodayInventory,
+  useTransferToSpoilage,
+} from "../hook/use-inventoryQuery";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { InventorySetting } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
@@ -50,6 +53,7 @@ type InventoryItem = {
   expiration_date?: string;
   unit_price?: number | null;
   unit_cost?: number | null;
+  unit?: string;
   [key: string]: unknown;
 };
 
@@ -168,7 +172,10 @@ export default function TodayInventoryPage() {
   const [customSpoilageReason, setCustomSpoilageReason] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
-  const { deleteTodayItem, transferTodayToSpoilage } = useInventoryAPI();
+
+  // React Query mutations
+  const deleteMutationHook = useDeleteTodayInventory();
+  const transferToSpoilageMutation = useTransferToSpoilage();
 
   useEffect(() => {
     if (isMobile) {
@@ -244,6 +251,8 @@ export default function TodayInventoryPage() {
           !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
         // Ensure stock is a number
         const stockQty = Number(item.stock_quantity);
+        // Get unit of measurement from settings or database
+        const unit = setting?.default_unit || item.unit || "";
 
         let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
 
@@ -270,6 +279,7 @@ export default function TodayInventoryPage() {
           expires: item.expiration_date ? new Date(item.expiration_date) : null,
           unit_price:
             item.unit_price !== undefined ? Number(item.unit_price) : null,
+          unit, // Add unit to item
         };
       });
       if (typeof window !== "undefined") {
@@ -283,7 +293,7 @@ export default function TodayInventoryPage() {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchOnMount: true,
-    refetchInterval: 5000, // Poll every 5 seconds for real-time updates
+    // refetchInterval: 5000, // Poll every 5 seconds for real-time updates
     refetchIntervalInBackground: false, // Only poll when tab is active
   });
 
@@ -305,46 +315,21 @@ export default function TodayInventoryPage() {
     queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
   };
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      // Find the batch date for the item to delete
-      const item = inventoryData.find((item) => item.id === id);
-      const batch_date = item?.batch;
-      await deleteTodayItem(id, batch_date as string);
-    },
-    // Optimistic update
-    onMutate: async (id: number) => {
-      await queryClient.cancelQueries({ queryKey: ["todayInventory"] });
-      const previousInventory = queryClient.getQueryData<InventoryItem[]>([
-        "todayInventory",
-        settings,
-      ]);
-      if (previousInventory) {
-        queryClient.setQueryData<InventoryItem[]>(
-          ["todayInventory", settings],
-          previousInventory.filter((item) => item.id !== id)
-        );
-      }
-      return { previousInventory };
-    },
-    onError: (err, variables, context) => {
-      if (context?.previousInventory) {
-        queryClient.setQueryData(
-          ["todayInventory", settings],
-          context.previousInventory
-        );
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
-      setShowDeleteModal(false);
-      setItemToDelete(null);
-    },
-  });
-
   const confirmDelete = async () => {
     if (itemToDelete) {
-      await deleteMutation.mutateAsync(itemToDelete);
+      // Find the batch date for the item to delete
+      const item = inventoryData.find((item) => item.id === itemToDelete);
+      const batch_date = item?.batch;
+
+      if (!batch_date) {
+        console.error("Batch date not found for item:", itemToDelete);
+        return;
+      }
+
+      await deleteMutationHook.mutateAsync({ id: itemToDelete, batch_date });
+
+      setShowDeleteModal(false);
+      setItemToDelete(null);
     }
   };
 
@@ -518,35 +503,6 @@ export default function TodayInventoryPage() {
     setShowSpoilageModal(true);
   };
 
-  // Spoilage mutation
-  const spoilageMutation = useMutation({
-    mutationFn: async ({
-      id,
-      batch,
-      quantity,
-      reason,
-    }: {
-      id: number;
-      batch: string;
-      quantity: number;
-      reason: string;
-    }) => {
-      await transferTodayToSpoilage(id, batch, quantity, reason);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
-      setShowSpoilageModal(false);
-      setItemToSpoilage(null);
-      setSpoilageQuantity("");
-      setSpoilageReason("");
-      setCustomSpoilageReason("");
-    },
-    onError: (error) => {
-      // Optionally show error toast
-      console.error("Failed to transfer to spoilage:", error);
-    },
-  });
-
   // Confirm spoilage transfer
   const confirmSpoilage = () => {
     if (
@@ -554,19 +510,34 @@ export default function TodayInventoryPage() {
       !spoilageQuantity ||
       Number(spoilageQuantity) <= 0 ||
       Number(spoilageQuantity) > itemToSpoilage.stock ||
-      spoilageMutation.status === "pending"
+      transferToSpoilageMutation.isPending
     )
       return;
+
     let reason = spoilageReason;
     if (spoilageReason === "Others" && customSpoilageReason.trim()) {
       reason = customSpoilageReason.trim();
     }
-    spoilageMutation.mutate({
-      id: itemToSpoilage.id,
-      batch: itemToSpoilage.batch,
-      quantity: Number(spoilageQuantity),
-      reason,
-    });
+
+    transferToSpoilageMutation.mutate(
+      {
+        item_id: itemToSpoilage.id,
+        quantity: Number(spoilageQuantity),
+        reason,
+      },
+      {
+        onSuccess: () => {
+          setShowSpoilageModal(false);
+          setItemToSpoilage(null);
+          setSpoilageQuantity("");
+          setSpoilageReason("");
+          setCustomSpoilageReason("");
+        },
+        onError: (error) => {
+          console.error("Failed to transfer to spoilage:", error);
+        },
+      }
+    );
   };
 
   const handleCloseSpoilageModal = () => {
@@ -892,6 +863,11 @@ export default function TodayInventoryPage() {
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
                               <span className="text-white font-semibold text-sm xs:text-base sm:text-lg">
                                 {item.stock}
+                                {item.unit && (
+                                  <span className="ml-1 text-gray-400 text-xs xs:text-sm font-normal">
+                                    {item.unit}
+                                  </span>
+                                )}
                               </span>
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-blue-300 text-xs xs:text-sm">
@@ -1145,18 +1121,18 @@ export default function TodayInventoryPage() {
                     !spoilageQuantity ||
                     Number(spoilageQuantity) <= 0 ||
                     Number(spoilageQuantity) > itemToSpoilage.stock ||
-                    spoilageMutation.status === "pending"
+                    transferToSpoilageMutation.status === "pending"
                   }
                   className={`group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl font-semibold transition-all duration-300 order-2 sm:order-1 text-xs xs:text-sm sm:text-base ${
                     !spoilageQuantity ||
                     Number(spoilageQuantity) <= 0 ||
                     Number(spoilageQuantity) > itemToSpoilage.stock ||
-                    spoilageMutation.status === "pending"
+                    transferToSpoilageMutation.status === "pending"
                       ? "bg-gray-600/50 text-gray-400 cursor-not-allowed border-2 border-gray-600/50"
                       : "bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-400 hover:to-pink-500 text-white border-2 border-pink-500/70 hover:border-pink-400/70 cursor-pointer"
                   }`}
                 >
-                  {spoilageMutation.status === "pending" ? (
+                  {transferToSpoilageMutation.status === "pending" ? (
                     <>
                       <div className="w-3 xs:w-4 h-3 xs:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                       Transferring...

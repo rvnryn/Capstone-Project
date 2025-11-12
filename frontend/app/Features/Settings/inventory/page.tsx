@@ -8,23 +8,35 @@ import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import {
   InventorySetting,
   InventorySettingInput,
-  useInventorySettingsAPI,
-} from "./hook/use-InventorySettingsAPI";
+  useInventorySettings,
+  useDeleteInventorySetting,
+  useBatchUpdateInventorySettings,
+} from "./hooks/use-inventorySettingsQuery";
 import { routes } from "@/app/routes/routes";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { MdCancel, MdSave, MdWarning } from "react-icons/md";
 import { FiAlertTriangle, FiSave } from "react-icons/fi";
 import { useInventoryItemNames } from "@/app/hooks/Itemnames";
-import { SectionLoading } from "@/app/components/LoadingStates";
+import {
+  INVENTORY_UNIT_OPTIONS,
+  getUnitsForCategory,
+} from "@/app/constants/unitOptions";
 
 export default function InventorySettings() {
   // --- Offline/Cache State ---
   const [isOnline, setIsOnline] = useState(true);
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const cacheKey = "inventory_settings_cache";
-  const { fetchSettings, createSetting, updateSetting, deleteSetting } =
-    useInventorySettingsAPI();
   const router = useRouter();
+
+  // React Query hooks
+  const {
+    data: settingsData = [],
+    isLoading,
+    error: queryError,
+  } = useInventorySettings();
+  const deleteMutation = useDeleteInventorySetting();
+  const batchUpdateMutation = useBatchUpdateInventorySettings();
 
   const [ingredients, setIngredients] = useState<InventorySetting[]>([]);
   const [pendingIngredients, setPendingIngredients] = useState<
@@ -45,7 +57,6 @@ export default function InventorySettings() {
   const [addError, setAddError] = useState("");
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [ingredientToDelete, setIngredientToDelete] =
     useState<InventorySetting | null>(null);
@@ -53,6 +64,10 @@ export default function InventorySettings() {
   // Filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+
+  // Collapsible section states
+  const [showAddForm, setShowAddForm] = useState(true);
+  const [showFilters, setShowFilters] = useState(true);
 
   const { items, loading: itemNamesLoading } = useInventoryItemNames();
   const uniqueCategories = Array.from(
@@ -76,51 +91,35 @@ export default function InventorySettings() {
     };
   }, []);
 
-  // Fetch inventory settings with offline/cache logic
+  // Sync React Query data with local state
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    if (settingsData && settingsData.length > 0) {
+      setIngredients(settingsData);
+      setPendingIngredients(settingsData);
+      setInitialSettings(settingsData);
       setOfflineError(null);
-      if (!isOnline) {
-        // Try to load from cache
-        if (typeof window !== "undefined") {
-          const cached = localStorage.getItem(cacheKey);
-          if (cached) {
-            try {
-              const data = JSON.parse(cached);
-              setIngredients(data);
-              setPendingIngredients(data);
-              setInitialSettings(data);
-              setLoading(false);
-              setOfflineError(null);
-              return;
-            } catch {}
-          }
+    } else if (!isOnline && typeof window !== "undefined") {
+      // Try to load from cache when offline
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const data = JSON.parse(cached);
+          setIngredients(data);
+          setPendingIngredients(data);
+          setInitialSettings(data);
+          setOfflineError(null);
+        } catch {
+          setOfflineError(
+            "You are offline and no cached inventory data is available. Please connect to the internet to view or edit inventory settings."
+          );
         }
+      } else {
         setOfflineError(
           "You are offline and no cached inventory data is available. Please connect to the internet to view or edit inventory settings."
         );
-        setLoading(false);
-        return;
       }
-      try {
-        const data = await fetchSettings();
-        setIngredients(data);
-        setPendingIngredients(data);
-        setInitialSettings(data);
-        // Cache inventory data
-        if (typeof window !== "undefined") {
-          localStorage.setItem(cacheKey, JSON.stringify(data));
-        }
-      } catch (error) {
-        setOfflineError("Failed to fetch inventory data. Please try again.");
-        console.error("Error fetching inventory:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [isOnline]);
+    }
+  }, [settingsData, isOnline]);
   const handleUnitChange = (id: number, value: string) => {
     setPendingIngredients((prev) =>
       prev.map((i) => (i.id === id ? { ...i, default_unit: value } : i))
@@ -137,30 +136,17 @@ export default function InventorySettings() {
     );
   };
   const handleDeleteIngredient = async (id: number) => {
-    try {
-      // Call API to delete immediately
-      const success = await deleteSetting(id);
-      if (success) {
+    deleteMutation.mutate(id, {
+      onSuccess: () => {
         // Remove from both pending and initial state
         setPendingIngredients((prev) => prev.filter((i) => i.id !== id));
         setIngredients((prev) => prev.filter((i) => i.id !== id));
         setInitialSettings((prev) => prev.filter((i) => i.id !== id));
 
-        // Update cache
-        const updatedIngredients = ingredients.filter((i) => i.id !== id);
-        if (typeof window !== "undefined") {
-          localStorage.setItem(cacheKey, JSON.stringify(updatedIngredients));
-        }
-
         setSaveMessage("Ingredient deleted successfully!");
         setTimeout(() => setSaveMessage(""), 2000);
-      } else {
-        alert("Failed to delete ingredient. Please try again.");
-      }
-    } catch (error) {
-      console.error("Error deleting ingredient:", error);
-      alert("An error occurred while deleting the ingredient.");
-    }
+      },
+    });
   };
   const handleAddIngredient = (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,9 +185,10 @@ export default function InventorySettings() {
   };
   const capitalizeWords = (str: string) =>
     str.replace(/\b\w/g, (char) => char.toUpperCase());
-  // Save all changes to Supabase
+  // Save all changes using batch mutation
   const handleConfirmSave = async () => {
     setShowSaveModal(false);
+
     // Find added, updated, deleted
     const added = pendingIngredients.filter(
       (i) => !initialSettings.some((orig) => orig.id === i.id)
@@ -220,44 +207,23 @@ export default function InventorySettings() {
       (orig) => !pendingIngredients.some((i) => i.id === orig.id)
     );
 
-    // Batch API calls
-    for (const item of added) {
-      const result = await createSetting(item);
-      if (!result) {
-        setSaveMessage("Failed to add some ingredients.");
-        setTimeout(() => setSaveMessage(""), 3000);
-        return;
+    // Use batch mutation
+    batchUpdateMutation.mutate(
+      { added, updated, deleted },
+      {
+        onSuccess: () => {
+          setSaveMessage("Settings saved successfully!");
+          setTimeout(() => setSaveMessage(""), 2000);
+          setInitialSettings(pendingIngredients);
+          setIngredients(pendingIngredients);
+          router.push(routes.settings);
+        },
+        onError: () => {
+          setSaveMessage("Failed to save some settings.");
+          setTimeout(() => setSaveMessage(""), 3000);
+        },
       }
-    }
-    for (const item of updated) {
-      // Only send the editable fields, not id/created_at/updated_at
-      const updateData: InventorySettingInput = {
-        name: item.name,
-        default_unit: item.default_unit,
-        low_stock_threshold: item.low_stock_threshold,
-        category: item.category,
-      };
-      const result = await updateSetting(item.id, updateData);
-      if (!result) {
-        setSaveMessage("Failed to update some ingredients.");
-        setTimeout(() => setSaveMessage(""), 3000);
-        return;
-      }
-    }
-    for (const item of deleted) {
-      const result = await deleteSetting(item.id);
-      if (!result) {
-        setSaveMessage("Failed to delete some ingredients.");
-        setTimeout(() => setSaveMessage(""), 3000);
-        return;
-      }
-    }
-
-    setSaveMessage("Settings saved successfully!");
-    setTimeout(() => setSaveMessage(""), 2000);
-    setInitialSettings(pendingIngredients);
-    setIngredients(pendingIngredients);
-    router.push(routes.settings);
+    );
   };
 
   const handleCancel = () => setShowCancelModal(true);
@@ -328,16 +294,18 @@ export default function InventorySettings() {
     setPendingRoute(null);
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <section className="text-white font-poppins w-full min-h-screen">
+      <section className="text-white font-poppins w-full min-h-screen bg-gradient-to-br from-gray-900 to-black">
         <NavigationBar onNavigate={handleSidebarNavigate} />
         <ResponsiveMain>
           <main className="flex flex-col items-center justify-center min-h-[60vh]">
-            <SectionLoading
-              height="h-96"
-              message="Loading inventory settings..."
-            />
+            <div className="flex flex-col items-center justify-center p-12 bg-gray-800/50 backdrop-blur-sm rounded-2xl border border-gray-700/50 shadow-2xl">
+              <div className="w-16 h-16 border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin mb-6"></div>
+              <p className="text-gray-300 font-medium text-lg">
+                Loading inventory settings...
+              </p>
+            </div>
           </main>
         </ResponsiveMain>
       </section>
@@ -438,291 +406,108 @@ export default function InventorySettings() {
                 </div>
               </div>
               <section className="mb-6 sm:mb-8" aria-label="Add ingredient">
-                <form
-                  onSubmit={handleAddIngredient}
-                  className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl"
-                  role="form"
+                {/* Collapsible Header */}
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(!showAddForm)}
+                  className="w-full flex items-center justify-between bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-4 sm:p-5 border border-gray-700/50 hover:border-yellow-400/30 transition-all duration-300 mb-3 group"
                 >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-                    {/* Ingredient Name */}
-                    <div className="lg:col-span-2 relative">
-                      <label
-                        htmlFor="ingredient-name"
-                        className="block mb-2 text-sm font-medium text-yellow-300"
+                  <div className="flex items-center gap-3">
+                    <div className="bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 p-2.5 rounded-lg">
+                      <svg
+                        className="w-5 h-5 text-yellow-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        Ingredient Name *
-                      </label>
-                      <select
-                        id="ingredient-name"
-                        value={newIngredient.name}
-                        onChange={(e) => {
-                          const selectedName = e.target.value;
-                          const selectedItem = items.find(
-                            (item) => item.item_name === selectedName
-                          );
-                          setNewIngredient((ni: InventorySettingInput) => ({
-                            ...ni,
-                            name: selectedName,
-                            category: selectedItem?.category || "",
-                          }));
-                        }}
-                        className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
-                        disabled={itemNamesLoading}
-                        required
-                      >
-                        <option value="">Select Ingredient</option>
-                        {items
-                          .filter(
-                            (item) =>
-                              !pendingIngredients.some(
-                                (ing) =>
-                                  ing.name.toLowerCase() ===
-                                  item.item_name.toLowerCase()
-                              )
-                          )
-                          .map((item) => (
-                            <option key={item.item_name} value={item.item_name}>
-                              {item.item_name}
-                            </option>
-                          ))}
-                      </select>
-                      <div className="absolute inset-y-0 top-7 right-0 flex items-center pr-3 pointer-events-none">
-                        <svg
-                          className="w-4 h-4 text-gray-400"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Threshold */}
-                    <div>
-                      <label
-                        htmlFor="threshold"
-                        className="block mb-2 text-sm font-medium text-yellow-300"
-                      >
-                        Low Stock Alert
-                      </label>
-                      <input
-                        type="number"
-                        id="threshold"
-                        min="0"
-                        step="0.1"
-                        placeholder="Alert threshold"
-                        value={
-                          newIngredient.low_stock_threshold === 0
-                            ? ""
-                            : newIngredient.low_stock_threshold
-                        }
-                        onChange={(e) =>
-                          setNewIngredient((ni: InventorySettingInput) => ({
-                            ...ni,
-                            low_stock_threshold: Number(e.target.value) || 0,
-                          }))
-                        }
-                        className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm placeholder-gray-400 transition-all duration-200 hover:border-gray-500"
-                        autoComplete="off"
-                      />
-                    </div>
-
-                    {/* Default Unit */}
-                    <div className="relative">
-                      <label
-                        htmlFor="default-unit"
-                        className="block mb-2 text-sm font-medium text-yellow-300"
-                      >
-                        Unit *
-                      </label>
-                      <select
-                        id="default-unit"
-                        value={newIngredient.default_unit}
-                        onChange={(e) =>
-                          setNewIngredient((ni: InventorySettingInput) => ({
-                            ...ni,
-                            default_unit: e.target.value,
-                          }))
-                        }
-                        className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
-                        required
-                      >
-                        <option value="" disabled>
-                          Select unit
-                        </option>
-                        <option value="kg">kg</option>
-                        <option value="g">g</option>
-                        <option value="lbs">lbs</option>
-                        <option value="oz">oz</option>
-                        <option value="L">L</option>
-                        <option value="ml">mL</option>
-                        <option value="gal">gallon</option>
-                        <option value="pcs">pcs</option>
-                        <option value="pack">pack</option>
-                        <option value="case">case</option>
-                        <option value="sack">sack</option>
-                        <option value="btl">bottle</option>
-                        <option value="can">can</option>
-                      </select>
-                      {/* Custom dropdown arrow */}
-                      <div className="absolute inset-y-0 top-7 right-0 flex items-center pr-3 pointer-events-none">
-                        <svg
-                          className="w-4 h-4 text-gray-400"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Category */}
-                    <div>
-                      <label
-                        htmlFor="category"
-                        className="block mb-2 text-sm font-medium text-yellow-300"
-                      >
-                        Category
-                      </label>
-                      <input
-                        type="text"
-                        value={newIngredient.category}
-                        readOnly
-                        className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
-                      />
-                    </div>
-
-                    {/* Add Button */}
-                    <div className="sm:col-span-2 lg:col-span-1">
-                      <button
-                        type="submit"
-                        className="w-full h-12 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 4v16m8-8H4"
-                          />
-                        </svg>
-                        Add Ingredient
-                      </button>
-                      {addError &&
-                        (() => {
-                          const AutoClearError: React.FC<{
-                            message: string;
-                          }> = ({ message }) => {
-                            const [visible, setVisible] = useState(true);
-                            useEffect(() => {
-                              setVisible(true);
-                              const t = setTimeout(
-                                () => setVisible(false),
-                                2000
-                              );
-                              return () => clearTimeout(t);
-                            }, [message]);
-                            useEffect(() => {
-                              if (!visible) setAddError("");
-                            }, [visible]);
-                            if (!visible) return null;
-                            return (
-                              <div className="mt-2 text-red-400 text-sm font-semibold">
-                                {message}
-                              </div>
-                            );
-                          };
-                          return <AutoClearError message={addError} />;
-                        })()}
-                    </div>
-                  </div>
-
-                  {/* Helper text */}
-                  <div className="mt-4 text-xs text-gray-400">
-                    <span className="text-yellow-400">*</span> Required fields
-                  </div>
-                </form>
-              </section>
-
-              {/* Filter Section */}
-              <section className="mb-6" aria-label="Filter ingredients">
-                <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl">
-                  <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-end">
-                    {/* Search Filter */}
-                    <div className="flex-1 w-full">
-                      <label
-                        htmlFor="search-ingredient"
-                        className="block mb-2 text-sm font-medium text-yellow-300"
-                      >
-                        Search Ingredient
-                      </label>
-                      <div className="relative">
-                        <input
-                          id="search-ingredient"
-                          type="text"
-                          placeholder="Search by name..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-full h-12 bg-gray-800/80 text-white rounded-xl pl-11 pr-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm transition-all duration-200 hover:border-gray-500"
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4v16m8-8H4"
                         />
-                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                          <svg
-                            className="w-5 h-5 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                            />
-                          </svg>
-                        </div>
-                      </div>
+                      </svg>
                     </div>
+                    <div className="text-left">
+                      <h2 className="text-lg font-bold text-yellow-300">
+                        Add New Ingredient
+                      </h2>
+                      <p className="text-xs text-gray-400">
+                        Configure units, thresholds, and categories
+                      </p>
+                    </div>
+                  </div>
+                  <svg
+                    className={`w-6 h-6 text-gray-400 transition-transform duration-300 ${
+                      showAddForm ? "rotate-180" : ""
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
 
-                    {/* Category Filter */}
-                    <div className="flex-1 w-full">
-                      <label
-                        htmlFor="category-filter"
-                        className="block mb-2 text-sm font-medium text-yellow-300"
-                      >
-                        Filter by Category
-                      </label>
-                      <div className="relative">
-                        <select
-                          id="category-filter"
-                          value={categoryFilter}
-                          onChange={(e) => setCategoryFilter(e.target.value)}
-                          className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                {/* Collapsible Content */}
+                {showAddForm && (
+                  <form
+                    onSubmit={handleAddIngredient}
+                    className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl animate-fade-in"
+                    role="form"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                      {/* Ingredient Name */}
+                      <div className="lg:col-span-2 relative">
+                        <label
+                          htmlFor="ingredient-name"
+                          className="block mb-2 text-sm font-medium text-yellow-300"
                         >
-                          <option value="all">All Categories</option>
-                          {availableCategories.map((category) => (
-                            <option key={category} value={category}>
-                              {category}
-                            </option>
-                          ))}
+                          Ingredient Name *
+                        </label>
+                        <select
+                          id="ingredient-name"
+                          value={newIngredient.name}
+                          onChange={(e) => {
+                            const selectedName = e.target.value;
+                            const selectedItem = items.find(
+                              (item) => item.item_name === selectedName
+                            );
+                            setNewIngredient((ni: InventorySettingInput) => ({
+                              ...ni,
+                              name: selectedName,
+                              category: selectedItem?.category || "",
+                            }));
+                          }}
+                          className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                          disabled={itemNamesLoading}
+                          required
+                        >
+                          <option value="">Select Ingredient</option>
+                          {items
+                            .filter(
+                              (item) =>
+                                !pendingIngredients.some(
+                                  (ing) =>
+                                    ing.name.toLowerCase() ===
+                                    item.item_name.toLowerCase()
+                                )
+                            )
+                            .map((item) => (
+                              <option
+                                key={item.item_name}
+                                value={item.item_name}
+                              >
+                                {item.item_name}
+                              </option>
+                            ))}
                         </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                        <div className="absolute inset-y-0 top-7 right-0 flex items-center pr-3 pointer-events-none">
                           <svg
                             className="w-4 h-4 text-gray-400"
                             fill="none"
@@ -738,34 +523,381 @@ export default function InventorySettings() {
                           </svg>
                         </div>
                       </div>
+
+                      {/* Threshold */}
+                      <div>
+                        <label
+                          htmlFor="threshold"
+                          className="block mb-2 text-sm font-medium text-yellow-300"
+                        >
+                          Low Stock Alert
+                        </label>
+                        <input
+                          type="number"
+                          id="threshold"
+                          min="0"
+                          step="0.1"
+                          placeholder="Alert threshold"
+                          value={
+                            newIngredient.low_stock_threshold === 0
+                              ? ""
+                              : newIngredient.low_stock_threshold
+                          }
+                          onChange={(e) =>
+                            setNewIngredient((ni: InventorySettingInput) => ({
+                              ...ni,
+                              low_stock_threshold: Number(e.target.value) || 0,
+                            }))
+                          }
+                          className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm placeholder-gray-400 transition-all duration-200 hover:border-gray-500"
+                          autoComplete="off"
+                        />
+                      </div>
+
+                      {/* Default Unit */}
+                      <div className="relative">
+                        <label
+                          htmlFor="default-unit"
+                          className="block mb-2 text-sm font-medium text-yellow-300"
+                        >
+                          Unit *
+                        </label>
+                        <select
+                          id="default-unit"
+                          value={newIngredient.default_unit}
+                          onChange={(e) =>
+                            setNewIngredient((ni: InventorySettingInput) => ({
+                              ...ni,
+                              default_unit: e.target.value,
+                            }))
+                          }
+                          className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                          required
+                        >
+                          <option value="" disabled>
+                            Select unit
+                          </option>
+                          {getUnitsForCategory(
+                            newIngredient.category || ""
+                          ).map((unit) => (
+                            <option key={unit.value} value={unit.value}>
+                              {unit.label}
+                            </option>
+                          ))}
+                        </select>
+                        {/* Custom dropdown arrow */}
+                        <div className="absolute inset-y-0 top-7 right-0 flex items-center pr-3 pointer-events-none">
+                          <svg
+                            className="w-4 h-4 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 9l-7 7-7-7"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* Category */}
+                      <div>
+                        <label
+                          htmlFor="category"
+                          className="block mb-2 text-sm font-medium text-yellow-300"
+                        >
+                          Category
+                        </label>
+                        <input
+                          type="text"
+                          value={newIngredient.category}
+                          readOnly
+                          className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                        />
+                      </div>
+
+                      {/* Add Button */}
+                      <div className="sm:col-span-2 lg:col-span-1">
+                        <button
+                          type="submit"
+                          className="w-full h-12 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 4v16m8-8H4"
+                            />
+                          </svg>
+                          Add Ingredient
+                        </button>
+                        {addError &&
+                          (() => {
+                            const AutoClearError: React.FC<{
+                              message: string;
+                            }> = ({ message }) => {
+                              const [visible, setVisible] = useState(true);
+                              useEffect(() => {
+                                setVisible(true);
+                                const t = setTimeout(
+                                  () => setVisible(false),
+                                  2000
+                                );
+                                return () => clearTimeout(t);
+                              }, [message]);
+                              useEffect(() => {
+                                if (!visible) setAddError("");
+                              }, [visible]);
+                              if (!visible) return null;
+                              return (
+                                <div className="mt-2 text-red-400 text-sm font-semibold">
+                                  {message}
+                                </div>
+                              );
+                            };
+                            return <AutoClearError message={addError} />;
+                          })()}
+                      </div>
                     </div>
 
-                    {/* Clear Filters Button */}
-                    <div className="w-full lg:w-auto">
-                      <button
-                        type="button"
-                        onClick={handleClearFilters}
-                        disabled={
-                          searchQuery === "" && categoryFilter === "all"
-                        }
-                        className="w-full lg:w-auto h-12 px-6 bg-gray-700/50 hover:bg-gray-600/50 disabled:bg-gray-800/30 disabled:text-gray-500 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all duration-200 text-sm border border-gray-600 hover:border-gray-500 disabled:border-gray-700"
+                    {/* Helper text */}
+                    <div className="mt-4 text-xs text-gray-400">
+                      <span className="text-yellow-400">*</span> Required fields
+                    </div>
+                  </form>
+                )}
+              </section>
+
+              {/* Filter Section */}
+              <section className="mb-6" aria-label="Filter ingredients">
+                {/* Collapsible Header */}
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="w-full flex items-center justify-between bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-4 sm:p-5 border border-gray-700/50 hover:border-yellow-400/30 transition-all duration-300 mb-3 group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="bg-gradient-to-br from-blue-400/20 to-blue-500/20 p-2.5 rounded-lg">
+                      <svg
+                        className="w-5 h-5 text-blue-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        Clear Filters
-                      </button>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                        />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <h2 className="text-lg font-bold text-blue-300">
+                        Search & Filter
+                      </h2>
+                      <p className="text-xs text-gray-400">
+                        {filteredIngredients.length} of{" "}
+                        {pendingIngredients.length} ingredient
+                        {pendingIngredients.length !== 1 ? "s" : ""} shown
+                      </p>
                     </div>
                   </div>
+                  <svg
+                    className={`w-6 h-6 text-gray-400 transition-transform duration-300 ${
+                      showFilters ? "rotate-180" : ""
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
 
-                  {/* Results Count */}
-                  <div className="mt-4 text-sm text-gray-400">
-                    Showing {filteredIngredients.length} of{" "}
-                    {pendingIngredients.length} ingredient
-                    {pendingIngredients.length !== 1 ? "s" : ""}
+                {/* Collapsible Content */}
+                {showFilters && (
+                  <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl animate-fade-in">
+                    <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-end">
+                      {/* Search Filter */}
+                      <div className="flex-1 w-full">
+                        <label
+                          htmlFor="search-ingredient"
+                          className="block mb-2 text-sm font-medium text-yellow-300"
+                        >
+                          Search Ingredient
+                        </label>
+                        <div className="relative">
+                          <input
+                            id="search-ingredient"
+                            type="text"
+                            placeholder="Search by name..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full h-12 bg-gray-800/80 text-white rounded-xl pl-11 pr-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm transition-all duration-200 hover:border-gray-500"
+                          />
+                          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <svg
+                              className="w-5 h-5 text-gray-400"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                              />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Category Filter */}
+                      <div className="flex-1 w-full">
+                        <label
+                          htmlFor="category-filter"
+                          className="block mb-2 text-sm font-medium text-yellow-300"
+                        >
+                          Filter by Category
+                        </label>
+                        <div className="relative">
+                          <select
+                            id="category-filter"
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                            className="w-full h-12 bg-gray-800/80 text-white rounded-xl px-4 py-3 border border-gray-600 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none text-sm appearance-none cursor-pointer transition-all duration-200 hover:border-gray-500"
+                          >
+                            <option value="all">All Categories</option>
+                            {availableCategories.map((category) => (
+                              <option key={category} value={category}>
+                                {category}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                            <svg
+                              className="w-4 h-4 text-gray-400"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 9l-7 7-7-7"
+                              />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Clear Filters Button */}
+                      <div className="w-full lg:w-auto">
+                        <button
+                          type="button"
+                          onClick={handleClearFilters}
+                          disabled={
+                            searchQuery === "" && categoryFilter === "all"
+                          }
+                          className="w-full lg:w-auto h-12 px-6 bg-gray-700/50 hover:bg-gray-600/50 disabled:bg-gray-800/30 disabled:text-gray-500 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all duration-200 text-sm border border-gray-600 hover:border-gray-500 disabled:border-gray-700"
+                        >
+                          Clear Filters
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Results Count */}
+                    <div className="mt-4 text-sm text-gray-400">
+                      Showing {filteredIngredients.length} of{" "}
+                      {pendingIngredients.length} ingredient
+                      {pendingIngredients.length !== 1 ? "s" : ""}
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {/* Quick Stats */}
+              <section className="mb-6">
+                <div className="grid grid-cols-1 gap-4">
+                  {/* Total Ingredients */}
+                  <div className="bg-gradient-to-br from-purple-900/40 to-purple-800/40 backdrop-blur-sm rounded-xl p-5 border border-purple-500/30 hover:border-purple-400/50 transition-all duration-300">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-purple-300 text-xs font-medium mb-1">
+                          Total Ingredients
+                        </p>
+                        <p className="text-white text-2xl font-bold">
+                          {pendingIngredients.length}
+                        </p>
+                      </div>
+                      <div className="bg-purple-500/20 p-3 rounded-lg">
+                        <svg
+                          className="w-6 h-6 text-purple-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                          />
+                        </svg>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </section>
 
+              {/* Ingredients Table Section */}
               <section>
-                <div className="overflow-x-auto">
+                {/* Table Header */}
+                <div className="flex items-center gap-3 mb-4 bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-4 sm:p-5 border border-gray-700/50">
+                  <div className="bg-gradient-to-br from-green-400/20 to-green-500/20 p-2.5 rounded-lg">
+                    <svg
+                      className="w-5 h-5 text-green-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+                      />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-bold text-green-300">
+                      Ingredients List
+                    </h2>
+                    <p className="text-xs text-gray-400">
+                      Manage units, thresholds, and categories for each
+                      ingredient
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto bg-gray-900/50 backdrop-blur-sm rounded-2xl border border-gray-700/50 shadow-xl">
                   <table className="table-auto w-full text-xs xs:text-sm sm:text-base lg:text-lg xl:text-xl text-left border-collapse min-w-[700px]">
                     <caption className="sr-only">Ingredients Table</caption>
                     <thead className="bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
@@ -792,11 +924,75 @@ export default function InventorySettings() {
                         <tr>
                           <td
                             colSpan={5}
-                            className="text-center text-gray-400 py-12 text-lg animate-fade-in"
+                            className="text-center py-16 animate-fade-in"
                           >
-                            {pendingIngredients.length === 0
-                              ? "No ingredients found. Add your first ingredient above!"
-                              : "No ingredients match your filters. Try adjusting your search or category filter."}
+                            <div className="flex flex-col items-center justify-center gap-4">
+                              {pendingIngredients.length === 0 ? (
+                                <>
+                                  <div className="bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 p-6 rounded-full">
+                                    <svg
+                                      className="w-16 h-16 text-yellow-400"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                      />
+                                    </svg>
+                                  </div>
+                                  <div className="text-center">
+                                    <h3 className="text-xl font-bold text-yellow-300 mb-2">
+                                      No Ingredients Yet
+                                    </h3>
+                                    <p className="text-gray-400 text-sm max-w-md">
+                                      Get started by adding your first
+                                      ingredient using the form above. Set up
+                                      units, thresholds, and categories to
+                                      manage your inventory effectively.
+                                    </p>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="bg-gradient-to-br from-blue-400/20 to-blue-500/20 p-6 rounded-full">
+                                    <svg
+                                      className="w-16 h-16 text-blue-400"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                      />
+                                    </svg>
+                                  </div>
+                                  <div className="text-center">
+                                    <h3 className="text-xl font-bold text-blue-300 mb-2">
+                                      No Matches Found
+                                    </h3>
+                                    <p className="text-gray-400 text-sm max-w-md">
+                                      No ingredients match your current filters.
+                                      Try adjusting your search query or
+                                      category filter to see more results.
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={handleClearFilters}
+                                      className="mt-4 px-6 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg font-medium transition-all duration-200 border border-blue-500/30 hover:border-blue-400/50"
+                                    >
+                                      Clear All Filters
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ) : (
@@ -805,20 +1001,33 @@ export default function InventorySettings() {
                             key={ing.id}
                             tabIndex={0}
                             aria-label={`Row for ${ing.name}`}
-                            className={`transition-colors duration-150 ${
+                            className={`group transition-all duration-200 ${
                               idx % 2 === 0
                                 ? "bg-gray-900/80"
                                 : "bg-gray-800/80"
-                            } hover:bg-yellow-100/10 ${
-                              idx === 0 ? "rounded-t-xl" : ""
-                            } ${
-                              idx === filteredIngredients.length - 1
-                                ? "rounded-b-xl"
-                                : ""
-                            } animate-fade-in`}
+                            } hover:bg-gradient-to-r hover:from-yellow-500/10 hover:to-transparent border-b border-gray-700/30 last:border-b-0 animate-fade-in`}
                           >
-                            <td className="px-4 py-3 text-white font-medium whitespace-nowrap align-middle">
-                              {ing.name}
+                            <td className="px-4 py-4 align-middle">
+                              <div className="flex items-center gap-3">
+                                <div className="bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 p-2 rounded-lg group-hover:from-yellow-400/30 group-hover:to-yellow-500/30 transition-all duration-200">
+                                  <svg
+                                    className="w-4 h-4 text-yellow-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                    />
+                                  </svg>
+                                </div>
+                                <span className="text-white font-medium">
+                                  {ing.name}
+                                </span>
+                              </div>
                             </td>
                             <td className="px-4 py-3 align-middle">
                               <input
@@ -852,21 +1061,13 @@ export default function InventorySettings() {
                                 <option value="" disabled>
                                   Select unit
                                 </option>
-                                <option value="kg">kg</option>
-                                <option value="g">g</option>
-                                <option value="lbs">lbs</option>
-                                <option value="oz">oz</option>
-                                <option value="L">L</option>
-                                <option value="ml">mL</option>
-                                <option value="gal">gallon</option>
-                                <option value="pcs">pcs</option>
-                                <option value="pack">pack</option>
-                                <option value="bundle">bundle</option>
-                                <option value="case">case</option>
-                                <option value="sack">sack</option>
-                                <option value="btl">bottle</option>
-                                <option value="can">can</option>
-                                <option value="tray">tray</option>
+                                {getUnitsForCategory(ing.category || "").map(
+                                  (unit) => (
+                                    <option key={unit.value} value={unit.value}>
+                                      {unit.label}
+                                    </option>
+                                  )
+                                )}
                               </select>
                               {/* Custom dropdown arrow */}
                               <div className="absolute inset-y-0 right-7 flex items-center pointer-events-none">
@@ -886,9 +1087,13 @@ export default function InventorySettings() {
                               </div>
                             </td>
                             <td className="px-4 py-3 align-middle relative">
-                              {ing.category}
+                              {ing.category && (
+                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                                  {ing.category}
+                                </span>
+                              )}
                             </td>
-                            <td className="px-4 py-3 flex items-center gap-2 align-middle">
+                            <td className="px-4 py-3 align-middle">
                               <button
                                 type="button"
                                 aria-label={`Delete ${ing.name}`}
@@ -896,11 +1101,11 @@ export default function InventorySettings() {
                                   setIngredientToDelete(ing);
                                   setShowDeleteModal(true);
                                 }}
-                                className="px-3 py-1 bg-red-500 hover:bg-red-400 text-white rounded-lg font-semibold text-xs transition-all duration-150 shadow-sm focus:outline-yellow-300 focus:outline-2"
+                                className="group/btn flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-lg font-semibold text-sm transition-all duration-200 border border-red-500/30 hover:border-red-400 shadow-sm"
                                 title="Delete ingredient"
                               >
-                                <span className="sr-only">Delete</span>
-                                Delete
+                                <FaTrash className="w-3 h-3 group-hover/btn:scale-110 transition-transform duration-200" />
+                                <span>Delete</span>
                               </button>
                             </td>
                           </tr>

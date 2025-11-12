@@ -237,19 +237,78 @@ async def get_surplus_ingredients(
 async def get_out_of_stock_inventory(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    table: str = Query("inventory_today", regex="^(inventory|inventory_today)$"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
+    """
+    Get items that are completely out of stock (aggregate across all batches).
+
+    Uses multi-batch logic:
+    - Groups by item_name
+    - Only includes items where SUM(stock_quantity) = 0 across ALL batches
+    - Shows all batches for each out-of-stock item
+
+    Args:
+        table: Which inventory table to query ("inventory_today" or "inventory")
+        skip: Number of records to skip (pagination)
+        limit: Maximum number of records to return
+    """
     try:
-        stmt = (
-            select(Inventory)
-            .where(Inventory.stock_status == "Out Of Stock")
-            .offset(skip)
-            .limit(limit)
-        )
-        result = await db.execute(stmt)
-        items = result.scalars().all()
-        return [item.as_dict() for item in items]
+        if table == "inventory_today":
+            # Use aggregate logic: only show items where ALL batches are depleted
+            stmt = text("""
+                WITH item_totals AS (
+                    SELECT
+                        item_name,
+                        SUM(stock_quantity) as total_stock,
+                        COUNT(*) as batch_count
+                    FROM inventory_today
+                    GROUP BY item_name
+                )
+                SELECT
+                    it.item_id,
+                    it.item_name,
+                    it.batch_date,
+                    it.stock_quantity,
+                    it.stock_status,
+                    it.expiration_date,
+                    it.category,
+                    totals.total_stock,
+                    totals.batch_count
+                FROM inventory_today it
+                INNER JOIN item_totals totals ON LOWER(it.item_name) = LOWER(totals.item_name)
+                WHERE totals.total_stock = 0
+                ORDER BY it.item_name, it.batch_date
+                LIMIT :limit OFFSET :skip
+            """)
+            result = await db.execute(stmt, {"limit": limit, "skip": skip})
+
+            items = []
+            for row in result:
+                items.append({
+                    "item_id": row.item_id,
+                    "item_name": row.item_name,
+                    "batch_date": row.batch_date.isoformat() if row.batch_date else None,
+                    "stock_quantity": float(row.stock_quantity),
+                    "stock_status": row.stock_status,
+                    "total_stock": float(row.total_stock),
+                    "batch_count": row.batch_count,
+                    "expiration_date": row.expiration_date.isoformat() if row.expiration_date else None,
+                    "category": row.category
+                })
+            return items
+        else:
+            # Original logic for master inventory (no batching in master inventory)
+            stmt = (
+                select(Inventory)
+                .where(Inventory.stock_status == "Out Of Stock")
+                .offset(skip)
+                .limit(limit)
+            )
+            result = await db.execute(stmt)
+            items = result.scalars().all()
+            return [item.as_dict() for item in items]
     except Exception as e:
         print("Error fetching out of stock inventory:", e)
         raise HTTPException(status_code=500, detail=str(e))

@@ -84,14 +84,19 @@ export default function ComprehensiveSalesReport() {
   const [endDate, setEndDate] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
-  // Set default dates (last 30 days)
+  // Set default dates (ALL TIME - from year 2000 to today)
   useEffect(() => {
     const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 30);
 
-    setEndDate(end.toISOString().split("T")[0]);
-    setStartDate(start.toISOString().split("T")[0]);
+    // Use local date to avoid timezone issues
+    const endDateStr = end.getFullYear() + '-' +
+      String(end.getMonth() + 1).padStart(2, '0') + '-' +
+      String(end.getDate()).padStart(2, '0');
+
+    const startDateStr = "2000-01-01";  // All time start date
+
+    setEndDate(endDateStr);
+    setStartDate(startDateStr);
   }, []);
 
   const fetchAnalytics = async () => {

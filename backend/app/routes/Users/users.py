@@ -15,11 +15,6 @@ import re
 
 router = APIRouter()
 
-
-# ===========================
-# ENUMS FOR VALIDATION
-# ===========================
-
 class UserRoleEnum(str, Enum):
     OWNER = "Owner"
     GENERAL_MANAGER = "General Manager"

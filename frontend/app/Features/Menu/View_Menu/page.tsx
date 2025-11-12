@@ -16,6 +16,7 @@ import {
   FiTrendingUp,
   FiClock,
   FiX,
+  FiImage,
 } from "react-icons/fi";
 import {
   FaCheckCircle,
@@ -80,22 +81,22 @@ function ItemRow({
 }) {
   return (
     <div className={`group ${fullWidth ? "col-span-full" : ""}`}>
-      <div className="bg-gray-800/30 backdrop-blur-sm rounded-lg xs:rounded-xl p-3 xs:p-4 sm:p-5 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-300 h-full">
-        <div className="flex items-start gap-2 xs:gap-3">
+      <div className="bg-gradient-to-br from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-xl p-4 sm:p-5 border border-gray-700/50 hover:border-yellow-400/30 hover:shadow-lg hover:shadow-yellow-400/10 transition-all duration-300 h-full">
+        <div className="flex items-start gap-3">
           {icon && (
-            <div className="flex-shrink-0 mt-0.5 xs:mt-1">
-              <div className="w-4 h-4 xs:w-5 xs:h-5 sm:w-auto sm:h-auto flex items-center justify-center">
+            <div className="flex-shrink-0 mt-1">
+              <div className="bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 p-2.5 rounded-lg group-hover:from-yellow-400/30 group-hover:to-yellow-500/30 transition-all duration-200">
                 {icon}
               </div>
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <h3 className="text-gray-400 text-xs xs:text-xs sm:text-sm font-medium mb-1 xs:mb-1.5 sm:mb-2 uppercase tracking-wider leading-tight">
+            <h3 className="text-yellow-300 text-xs sm:text-sm font-semibold mb-2 uppercase tracking-wider">
               {label}
             </h3>
             {typeof value === "string" || typeof value === "number" ? (
               <p
-                className={`text-sm xs:text-base sm:text-lg font-medium xs:font-semibold break-words leading-tight ${
+                className={`text-base sm:text-lg font-semibold break-words ${
                   valueClassName || className
                 }`}
               >
@@ -103,7 +104,7 @@ function ItemRow({
               </p>
             ) : (
               <div
-                className={`text-sm xs:text-base sm:text-lg font-medium xs:font-semibold break-words leading-tight ${
+                className={`text-base sm:text-lg font-semibold break-words ${
                   valueClassName || className
                 }`}
               >
@@ -474,9 +475,6 @@ export default function ViewMenu() {
                         <div className="text-sm font-semibold text-white">
                           {formatDateTime(menu.created_at)}
                         </div>
-                        <div className="text-xs text-gray-400">
-                          {formatRelativeTime(menu.created_at)}
-                        </div>
                       </div>
                     }
                     valueClassName=""
@@ -489,11 +487,6 @@ export default function ViewMenu() {
                         <div className="text-sm font-semibold text-white">
                           {formatDateTime(menu.updated_at)}
                         </div>
-                        <div className="text-xs text-gray-400">
-                          {menu.updated_at !== menu.created_at
-                            ? formatRelativeTime(menu.updated_at)
-                            : "Not modified since creation"}
-                        </div>
                       </div>
                     }
                     valueClassName=""
@@ -502,123 +495,198 @@ export default function ViewMenu() {
               </div>
 
               {/* Ingredients - Full Width */}
-              <div className="pt-2 sm:pt-4 border-t border-gray-700/50">
-                <ItemRow
-                  icon={<FiPackage className="text-gray-400" />}
-                  label="Ingredients"
-                  value={
-                    menu.ingredients && menu.ingredients.length > 0 ? (
-                      <div>
-                        <ul className="list-disc list-inside text-white space-y-2">
-                          {menu.ingredients.map((ing: any, idx: number) => {
-                            const reasonProps = getUnavailabilityReasonProps(
-                              ing.unavailable_reason
-                            );
-                            const isProblematic =
-                              ing.is_unavailable || ing.is_low_stock;
+              <div className="pt-4 sm:pt-6 border-t border-gray-700/50">
+                <div className="mb-4 flex items-center gap-3 bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-4 sm:p-5 border border-gray-700/50">
+                  <div className="bg-gradient-to-br from-green-400/20 to-green-500/20 p-2.5 rounded-lg">
+                    <FiPackage className="w-5 h-5 text-green-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-green-300">
+                      Ingredients
+                    </h2>
+                    <p className="text-xs text-gray-400">
+                      {menu.ingredients && menu.ingredients.length > 0
+                        ? `${menu.ingredients.length} ingredient${
+                            menu.ingredients.length !== 1 ? "s" : ""
+                          }`
+                        : "No ingredients listed"}
+                    </p>
+                  </div>
+                </div>
 
-                            return (
-                              <li
-                                key={idx}
-                                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border transition-all duration-200 ${
+                {menu.ingredients && menu.ingredients.length > 0 ? (
+                  <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl">
+                    <div className="space-y-3">
+                      {menu.ingredients.map((ing: any, idx: number) => {
+                        const reasonProps = getUnavailabilityReasonProps(
+                          ing.unavailable_reason
+                        );
+                        const isProblematic =
+                          ing.is_unavailable || ing.is_low_stock;
+
+                        return (
+                          <div
+                            key={idx}
+                            className={`group flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border transition-all duration-300 ${
+                              isProblematic
+                                ? "bg-gradient-to-br from-red-500/10 to-red-600/10 border-red-400/30 hover:border-red-400/50"
+                                : "bg-gradient-to-br from-green-500/10 to-green-600/10 border-green-400/30 hover:border-green-400/50"
+                            } hover:shadow-lg`}
+                          >
+                            {/* Ingredient Number Badge */}
+                            <div className="flex items-center gap-3 flex-1">
+                              <div
+                                className={`px-3 py-1 rounded-full border ${
                                   isProblematic
-                                    ? "bg-red-500/5 border-red-400/20 text-red-200"
-                                    : "bg-green-500/5 border-green-400/20 text-green-200"
+                                    ? "bg-red-400/20 border-red-500/30"
+                                    : "bg-green-400/20 border-green-500/30"
                                 }`}
                               >
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium">
-                                      {ing.ingredient_name || ing.name}
-                                    </span>
-                                    <span className="text-gray-400 text-sm">
-                                      {ing.quantity ? `(${ing.quantity})` : ""}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-gray-400 mt-1">
-                                    Total: {ing.stock_quantity || 0} |
-                                    Available: {ing.available_stock || 0}
-                                    {ing.expired_stock > 0 && (
-                                      <span className="text-red-400 ml-2">
-                                        | Expired: {ing.expired_stock}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                {isProblematic && (
-                                  <div className="flex flex-col gap-1">
-                                    <span
-                                      className={`text-xs px-2 py-1 rounded-full border ${reasonProps.color} inline-flex items-center`}
-                                    >
-                                      {reasonProps.icon}
-                                      {reasonProps.label}
-                                    </span>
-                                    <span className="text-xs text-gray-400 text-right">
-                                      {reasonProps.description}
-                                    </span>
-                                  </div>
-                                )}
-                                {!isProblematic && (
-                                  <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full border border-green-400/30 inline-flex items-center">
-                                    <FaCheckCircle
-                                      className="inline mr-1"
-                                      size={10}
-                                    />
-                                    Available
+                                <span
+                                  className={`text-xs font-bold ${
+                                    isProblematic
+                                      ? "text-red-400"
+                                      : "text-green-400"
+                                  }`}
+                                >
+                                  #{idx + 1}
+                                </span>
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span
+                                    className={`font-semibold text-base ${
+                                      isProblematic
+                                        ? "text-red-200"
+                                        : "text-green-200"
+                                    }`}
+                                  >
+                                    {ing.ingredient_name || ing.name}
                                   </span>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
+                                  {ing.quantity && (
+                                    <span className="text-gray-400 text-sm font-medium">
+                                      ({ing.quantity} {ing.measurements || ""})
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
+                                  <span className="flex items-center gap-1">
+                                    <span className="font-medium">Total:</span>{" "}
+                                    {ing.stock_quantity || 0}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <span className="font-medium">
+                                      Available:
+                                    </span>{" "}
+                                    {ing.available_stock || 0}
+                                  </span>
+                                  {ing.expired_stock > 0 && (
+                                    <span className="flex items-center gap-1 text-red-400">
+                                      <span className="font-medium">
+                                        Expired:
+                                      </span>{" "}
+                                      {ing.expired_stock}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {isProblematic && (
+                              <div className="flex flex-col gap-1 sm:items-end">
+                                <span
+                                  className={`text-xs px-3 py-1.5 rounded-full border ${reasonProps.color} inline-flex items-center gap-1 font-medium`}
+                                >
+                                  {reasonProps.icon}
+                                  {reasonProps.label}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  {reasonProps.description}
+                                </span>
+                              </div>
+                            )}
+                            {!isProblematic && (
+                              <span className="text-xs bg-green-500/20 text-green-300 px-3 py-1.5 rounded-full border border-green-400/30 inline-flex items-center gap-1 font-medium">
+                                <FaCheckCircle size={12} />
+                                Available
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-8 border border-gray-700/50 shadow-xl text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="bg-gradient-to-br from-gray-400/20 to-gray-500/20 p-4 rounded-full">
+                        <FiPackage className="w-8 h-8 text-gray-400" />
                       </div>
-                    ) : (
-                      <span className="text-gray-500">
-                        No ingredients listed.
-                      </span>
-                    )
-                  }
-                  fullWidth={true}
-                />
+                      <p className="text-gray-400 text-sm">
+                        No ingredients listed for this menu item.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Image - Full Width */}
-              <div className="pt-2 sm:pt-4 border-t border-gray-700/50">
-                <div className="mb-2 text-gray-400 text-xs sm:text-sm font-medium uppercase tracking-wider text-center">
-                  Menu Image
+              <div className="pt-4 sm:pt-6 border-t border-gray-700/50">
+                <div className="mb-4 flex items-center gap-3 bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-4 sm:p-5 border border-gray-700/50">
+                  <div className="bg-gradient-to-br from-purple-400/20 to-purple-500/20 p-2.5 rounded-lg">
+                    <FiImage className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-purple-300">
+                      Menu Image
+                    </h2>
+                    <p className="text-xs text-gray-400">
+                      Dish presentation photo
+                    </p>
+                  </div>
                 </div>
-                <div className="flex justify-center">
-                  {menu.image_url ? (
-                    <Image
-                      src={menu.image_url}
-                      alt={menu.dish_name}
-                      width={180}
-                      height={180}
-                      className="rounded-lg object-cover bg-gray-300"
-                      style={{
-                        width: "100%",
-                        maxWidth: "260px",
-                        height: "auto",
-                      }}
-                    />
-                  ) : (
-                    <div className="w-40 h-40 sm:w-64 sm:h-64 bg-gray-300 flex items-center justify-center rounded-lg">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="w-16 h-16 sm:w-24 sm:h-24 text-gray-500"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"
+
+                <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 shadow-xl">
+                  <div className="flex justify-center">
+                    {menu.image_url ? (
+                      <div className="relative group">
+                        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl blur-xl group-hover:blur-2xl transition-all duration-300"></div>
+                        <Image
+                          src={menu.image_url}
+                          alt={menu.dish_name}
+                          width={400}
+                          height={400}
+                          className="relative rounded-xl object-cover shadow-2xl border-2 border-gray-700/50 group-hover:border-purple-400/50 transition-all duration-300"
+                          style={{
+                            width: "100%",
+                            maxWidth: "400px",
+                            height: "auto",
+                          }}
                         />
-                      </svg>
-                    </div>
-                  )}
+                      </div>
+                    ) : (
+                      <div className="w-full max-w-md aspect-square bg-gradient-to-br from-gray-800/50 to-gray-900/50 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-600/50">
+                        <div className="bg-gradient-to-br from-gray-400/20 to-gray-500/20 p-6 rounded-full mb-4">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="w-16 h-16 text-gray-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                            />
+                          </svg>
+                        </div>
+                        <p className="text-gray-400 text-sm font-medium">
+                          No image available
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

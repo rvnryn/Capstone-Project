@@ -10,7 +10,7 @@ import NavigationBar from "@/app/components/navigation/navigation";
 import { useAuth } from "@/app/context/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
-import { useInventoryAPI } from "../hook/use-inventoryAPI";
+import { useDeleteSpoilage } from "../hook/use-inventoryQuery";
 import { GiBiohazard } from "react-icons/gi";
 import Pagination from "@/app/components/Pagination";
 import { TableLoading, EmptyState } from "@/app/components/LoadingStates";
@@ -47,7 +47,28 @@ export default function SpoilageInventoryPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isMobile } = useNavigation();
-  const { listSpoilage, deleteSpoilage } = useInventoryAPI();
+
+  // React Query mutation
+  const deleteSpoilageMutation = useDeleteSpoilage();
+
+  // Keep listSpoilage for the query function
+  const listSpoilage = async () => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const response = await fetch(`${API_BASE_URL}/api/inventory-spoilage`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  };
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sortConfig, setSortConfig] = useState({
@@ -270,8 +291,7 @@ export default function SpoilageInventoryPage() {
   const confirmDelete = async () => {
     if (deleteTargetId == null) return;
     try {
-      await deleteSpoilage(deleteTargetId);
-      queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] });
+      await deleteSpoilageMutation.mutateAsync(deleteTargetId);
     } catch (error: any) {
       alert("Failed to remove spoilage record. Please try again.");
     }

@@ -1,208 +1,141 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
-  pwaInstaller,
-  networkStatus,
-  offlineQueue,
-  pushNotifications,
-  isPWA,
-} from "@/app/utils/pwa";
 
-export interface PWAHookReturn {
-  // Installation
-  canInstall: boolean;
-  isInstalled: boolean;
-  install: () => Promise<boolean>;
+// PWA Hook - For installation and app features (NO offline data functionality)
+export function usePWA() {
+  const [isOnline, setIsOnline] = useState(true);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
-  // Network
-  isOnline: boolean;
+  useEffect(() => {
+    // Check if running as installed PWA
+    if (typeof window !== "undefined") {
+      const isStandalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as any).standalone === true;
+      setIsInstalled(isStandalone);
+    }
 
-  // Offline queue
-  addOfflineAction: (action: string, data: any) => string;
-  getOfflineActions: () => any[];
-  clearOfflineActions: () => void;
+    // Online/offline detection
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
-  // Notifications
-  requestNotificationPermission: () => Promise<NotificationPermission>;
-  hasNotificationPermission: boolean;
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
-  // PWA status
-  pwaFeatures: {
-    serviceWorker: boolean;
-    notifications: boolean;
-    backgroundSync: boolean;
-    installable: boolean;
+    // Capture install prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    // Check initial online status
+    setIsOnline(navigator.onLine);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  return {
+    isOnline,
+    isInstalled,
+    canInstall: !!deferredPrompt,
+    deferredPrompt,
   };
 }
 
-export const usePWA = (): PWAHookReturn => {
-  const [canInstall, setCanInstall] = useState(false);
+// Hook for install prompt UI
+export function useInstallPrompt() {
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showPrompt, setShowPrompt] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
-  const [hasNotificationPermission, setHasNotificationPermission] =
-    useState(false);
-  const [pwaFeatures, setPwaFeatures] = useState({
-    serviceWorker: false,
-    notifications: false,
-    backgroundSync: false,
-    installable: false,
-  });
 
   useEffect(() => {
-    // Initialize PWA status
-    const initializePWA = () => {
-      setIsInstalled(isPWA());
-      setCanInstall(pwaInstaller.canInstall());
-      setIsOnline(networkStatus.isOnline());
+    // Check if already installed
+    if (typeof window !== "undefined") {
+      const isStandalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as any).standalone === true;
+      setIsInstalled(isStandalone);
+    }
 
-      if (typeof window !== "undefined") {
-        setHasNotificationPermission(
-          "Notification" in window && Notification.permission === "granted"
-        );
-
-        setPwaFeatures({
-          serviceWorker: "serviceWorker" in navigator,
-          notifications: "Notification" in window,
-          backgroundSync:
-            "serviceWorker" in navigator &&
-            "sync" in window.ServiceWorkerRegistration.prototype,
-          installable: pwaInstaller.canInstall(),
-        });
-      }
+    // Capture the beforeinstallprompt event
+    const handleBeforeInstallPrompt = (e: any) => {
+      console.log("📱 beforeinstallprompt event captured");
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowPrompt(true);
     };
 
-    initializePWA();
-
-    // Listen for network changes
-    const handleNetworkChange = (online: boolean) => {
-      setIsOnline(online);
+    // Handle app installed
+    const handleAppInstalled = () => {
+      console.log("📱 App was installed");
+      setIsInstalled(true);
+      setShowPrompt(false);
+      setDeferredPrompt(null);
     };
 
-    networkStatus.addListener(handleNetworkChange);
-
-    // Check install status periodically
-    const installCheckInterval = setInterval(() => {
-      setCanInstall(pwaInstaller.canInstall());
-      setIsInstalled(pwaInstaller.isInstalled());
-    }, 1000);
-
-    // Listen for beforeinstallprompt to update canInstall immediately
-    const beforeInstallPromptHandler = () => {
-      setCanInstall(pwaInstaller.canInstall());
-    };
-    window.addEventListener("beforeinstallprompt", beforeInstallPromptHandler);
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
 
     return () => {
-      networkStatus.removeListener(handleNetworkChange);
-      clearInterval(installCheckInterval);
-      window.removeEventListener("beforeinstallprompt", beforeInstallPromptHandler);
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
     };
   }, []);
-
-  const install = useCallback(async (): Promise<boolean> => {
-    return await pwaInstaller.install();
-  }, []);
-
-  const addOfflineAction = useCallback((action: string, data: any): string => {
-    return offlineQueue.addAction(action, data);
-  }, []);
-
-  const getOfflineActions = useCallback(() => {
-    return offlineQueue.getQueue();
-  }, []);
-
-  const clearOfflineActions = useCallback(() => {
-    offlineQueue.clearQueue();
-  }, []);
-
-  const requestNotificationPermission =
-    useCallback(async (): Promise<NotificationPermission> => {
-      const permission = await pushNotifications.requestPermission();
-      setHasNotificationPermission(permission === "granted");
-      return permission;
-    }, []);
-
-  return {
-    canInstall,
-    isInstalled,
-    install,
-    isOnline,
-    addOfflineAction,
-    getOfflineActions,
-    clearOfflineActions,
-    requestNotificationPermission,
-    hasNotificationPermission,
-    pwaFeatures,
-  };
-};
-
-// Utility hooks for specific PWA features
-export const useOfflineQueue = () => {
-  const { addOfflineAction, getOfflineActions, clearOfflineActions, isOnline } =
-    usePWA();
-
-  const syncWhenOnline = useCallback(
-    async (syncFunction: (actions: any[]) => Promise<void>) => {
-      if (isOnline) {
-        const actions = getOfflineActions();
-        if (actions.length > 0) {
-          try {
-            await syncFunction(actions);
-            clearOfflineActions();
-          } catch (error) {
-            console.error("Failed to sync offline actions:", error);
-          }
-        }
-      }
-    },
-    [isOnline, getOfflineActions, clearOfflineActions]
-  );
-
-  return {
-    addOfflineAction,
-    getOfflineActions,
-    clearOfflineActions,
-    syncWhenOnline,
-    isOnline,
-  };
-};
-
-export const useInstallPrompt = () => {
-  const { canInstall, isInstalled, install } = usePWA();
-  const [showPrompt, setShowPrompt] = useState(false);
-
-  useEffect(() => {
-    const checkPrompt = () => {
-      const dismissed = localStorage.getItem("pwa-install-dismissed") === "true";
-      const isPWAMode = typeof window !== "undefined" && window.matchMedia("(display-mode: standalone)").matches;
-      setShowPrompt(!dismissed && !isPWAMode && !isInstalled && canInstall);
-    };
-    checkPrompt();
-    // Listen for install state changes
-    const interval = setInterval(checkPrompt, 1000);
-    return () => clearInterval(interval);
-  }, [isInstalled, canInstall]);
 
   const handleInstall = useCallback(async () => {
-    const success = await install();
-    if (success) {
-      setShowPrompt(false);
-      localStorage.setItem("pwa-install-dismissed", "true");
+    if (!deferredPrompt) {
+      console.warn("Install prompt not available");
+      return false;
     }
-    return success;
-  }, [install]);
+
+    try {
+      await deferredPrompt.prompt();
+      const choiceResult = await deferredPrompt.userChoice;
+
+      if (choiceResult.outcome === "accepted") {
+        console.log("✅ User accepted the install prompt");
+        setShowPrompt(false);
+        setDeferredPrompt(null);
+        return true;
+      } else {
+        console.log("❌ User dismissed the install prompt");
+        return false;
+      }
+    } catch (error) {
+      console.error("Error during install:", error);
+      return false;
+    }
+  }, [deferredPrompt]);
 
   const dismissPrompt = useCallback(() => {
-    localStorage.setItem("pwa-install-dismissed", "true");
     setShowPrompt(false);
+    localStorage.setItem("pwa-install-dismissed", "true");
+    localStorage.setItem("pwa-install-dismissed-time", Date.now().toString());
   }, []);
 
   return {
     showPrompt,
     handleInstall,
     dismissPrompt,
-    canInstall,
+    canInstall: !!deferredPrompt,
     isInstalled,
   };
-};
+}
+
+// Simple hook for offline queue (NO-OP - offline functionality removed)
+export function useOfflineQueue() {
+  // Return empty functions to maintain compatibility
+  return {
+    addOfflineAction: () => {},
+    getOfflineActions: () => [],
+    syncWhenOnline: () => Promise.resolve(),
+  };
+}

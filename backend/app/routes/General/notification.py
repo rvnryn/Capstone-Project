@@ -84,26 +84,35 @@ async def update_notification_settings(
         result = await db.execute(stmt)
         existing = result.scalars().first()
 
+        # Helper function to safely encode method arrays
+        def encode_method(method_value):
+            """Encode method value as JSON string, handling already-encoded strings"""
+            if isinstance(method_value, str):
+                # If it's already a string, return as-is (avoid double encoding)
+                return method_value
+            # If it's a list, encode it
+            return json.dumps(method_value)
+
         if existing:
             # Update existing record
             existing.low_stock_enabled = settings.low_stock_enabled
-            existing.low_stock_method = json.dumps(settings.low_stock_method)
+            existing.low_stock_method = encode_method(settings.low_stock_method)
             existing.expiration_enabled = settings.expiration_enabled
             existing.expiration_days = settings.expiration_days
-            existing.expiration_method = json.dumps(settings.expiration_method)
+            existing.expiration_method = encode_method(settings.expiration_method)
             existing.transfer_enabled = settings.transfer_enabled
-            existing.transfer_method = json.dumps(settings.transfer_method)
+            existing.transfer_method = encode_method(settings.transfer_method)
         else:
             # Insert new record
             new_settings = NotificationSettingsModel(
                 user_id=settings.user_id,
                 low_stock_enabled=settings.low_stock_enabled,
-                low_stock_method=json.dumps(settings.low_stock_method),
+                low_stock_method=encode_method(settings.low_stock_method),
                 expiration_enabled=settings.expiration_enabled,
                 expiration_days=settings.expiration_days,
-                expiration_method=json.dumps(settings.expiration_method),
+                expiration_method=encode_method(settings.expiration_method),
                 transfer_enabled=settings.transfer_enabled,
-                transfer_method=json.dumps(settings.transfer_method),
+                transfer_method=encode_method(settings.transfer_method),
             )
             db.add(new_settings)
 
@@ -143,6 +152,8 @@ def create_notification(user_id, type, message, details=None):
     try:
         now = datetime.utcnow().isoformat()
         today = now[:10]
+
+        print(f"[DEBUG] Checking for existing notifications for today: {today}")
         existing = (
             postgrest_client.table("notification")
             .select("id")
@@ -153,10 +164,13 @@ def create_notification(user_id, type, message, details=None):
             .lte("created_at", f"{today}T23:59:59.999999")
             .execute()
         )
-        print("Existing notifications:", existing.data)
+        print(f"[DEBUG] Existing notifications query result: {existing}")
+        print(f"[DEBUG] Existing notifications data: {existing.data}")
+
         if existing.data and len(existing.data) > 0:
             print("Duplicate notification detected, not inserting.")
             return
+
         payload = {
             "user_id": user_id,
             "type": type,
@@ -166,15 +180,25 @@ def create_notification(user_id, type, message, details=None):
         }
         if details is not None:
             payload["details"] = details
-        # Insert and fetch the id
-        result = postgrest_client.table("notification").insert(payload).select("id").execute()
-        print("Insert result:", result)
-        if result.data and "id" in result.data[0]:
-            print(f"Notification created with id: {result.data[0]['id']}")
+
+        print(f"[DEBUG] Inserting notification with payload: {payload}")
+        # Insert (postgrest-py doesn't support .select() after .insert() in sync mode)
+        result = postgrest_client.table("notification").insert(payload).execute()
+        print(f"[DEBUG] Insert result: {result}")
+        print(f"[DEBUG] Insert result data: {result.data}")
+
+        if result.data and len(result.data) > 0 and "id" in result.data[0]:
+            print(f"✅ Notification created successfully with id: {result.data[0]['id']}")
         else:
-            print("Warning: Notification id missing after insert!")
+            print(f"❌ Warning: Notification insert returned unexpected result: {result}")
+
     except Exception as e:
-        print("Error creating notification:", e)
+        import traceback
+        print(f"❌ Error creating notification: {e}")
+        print(f"❌ Traceback:")
+        traceback.print_exc()
+        # Re-raise the exception so we can see it in the logs
+        raise
 
 
 def format_items_message(type_str, items):
@@ -582,3 +606,70 @@ def run_inventory_check():
     print("Manual inventory check triggered")
     check_inventory_alerts()
     return {"status": "inventory check run"}
+
+
+def create_transfer_notification(transfer_type: str, item_count: int, details_list: list = None):
+    """
+    Create notifications for auto transfer operations
+    transfer_type: "today", "master", or "surplus"
+    """
+    print(f"create_transfer_notification called for type={transfer_type}, count={item_count}")
+    try:
+        users_response = postgrest_client.table("users").select("user_id").execute()
+        users = [u["user_id"] for u in users_response.data] if users_response.data else []
+
+        for user_id in users:
+            # Check if transfer notifications are enabled for this user
+            settings_resp = (
+                postgrest_client.table("notification_settings")
+                .select("transfer_enabled, transfer_method")
+                .eq("user_id", user_id)
+                .execute()
+            )
+
+            # Default to enabled if no settings found
+            if settings_resp.data and len(settings_resp.data) > 0:
+                settings = settings_resp.data[0]
+                transfer_enabled = settings.get("transfer_enabled", True)
+                transfer_method = settings.get("transfer_method", '["inapp"]')
+
+                # Parse transfer_method if it's a JSON string
+                if isinstance(transfer_method, str):
+                    import json
+                    try:
+                        transfer_method = json.loads(transfer_method)
+                    except:
+                        transfer_method = ["inapp"]
+            else:
+                transfer_enabled = True
+                transfer_method = ["inapp"]
+
+            # Only create notification if enabled and inapp method is selected
+            if transfer_enabled and "inapp" in transfer_method:
+                if transfer_type == "today":
+                    message = f"Auto transfer to Today's Inventory completed: {item_count} items transferred"
+                    notif_type = "auto_transfer_today"
+                elif transfer_type == "master":
+                    message = f"Auto transfer from Master Inventory completed: {item_count} items transferred for top selling items"
+                    notif_type = "auto_transfer_master"
+                elif transfer_type == "surplus":
+                    message = f"Auto transfer to Surplus Inventory completed: {item_count} items transferred"
+                    notif_type = "auto_transfer_surplus"
+                else:
+                    message = f"Auto transfer completed: {item_count} items"
+                    notif_type = "auto_transfer"
+
+                # Create notification with details
+                details = None
+                if details_list:
+                    details = json.dumps(details_list)
+
+                create_notification(
+                    user_id=user_id,
+                    type=notif_type,
+                    message=message,
+                    details=details
+                )
+                print(f"Transfer notification created for user {user_id}: {message}")
+    except Exception as e:
+        print(f"Error creating transfer notification: {e}")

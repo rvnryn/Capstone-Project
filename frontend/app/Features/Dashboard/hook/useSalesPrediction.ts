@@ -44,7 +44,9 @@ export interface HistoricalAnalysis {
 
 export function useSalesHistory(
   timeframe: "daily" | "weekly" | "monthly",
-  top_n: number
+  top_n: number,
+  startDate?: string,
+  endDate?: string
 ) {
   const {
     data = [],
@@ -52,10 +54,17 @@ export function useSalesHistory(
     error,
     refetch: fetchSalesHistory,
   } = useQuery({
-    queryKey: ["sales-history", timeframe, top_n],
+    queryKey: ["sales-history", timeframe, top_n, startDate, endDate],
     queryFn: async () => {
+      const params = new URLSearchParams({
+        timeframe,
+        top_n: top_n.toString(),
+      });
+      if (startDate) params.append("start_date", startDate);
+      if (endDate) params.append("end_date", endDate);
+
       const response = await fetch(
-        `${API_BASE_URL}/api/predict_top_sales?timeframe=${timeframe}&top_n=${top_n}`,
+        `${API_BASE_URL}/api/predict_top_sales?${params.toString()}`,
         {
           method: "GET",
           headers: {
@@ -69,7 +78,6 @@ export function useSalesHistory(
       }
 
       const data = await response.json();
-      console.log("[SalesHistory] API response for", timeframe, top_n, data);
       return data;
     },
     refetchOnWindowFocus: false,
@@ -77,21 +85,30 @@ export function useSalesHistory(
     refetchInterval: false,
     staleTime: 10000,
   });
-  console.log("[SalesHistory] Hook data for", timeframe, top_n, data);
   return { data, loading, error, fetchSalesHistory };
 }
 
-export function useHistoricalAnalysis(days: number = 90) {
+export function useHistoricalAnalysis(
+  days: number = 90,
+  startDate?: string,
+  endDate?: string
+) {
   const {
     data = null,
     isLoading: loading,
     error,
     refetch: fetchHistoricalAnalysis,
   } = useQuery({
-    queryKey: ["historical-analysis", days],
+    queryKey: ["historical-analysis", days, startDate, endDate],
     queryFn: async () => {
+      const params = new URLSearchParams({
+        days: days.toString(),
+      });
+      if (startDate) params.append("start_date", startDate);
+      if (endDate) params.append("end_date", endDate);
+
       const response = await fetch(
-        `${API_BASE_URL}/api/historical_analysis?days=${days}`,
+        `${API_BASE_URL}/api/historical_analysis?${params.toString()}`,
         {
           method: "GET",
           headers: {
@@ -124,10 +141,12 @@ export function useSalesPrediction(
 export function useSalesAnalytics(
   timeframe: "daily" | "weekly" | "monthly",
   top_n: number,
-  days?: number
+  days?: number,
+  startDate?: string,
+  endDate?: string
 ) {
-  const salesHistory = useSalesHistory(timeframe, top_n);
-  const historical = useHistoricalAnalysis(days);
+  const salesHistory = useSalesHistory(timeframe, top_n, startDate, endDate);
+  const historical = useHistoricalAnalysis(days, startDate, endDate);
   return {
     prediction: salesHistory,
     historical,

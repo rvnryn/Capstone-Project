@@ -16,7 +16,14 @@ from app.models.custom_holiday import CustomHoliday
 from app.models.user_activity_log import UserActivityLog
 from app.routes.Inventory.master_inventory import require_role
 
+from typing import Dict
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+import holidays
+
 router = APIRouter()
+
 @router.post("/import-sales-json")
 async def import_sales_json(
     sales_data: list = Body(..., example=[{"sale_date": "02-Nov-25 11:09:12", "count": 1}]),
@@ -24,40 +31,51 @@ async def import_sales_json(
 ):
     """
     Import sales data in custom JSON format, parse sale_date, and insert into sales_report table.
+    Fetch category from menu table for each item.
     """
     inserted = 0
     errors = []
     for entry in sales_data:
         try:
-            # Parse date in format '02-Nov-25 11:09:12' to datetime
             dt = datetime.strptime(entry["sale_date"], "%d-%b-%y %H:%M:%S")
-            # Insert into sales_report (adjust columns as needed)
+            item_name = entry.get("item_name", "Imported Sale")
+            itemcode = entry.get("itemcode")
+            category_res = await session.execute(
+                text("SELECT category FROM menu WHERE itemcode = :itemcode LIMIT 1"),
+                {"itemcode": itemcode}
+            )
+            category_row = category_res.fetchone()
+            category = category_row[0] if category_row else None
+
             await session.execute(
                 text("""
-                    INSERT INTO sales_report (sale_date, total_price, item_name, count)
-                    VALUES (:sale_date, :total_price, :item_name, :count)
+                    INSERT INTO sales_report (sale_date, total_price, item_name, count, category)
+                    VALUES (:sale_date, :total_price, :item_name, :count, :category)
                 """),
                 {
                     "sale_date": dt,
                     "total_price": entry.get("total_price", 0),
-                    "item_name": entry.get("item_name", "Imported Sale"),
+                    "item_name": item_name,
                     "count": entry.get("count", 1),
+                    "category": category,
                 },
             )
             inserted += 1
         except Exception as e:
             errors.append({"entry": entry, "error": str(e)})
     await session.commit()
+
+    # --- Update missing categories after import ---
+    update_query = text("""
+        UPDATE sales_report sr
+        SET category = m.category
+        FROM menu m
+        WHERE sr.itemcode = m.itemcode
+        AND (sr.category IS NULL OR sr.category = '')
+    """)
+    await session.execute(update_query)
+    await session.commit()
     return {"inserted": inserted, "errors": errors}
-
-# --- Weekly Sales Forecast Endpoint ---
-from typing import Dict
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import LinearRegression
-
-import holidays
-
 
 @limiter.limit("10/minute")
 @router.get("/weekly-sales-forecast")
@@ -277,13 +295,13 @@ async def get_sales_summary(
 
         query = text(
             """
-            SELECT 
+            SELECT
                 SUM(quantity) as total_items_sold,
                 SUM(total_price) as total_revenue,
                 AVG(total_price) as avg_order_value,
                 COUNT(DISTINCT item_name) as unique_items_sold
-            FROM sales_report 
-            WHERE DATE(sale_date) BETWEEN DATE(:start_date) AND DATE(:end_date)
+            FROM sales_report
+            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
         """
         )
 
@@ -293,10 +311,10 @@ async def get_sales_summary(
             "[SALES SUMMARY] Params:",
             {"start_date": start_datetime, "end_date": end_datetime},
         )
-        # Pass as date objects for asyncpg compatibility
+        # Pass as datetime objects (not .date()) to match sales-detailed endpoint
         result = await session.execute(
             query,
-            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
+            {"start_date": start_datetime, "end_date": end_datetime},
         )
         row = result.fetchone()
         print("[SALES SUMMARY] Row:", row)
@@ -322,13 +340,24 @@ async def get_sales_summary(
             }
 
         print("[SALES SUMMARY] Returning data.")
+        # Fix: Map row indices to correct columns based on SELECT order
+        # Query returns: total_items_sold(row[0]), total_revenue(row[1]), avg_order_value(row[2]), unique_items_sold(row[3])
+        total_items = int(row[0] or 0)
+        total_revenue = float(row[1] or 0)
+        avg_order = float(row[2] or 0)
+        unique_items = int(row[3] or 0)
+
+        # Calculate total_orders: if we have items sold, use total_items as proxy for orders
+        # (This assumes 1 order = 1 item; adjust if you track orders separately)
+        total_orders = total_items  # or use COUNT(DISTINCT order_id) if you have order tracking
+
         return {
             "period": f"{start_date} to {end_date}",
-            "total_orders": row[0] or 0,
-            "total_items_sold": row[1] or 0,
-            "total_revenue": float(row[2] or 0),
-            "avg_order_value": float(row[3] or 0),
-            "unique_items_sold": row[3] or 0,
+            "total_orders": total_orders,
+            "total_items_sold": total_items,
+            "total_revenue": total_revenue,
+            "avg_order_value": avg_order,
+            "unique_items_sold": unique_items,
         }
     except Exception as e:
         import traceback
@@ -362,14 +391,15 @@ async def get_sales_by_item(
         query = text(
             """
             SELECT
-                item_name,
-                category,
-                SUM(quantity) as total_quantity,
-                SUM(total_price) as total_revenue,
-                AVG(unit_price) as avg_price
-            FROM sales_report
-            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
-            GROUP BY item_name, category
+                sr.item_name,
+                m.category,
+                SUM(sr.quantity) as total_quantity,
+                SUM(sr.total_price) as total_revenue,
+                AVG(sr.unit_price) as avg_price
+            FROM sales_report sr
+            LEFT JOIN menu m ON LOWER(TRIM(sr.item_name)) = LOWER(TRIM(m.dish_name))
+            WHERE DATE(sr.sale_date) BETWEEN :start_date AND :end_date
+            GROUP BY sr.item_name, m.category
             ORDER BY total_revenue DESC
             """
         )
@@ -448,11 +478,22 @@ async def get_sales_detailed(
         select_columns = base_columns + [col for col in optional_columns if col in available_columns]
         select_clause = ", ".join(select_columns)
 
+        # Query with LEFT JOIN to menu to get category if it's empty in sales_report
+        # Uses REPLACE to remove spaces for matching (e.g., "BAGNETSILOG" matches "Bagnet Silog")
         query = text(f"""
-            SELECT {select_clause}
-            FROM sales_report
-            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
-            ORDER BY sale_date DESC
+            SELECT
+                sr.sale_date,
+                sr.item_name,
+                COALESCE(NULLIF(sr.category, ''), m.category, '') as category,
+                sr.quantity,
+                sr.unit_price,
+                sr.price,
+                sr.total_price
+                {', sr.' + ', sr.'.join([col for col in optional_columns if col in available_columns]) if any(col in available_columns for col in optional_columns) else ''}
+            FROM sales_report sr
+            LEFT JOIN menu m ON LOWER(REPLACE(TRIM(sr.item_name), ' ', '')) = LOWER(REPLACE(TRIM(m.dish_name), ' ', ''))
+            WHERE DATE(sr.sale_date) BETWEEN :start_date AND :end_date
+            ORDER BY sr.sale_date DESC
             LIMIT 1000
         """)
 
@@ -794,11 +835,14 @@ async def get_comprehensive_sales_analytics(
     - This prevents the 1000x multiplication error that caused COGS to be 73x revenue
     """
     try:
-        # Default to last 30 days if no dates provided
+        # Default to ALL TIME if no dates provided
         if not start_date:
-            start_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
+            start_date = "2000-01-01"  # Far enough in the past to capture all sales
         if not end_date:
-            end_date = datetime.utcnow().strftime("%Y-%m-%d")
+            # Use current date in Philippine timezone (UTC+8)
+            from datetime import timezone
+            ph_tz = timezone(timedelta(hours=8))
+            end_date = datetime.now(ph_tz).strftime("%Y-%m-%d")
 
         start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
         end_datetime = datetime.strptime(end_date, "%Y-%m-%d")
@@ -1062,6 +1106,14 @@ async def get_comprehensive_sales_analytics(
         print(f"{'='*60}\n")
 
         # 3. Get Spoilage/Loss Costs
+        print(f"[DEBUG] Querying spoilage data: start={start_datetime.date()}, end={end_datetime.date()}")
+
+        # First check if there's ANY data in inventory_spoilage
+        check_query = text("SELECT COUNT(*), MIN(DATE(spoilage_date)), MAX(DATE(spoilage_date)) FROM inventory_spoilage")
+        check_result = await session.execute(check_query)
+        check_row = check_result.fetchone()
+        print(f"[DEBUG] Spoilage table has {check_row[0]} total records, date range: {check_row[1]} to {check_row[2]}")
+
         spoilage_query = text(
             """
             SELECT
@@ -1084,6 +1136,8 @@ async def get_comprehensive_sales_analytics(
         total_quantity_spoiled = spoilage_row.total_quantity_spoiled or 0
         total_spoilage_incidents = spoilage_row.total_spoilage_incidents or 0
         unique_items_spoiled = spoilage_row.unique_items_spoiled or 0
+
+        print(f"[DEBUG] Spoilage query results: cost={total_spoilage_cost}, qty={total_quantity_spoiled}, incidents={total_spoilage_incidents}")
 
         # 4. Calculate Profitability Metrics
         gross_profit = total_revenue - total_cogs
@@ -1386,3 +1440,24 @@ async def clean_sales_report_invalid_dates(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error cleaning sales_report: {str(e)}")
+
+@router.post("/update-sales-categories")
+async def update_sales_categories(session: AsyncSession = Depends(get_db)):
+    """
+    Update missing categories in sales_report by joining with menu table.
+    """
+    try:
+        update_query = text("""
+            UPDATE sales_report sr
+            SET category = m.category
+            FROM menu m
+            WHERE sr.itemcode = m.itemcode
+            AND (sr.category IS NULL OR sr.category = '')
+        """)
+        result = await session.execute(update_query)
+        await session.commit()
+        return {"message": "Sales categories updated successfully."}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error updating sales categories: {str(e)}")

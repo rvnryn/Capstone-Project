@@ -23,8 +23,6 @@ interface InventoryItem {
   total_value?: number; // Calculated: inStock * unit_cost
   [key: string]: string | number | undefined;
 }
-import { isOnline } from "@/app/utils/offlineUtils";
-import OfflineDataBanner from "@/app/components/OfflineDataBanner";
 import { TbReportAnalytics } from "react-icons/tb";
 import { MdAssessment } from "react-icons/md";
 import { MdCheckCircle } from "react-icons/md";
@@ -103,14 +101,17 @@ export default function ReportInventory() {
       let end = endDate;
       if (!start && !end && period !== "all") {
         const now = dayjs();
-        if (period === "weekly") {
+        if (period === "today") {
+          start = now.format("YYYY-MM-DD");
+          end = now.format("YYYY-MM-DD");
+        } else if (period === "week") {
           start = now.subtract(7, "day").format("YYYY-MM-DD");
           end = now.format("YYYY-MM-DD");
-        } else if (period === "monthly") {
-          start = now.startOf("month").format("YYYY-MM-DD");
+        } else if (period === "month") {
+          start = now.subtract(30, "day").format("YYYY-MM-DD");
           end = now.format("YYYY-MM-DD");
-        } else if (period === "yearly") {
-          start = now.startOf("year").format("YYYY-MM-DD");
+        } else if (period === "year") {
+          start = now.subtract(365, "day").format("YYYY-MM-DD");
           end = now.format("YYYY-MM-DD");
         }
       }
@@ -120,7 +121,6 @@ export default function ReportInventory() {
     }
   };
 
-  // (Removed duplicate offline state declarations and effects)
   // Spoilage items state
   const [spoilageItems, setSpoilageItems] = useState<any[]>([]);
   // Spoilage summary state
@@ -145,57 +145,12 @@ export default function ReportInventory() {
   const { user } = useAuth();
   const [pastInventory, setPastInventory] = useState<InventoryItem[]>([]);
 
-  // --- OFFLINE STATE/EFFECTS (must be after inventory declaration) ---
-  const [isOffline, setIsOffline] = useState(false);
-  const [offlineData, setOfflineData] = useState<InventoryItem[] | null>(null);
-  const [offlineError, setOfflineError] = useState<string | null>(null);
-
-  // Detect offline/online and handle localStorage fallback
+  // Cache inventory data in localStorage for backup
   useEffect(() => {
-    function handleOnline() {
-      setIsOffline(false);
-      setOfflineError(null);
-    }
-    function handleOffline() {
-      setIsOffline(true);
-    }
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    setIsOffline(!isOnline());
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
-  // Cache inventory data in localStorage when online, load from cache when offline
-  useEffect(() => {
-    if (!isOffline) {
-      // Online: cache inventory
-      try {
-        localStorage.setItem("inventoryReportCache", JSON.stringify(inventory));
-        setOfflineData(null);
-        setOfflineError(null);
-      } catch {}
-    } else {
-      // Offline: try to load from cache
-      try {
-        const cached = localStorage.getItem("inventoryReportCache");
-        if (cached) {
-          setOfflineData(JSON.parse(cached));
-          setOfflineError(null);
-        } else {
-          setOfflineData(null);
-          setOfflineError(
-            "No cached inventory report data available. Please connect to the internet to load report."
-          );
-        }
-      } catch {
-        setOfflineData(null);
-        setOfflineError("Failed to load cached inventory report data.");
-      }
-    }
-  }, [isOffline, inventory]);
+    try {
+      localStorage.setItem("inventoryReportCache", JSON.stringify(inventory));
+    } catch {}
+  }, [inventory]);
 
   const [historicalInventory, setHistoricalInventory] = useState<
     InventoryItem[]
@@ -204,22 +159,6 @@ export default function ReportInventory() {
   const [availableHistoricalDates, setAvailableHistoricalDates] = useState<
     string[]
   >([]);
-
-  // 💡 Smart Balance: Unique report dates including historical data
-  const uniqueReportDates = useMemo(() => {
-    const currentDates = inventory
-      .map((item) => item.report_date)
-      .filter((date) => !!date);
-    const pastDates = pastInventory
-      .map((item) => item.report_date)
-      .filter((date) => !!date);
-    const allDates = [
-      ...currentDates,
-      ...pastDates,
-      ...availableHistoricalDates,
-    ].map((date) => dayjs(date).format("YYYY-MM-DD"));
-    return [...new Set(allDates)].sort((a, b) => b.localeCompare(a)); // Sort newest first
-  }, [inventory, pastInventory, availableHistoricalDates]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showPopup, setShowPopup] = useState(false);
@@ -234,13 +173,32 @@ export default function ReportInventory() {
   const [categoryFilter, setCategoryFilter] = useState(""); // <-- Add this line
   const [stockStatusFilter, setStockStatusFilter] = useState("");
   const [expirationFilter, setExpirationFilter] = useState("");
-  const [period, setPeriod] = useState("all");
+  const [period, setPeriod] = useState<
+    "all" | "today" | "week" | "month" | "year" | "custom"
+  >("all");
 
   const [sortConfig, setSortConfig] = useState({
     key: "",
     direction: "asc",
   });
   const { fetchLogs, saveLogs } = useInventoryReportAPI();
+
+  const [settings, setSettings] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const res = await fetch("/api/inventory-settings");
+        if (!res.ok) throw new Error("Failed to fetch settings");
+        const data = await res.json();
+        setSettings(data);
+      } catch (err) {
+        console.error("Error fetching inventory settings:", err);
+        setSettings([]);
+      }
+    }
+    fetchSettings();
+  }, []);
 
   // Fetch inventory analytics
   const {
@@ -452,7 +410,8 @@ export default function ReportInventory() {
 
           // Calculate weighted average unit_cost if both have costs
           if (existing.unit_cost && item.unit_cost) {
-            const existingValue = (existing.inStock - item.inStock) * existing.unit_cost;
+            const existingValue =
+              (existing.inStock - item.inStock) * existing.unit_cost;
             const newValue = item.inStock * item.unit_cost;
             existing.unit_cost = (existingValue + newValue) / existing.inStock;
           } else if (item.unit_cost) {
@@ -483,18 +442,23 @@ export default function ReportInventory() {
       // Recalculate stock status based on final merged quantities
       const allInventoryWithStatus = Array.from(groupedInventory.values()).map(
         (item) => {
-          // Recalculate stock status based on total quantity
-          let newStatus = "Sufficient";
+          // Find the threshold for this item from settings
+          const setting = settings.find(
+            (s) =>
+              (s.name || s.item_name || "").toString().trim().toLowerCase() ===
+              (item.name || "").toString().trim().toLowerCase()
+          );
+          const threshold = Number(setting?.low_stock_threshold) || 10; // fallback to 10
+
+          let newStatus = "Normal";
           if (item.inStock === 0) {
-            newStatus = "Out of Stock";
-          } else if (item.inStock <= 10) {
-            newStatus = "Low";
-          } else if (item.inStock <= 50) {
-            newStatus = "Moderate";
-          } else if (item.inStock <= 100) {
-            newStatus = "Sufficient";
-          } else {
-            newStatus = "High";
+            newStatus = "Out Of Stock";
+          } else if (item.inStock <= 0.5 * threshold) {
+            newStatus = "Critical";
+          } else if (item.inStock <= threshold) {
+            newStatus = "Low Stock";
+          } else if (item.inStock > threshold) {
+            newStatus = "Normal";
           }
 
           return {
@@ -599,14 +563,17 @@ export default function ReportInventory() {
         if (!start && !end && period !== "all") {
           // Calculate start/end from period
           const now = dayjs();
-          if (period === "weekly") {
+          if (period === "today") {
+            start = now.format("YYYY-MM-DD");
+            end = now.format("YYYY-MM-DD");
+          } else if (period === "week") {
             start = now.subtract(7, "day").format("YYYY-MM-DD");
             end = now.format("YYYY-MM-DD");
-          } else if (period === "monthly") {
-            start = now.startOf("month").format("YYYY-MM-DD");
+          } else if (period === "month") {
+            start = now.subtract(30, "day").format("YYYY-MM-DD");
             end = now.format("YYYY-MM-DD");
-          } else if (period === "yearly") {
-            start = now.startOf("year").format("YYYY-MM-DD");
+          } else if (period === "year") {
+            start = now.subtract(365, "day").format("YYYY-MM-DD");
             end = now.format("YYYY-MM-DD");
           }
         }
@@ -654,14 +621,17 @@ export default function ReportInventory() {
       let end = endDate;
       if (!start && !end && period !== "all") {
         const now = dayjs();
-        if (period === "weekly") {
+        if (period === "today") {
+          start = now.format("YYYY-MM-DD");
+          end = now.format("YYYY-MM-DD");
+        } else if (period === "week") {
           start = now.subtract(7, "day").format("YYYY-MM-DD");
           end = now.format("YYYY-MM-DD");
-        } else if (period === "monthly") {
-          start = now.startOf("month").format("YYYY-MM-DD");
+        } else if (period === "month") {
+          start = now.subtract(30, "day").format("YYYY-MM-DD");
           end = now.format("YYYY-MM-DD");
-        } else if (period === "yearly") {
-          start = now.startOf("year").format("YYYY-MM-DD");
+        } else if (period === "year") {
+          start = now.subtract(365, "day").format("YYYY-MM-DD");
           end = now.format("YYYY-MM-DD");
         }
       }
@@ -784,14 +754,17 @@ export default function ReportInventory() {
       if (period === "all" || !dateStr) return true;
       const date = dayjs(dateStr);
       const now = dayjs();
-      if (period === "weekly") {
+      if (period === "today") {
+        return date.isSame(now, "day");
+      }
+      if (period === "week") {
         return date.isAfter(now.subtract(7, "day"), "day");
       }
-      if (period === "monthly") {
-        return date.isAfter(now.startOf("month"));
+      if (period === "month") {
+        return date.isAfter(now.subtract(30, "day"), "day");
       }
-      if (period === "yearly") {
-        return date.isAfter(now.startOf("year"));
+      if (period === "year") {
+        return date.isAfter(now.subtract(365, "day"), "day");
       }
       return true;
     },
@@ -806,8 +779,7 @@ export default function ReportInventory() {
     }
 
     // Otherwise, show active inventory (original logic)
-    // Use offlineData if offline, otherwise normal logic
-    const baseInventory = isOffline && offlineData ? offlineData : inventory;
+    const baseInventory = inventory;
     // When not in historical mode and period is 'all', include pastInventory (historical logs)
     let sourceData = isHistoricalMode ? historicalInventory : baseInventory;
     if (
@@ -851,8 +823,6 @@ export default function ReportInventory() {
     showSpoilageTable,
     spoilageInventory,
     inventory,
-    offlineData,
-    isOffline,
     historicalInventory,
     isHistoricalMode,
     period,
@@ -882,18 +852,24 @@ export default function ReportInventory() {
     if (!item.report_date) return true;
     const today = new Date();
     const itemDate = new Date(item.report_date);
-    if (period === "weekly") {
+    if (period === "today") {
+      return (
+        itemDate.getFullYear() === today.getFullYear() &&
+        itemDate.getMonth() === today.getMonth() &&
+        itemDate.getDate() === today.getDate()
+      );
+    }
+    if (period === "week") {
       const weekAgo = new Date(today);
       weekAgo.setDate(today.getDate() - 7);
       return itemDate >= weekAgo && itemDate <= today;
     }
-    if (period === "monthly") {
-      return (
-        itemDate.getFullYear() === today.getFullYear() &&
-        itemDate.getMonth() === today.getMonth()
-      );
+    if (period === "month") {
+      const monthAgo = new Date(today);
+      monthAgo.setDate(today.getDate() - 30);
+      return itemDate >= monthAgo && itemDate <= today;
     }
-    if (period === "yearly") {
+    if (period === "year") {
       return itemDate.getFullYear() === today.getFullYear();
     }
     return true;
@@ -1103,13 +1079,46 @@ export default function ReportInventory() {
     currentRow++;
 
     const filterData = [];
+
     if (searchQuery) filterData.push(["Search Query", searchQuery]);
     if (categoryFilter) filterData.push(["Category", categoryFilter]);
     if (stockStatusFilter) filterData.push(["Stock Status", stockStatusFilter]);
     if (expirationFilter) filterData.push(["Expiration", expirationFilter]);
-    if (startDate && endDate)
+
+    // Show date range for time period filter
+    if (period !== "all") {
+      let rangeLabel = "";
+      let rangeValue = "";
+      const now = dayjs();
+      if (period === "today") {
+        rangeLabel = "Date";
+        rangeValue = now.format("YYYY-MM-DD");
+      } else if (period === "week") {
+        rangeLabel = "Date Range";
+        rangeValue = `${now
+          .subtract(6, "day")
+          .format("YYYY-MM-DD")} to ${now.format("YYYY-MM-DD")}`;
+      } else if (period === "month") {
+        rangeLabel = "Date Range";
+        rangeValue = `${now
+          .subtract(29, "day")
+          .format("YYYY-MM-DD")} to ${now.format("YYYY-MM-DD")}`;
+      } else if (period === "year") {
+        rangeLabel = "Date Range";
+        rangeValue = `${now
+          .startOf("year")
+          .format("YYYY-MM-DD")} to ${now.format("YYYY-MM-DD")}`;
+      } else if (period === "custom" && startDate && endDate) {
+        rangeLabel = "Date Range";
+        rangeValue = `${startDate} to ${endDate}`;
+      } else {
+        rangeLabel = "Period";
+        rangeValue = period;
+      }
+      filterData.push([rangeLabel, rangeValue]);
+    } else if (startDate && endDate) {
       filterData.push(["Date Range", `${startDate} to ${endDate}`]);
-    if (period !== "all") filterData.push(["Period", period]);
+    }
 
     if (filterData.length > 0) {
       filterData.forEach(([label, value]) => {
@@ -1147,14 +1156,13 @@ export default function ReportInventory() {
     const outOfStockCount = filtered.filter(
       (item) => (item.inStock || 0) === 0
     ).length;
+
+    const criticalCount = filtered.filter(
+      (item) => item.stock === "Critical"
+    ).length;
+
     const lowStockCount = filtered.filter(
       (item) => item.stock === "Low"
-    ).length;
-    const moderateStockCount = filtered.filter(
-      (item) => item.stock === "Normal"
-    ).length;
-    const sufficientStockCount = filtered.filter(
-      (item) => item.stock === "High"
     ).length;
 
     // Calculate expiration-related stats
@@ -1189,9 +1197,8 @@ export default function ReportInventory() {
       ["Total Items", filtered.length],
       ["Total Stock Quantity", totalStock],
       ["Out of Stock", outOfStockCount],
+      ["Critical Stock", criticalCount],
       ["Low Stock", lowStockCount],
-      ["Moderate Stock", moderateStockCount],
-      ["Sufficient/High Stock", sufficientStockCount],
       ["Expiring Soon (7 days)", expiringSoonCount],
       ["Expired Items", expiredCount],
     ];
@@ -1434,7 +1441,9 @@ export default function ReportInventory() {
         item.batch_id_display || item.batch_id || "N/A",
         item.inStock || 0,
         item.unit_cost ? `₱${Number(item.unit_cost).toFixed(2)}` : "-",
-        item.unit_cost && item.inStock ? `₱${(Number(item.unit_cost) * Number(item.inStock)).toFixed(2)}` : "-",
+        item.unit_cost && item.inStock
+          ? `₱${(Number(item.unit_cost) * Number(item.inStock)).toFixed(2)}`
+          : "-",
         item.wastage || 0,
         item.stock || "Unknown",
         expirationDate ? expirationDate.toLocaleDateString() : "N/A",
@@ -1532,7 +1541,7 @@ export default function ReportInventory() {
     }
 
     // Set column widths
-    inventorySheet.getColumn(1).width = 8;  // #
+    inventorySheet.getColumn(1).width = 8; // #
     inventorySheet.getColumn(2).width = 25; // Item Name
     inventorySheet.getColumn(3).width = 20; // Category
     inventorySheet.getColumn(4).width = 15; // Batch ID
@@ -1708,6 +1717,43 @@ export default function ReportInventory() {
     setPeriod("all"); // 💡 Smart Balance: Reset to all time
   };
 
+  // Handler for time period changes
+  const handleTimePeriodChange = useCallback(
+    (newPeriod: "all" | "today" | "week" | "month" | "year" | "custom") => {
+      setPeriod(newPeriod);
+
+      const now = dayjs();
+      const today = now.format("YYYY-MM-DD");
+
+      switch (newPeriod) {
+        case "today":
+          setStartDate(today);
+          setEndDate(today);
+          break;
+        case "week":
+          setStartDate(now.subtract(7, "day").format("YYYY-MM-DD"));
+          setEndDate(today);
+          break;
+        case "month":
+          setStartDate(now.subtract(30, "day").format("YYYY-MM-DD"));
+          setEndDate(today);
+          break;
+        case "year":
+          setStartDate(now.subtract(365, "day").format("YYYY-MM-DD"));
+          setEndDate(today);
+          break;
+        case "all":
+          setStartDate("");
+          setEndDate("");
+          break;
+        case "custom":
+          // Don't change date range, user will set manually
+          break;
+      }
+    },
+    []
+  );
+
   const clearStockStatus = () => {
     setStockStatusFilter("");
   };
@@ -1799,14 +1845,6 @@ export default function ReportInventory() {
           isExporting={isExporting}
         />
         <ResponsiveMain>
-          {isOffline && (
-            <OfflineDataBanner
-              message={
-                offlineError ||
-                "You are offline. Showing cached inventory report data."
-              }
-            />
-          )}
           <main
             className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
             aria-label="Inventory Report main content"
@@ -1932,19 +1970,6 @@ export default function ReportInventory() {
                 </div>
 
                 {/* Divider */}
-                <div className="relative my-6 sm:my-8">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-700/50"></div>
-                  </div>
-                  <div className="relative flex justify-center">
-                    <span className="bg-gradient-to-br from-gray-900 to-black px-2 2xs:px-3 xs:px-4 text-blue-400/70 text-2xs 2xs:text-xs xs:text-sm flex items-center gap-1 2xs:gap-1.5 xs:gap-2">
-                      <FaChartLine className="text-2xs 2xs:text-xs xs:text-sm flex-shrink-0" />
-                      <span className="truncate">
-                        Advanced Analytics & Filtering
-                      </span>
-                    </span>
-                  </div>
-                </div>
 
                 {/* Toggle Button for Active/Spoilage Inventory */}
                 <div className="mb-6 flex items-center justify-center gap-3">
@@ -2026,9 +2051,11 @@ export default function ReportInventory() {
                         >
                           <option value="">All Categories</option>
                           <option value="Meats">Meats</option>
+                          <option value="Seafood">Seafood</option>
                           <option value="Vegetables & Fruits">
                             Vegetables & Fruits
                           </option>
+                          <option value="Dairy & Eggs">Dairy & Eggs</option>
                           <option value="Seasonings & Condiments">
                             Seasonings & Condiments
                           </option>
@@ -2049,9 +2076,10 @@ export default function ReportInventory() {
                           aria-label="Filter by stock status"
                         >
                           <option value="">All Status</option>
-                          <option value="Low">Critical/Low</option>
-                          <option value="Normal">Normal/Moderate</option>
-                          <option value="High">High/Sufficient</option>
+                          <option value="Critical">Critical</option>
+                          <option value="Low Stock">Low Stock</option>
+                          <option value="Normal">Normal</option>
+                          <option value="Out Of Stock">Out Of Stock</option>
                         </select>
                       </div>
 
@@ -2077,48 +2105,70 @@ export default function ReportInventory() {
 
                       <div>
                         <label className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-gray-300 text-2xs 2xs:text-xs xs:text-sm font-medium mb-1 2xs:mb-2">
-                          <FaChartLine className="text-blue-400 text-2xs 2xs:text-xs flex-shrink-0" />
+                          <FaCalendarAlt className="text-blue-400 text-2xs 2xs:text-xs flex-shrink-0" />
                           <span className="truncate">Time Period</span>
                         </label>
                         <select
                           value={period}
-                          onChange={(e) => setPeriod(e.target.value)}
+                          onChange={(e) =>
+                            handleTimePeriodChange(
+                              e.target.value as
+                                | "all"
+                                | "today"
+                                | "week"
+                                | "month"
+                                | "year"
+                                | "custom"
+                            )
+                          }
                           className="w-full bg-gray-700/50 text-white rounded-md 2xs:rounded-lg px-2 2xs:px-3 py-2 2xs:py-3 border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 cursor-pointer text-2xs 2xs:text-xs xs:text-sm transition-all min-h-[36px] 2xs:min-h-[40px] xs:min-h-[44px] touch-manipulation"
                         >
                           <option value="all">All Time</option>
-                          <option value="weekly">This Week</option>
-                          <option value="monthly">This Month</option>
-                          <option value="yearly">This Year</option>
+                          <option value="today">Today</option>
+                          <option value="week">This Week</option>
+                          <option value="month">This Month</option>
+                          <option value="year">This Year</option>
+                          <option value="custom">Custom Range</option>
                         </select>
                       </div>
                     </div>
 
-                    {/* Date Range Filter Row */}
-                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2 2xs:gap-3 xs:gap-4">
-                      <div>
-                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
-                          From Date
+                    {/* Custom Date Range (shown when Custom is selected) */}
+                    {period === "custom" && (
+                      <div className="mb-4 pb-4 border-b border-gray-700/30">
+                        <label className="flex items-center gap-1.5 xs:gap-2 text-gray-300 text-xs xs:text-xs sm:text-sm font-medium mb-1.5 xs:mb-2">
+                          <FaCalendarAlt className="text-blue-400 text-xs flex-shrink-0" />
+                          <span className="truncate">Custom Date Range</span>
                         </label>
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 text-2xs xs:text-xs sm:text-sm transition-all"
-                        />
-                      </div>
+                        <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 2xs:gap-3 xs:gap-4">
+                          <div>
+                            <label className="block text-xs xs:text-sm text-gray-400 mb-1">
+                              From Date
+                            </label>
+                            <input
+                              type="date"
+                              value={startDate}
+                              onChange={(e) => setStartDate(e.target.value)}
+                              className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 text-2xs xs:text-xs sm:text-sm transition-all"
+                              placeholder="Start date"
+                            />
+                          </div>
 
-                      <div>
-                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2 font-medium">
-                          To Date
-                        </label>
-                        <input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 text-2xs xs:text-xs sm:text-sm transition-all"
-                        />
+                          <div>
+                            <label className="block text-xs xs:text-sm text-gray-400 mb-1">
+                              To Date
+                            </label>
+                            <input
+                              type="date"
+                              value={endDate}
+                              onChange={(e) => setEndDate(e.target.value)}
+                              className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 text-2xs xs:text-xs sm:text-sm transition-all"
+                              placeholder="End date"
+                            />
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Clear All Button inside filter controls */}
                     {(searchQuery ||
@@ -2218,17 +2268,28 @@ export default function ReportInventory() {
                               </div>
                             )}
                             {(startDate || endDate) && (
-                              <div className="flex items-center gap-0.5 2xs:gap-1 bg-pink-500/20 text-pink-400 px-1 2xs:px-1.5 xs:px-2 py-0.5 2xs:py-1 rounded-sm 2xs:rounded-md border border-pink-500/30 max-w-[120px] 2xs:max-w-[150px] xs:max-w-none">
-                                <span className="truncate">
+                              <div
+                                className="flex items-center gap-1 bg-pink-500/20 text-pink-400 px-3 py-1 rounded-md border border-pink-500/30 whitespace-nowrap overflow-visible shadow-md"
+                                style={{ maxWidth: "none" }}
+                              >
+                                <span
+                                  className="font-semibold"
+                                  style={{
+                                    whiteSpace: "nowrap",
+                                    overflow: "visible",
+                                    textOverflow: "unset",
+                                  }}
+                                >
                                   Range: {startDate || "..."} to{" "}
                                   {endDate || "..."}
                                 </span>
                                 <button
                                   onClick={clearDateRange}
-                                  className="text-pink-300 hover:text-white transition-colors text-xs 2xs:text-sm touch-manipulation flex-shrink-0"
+                                  className="ml-2 text-pink-300 hover:text-white font-bold text-base"
                                   title="Clear date range"
+                                  style={{ fontSize: "1.1em" }}
                                 >
-                                  ✕
+                                  ×
                                 </button>
                               </div>
                             )}
@@ -2350,11 +2411,13 @@ export default function ReportInventory() {
                               </span>
                               <span
                                 className={`text-2xs font-bold ${
-                                  item.stock === "Low"
-                                    ? "text-red-400"
-                                    : item.stock === "Normal"
-                                    ? "text-blue-400"
-                                    : "text-green-400"
+                                  item.stock === "Critical"
+                                    ? "bg-red-500/20 text-red-400 border-red-500/30"
+                                    : item.stock === "Low Stock"
+                                    ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                                    : item.stock === "Out Of Stock"
+                                    ? "bg-gray-500/20 text-gray-400 border-gray-500/30"
+                                    : "bg-green-500/20 text-green-400 border-green-500/30"
                                 }`}
                               >
                                 {item.stock}
@@ -2403,11 +2466,13 @@ export default function ReportInventory() {
                               </div>
                               <span
                                 className={`px-1.5 py-0.5 rounded text-2xs font-bold ${
-                                  item.stock === "Low"
-                                    ? "bg-red-500/20 text-red-400"
-                                    : item.stock === "Normal"
-                                    ? "bg-blue-500/20 text-blue-400"
-                                    : "bg-green-500/20 text-green-400"
+                                  item.stock === "Critical"
+                                    ? "bg-red-500/20 text-red-400 border-red-500/30"
+                                    : item.stock === "Low Stock"
+                                    ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                                    : item.stock === "Out Of Stock"
+                                    ? "bg-gray-500/20 text-gray-400 border-gray-500/30"
+                                    : "bg-green-500/20 text-green-400 border-green-500/30"
                                 }`}
                               >
                                 {item.stock}
@@ -2507,11 +2572,13 @@ export default function ReportInventory() {
                                   </span>
                                   <span
                                     className={`px-1.5 py-0.5 rounded text-2xs xs:text-xs font-medium whitespace-nowrap ${
-                                      item.stock === "Low"
-                                        ? "bg-red-500/20 text-red-400"
-                                        : item.stock === "Normal"
-                                        ? "bg-blue-500/20 text-blue-400"
-                                        : "bg-green-500/20 text-green-400"
+                                      item.stock === "Critical"
+                                        ? "bg-red-500/20 text-red-400 border-red-500/30"
+                                        : item.stock === "Low Stock"
+                                        ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                                        : item.stock === "Out Of Stock"
+                                        ? "bg-gray-500/20 text-gray-400 border-gray-500/30"
+                                        : "bg-green-500/20 text-green-400 border-green-500/30"
                                     }`}
                                   >
                                     {item.stock}
@@ -2713,11 +2780,13 @@ export default function ReportInventory() {
                                 ) : (
                                   <span
                                     className={`px-2 py-1 rounded text-xs font-bold ${
-                                      item.stock === "Low"
-                                        ? "bg-red-500/20 text-red-400"
-                                        : item.stock === "Normal"
-                                        ? "bg-blue-500/20 text-blue-400"
-                                        : "bg-green-500/20 text-green-400"
+                                      item.stock === "Critical"
+                                        ? "bg-red-500/20 text-red-400 border-red-500/30"
+                                        : item.stock === "Low Stock"
+                                        ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                                        : item.stock === "Out Of Stock"
+                                        ? "bg-gray-500/20 text-gray-400 border-gray-500/30"
+                                        : "bg-green-500/20 text-green-400 border-green-500/30"
                                     }`}
                                   >
                                     {item.stock}
@@ -2850,7 +2919,10 @@ export default function ReportInventory() {
                                   <div className="flex items-center gap-3">
                                     <div className="w-2 h-2 rounded-full bg-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     <span className="text-blue-400 group-hover:text-blue-300 transition-colors font-mono text-sm">
-                                      #{(currentPage - 1) * itemsPerPage + index + 1}
+                                      #
+                                      {(currentPage - 1) * itemsPerPage +
+                                        index +
+                                        1}
                                     </span>
                                   </div>
                                 </td>
@@ -3026,18 +3098,16 @@ export default function ReportInventory() {
                                   ) : (
                                     <span
                                       className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                                        item.stock === "Low"
+                                        item.stock === "Critical"
                                           ? "bg-red-500/20 text-red-400 border-red-500/30"
-                                          : item.stock === "Normal"
+                                          : item.stock === "Low Stock"
                                           ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                                          : item.stock === "Out Of Stock"
+                                          ? "bg-gray-500/20 text-gray-400 border-gray-500/30"
                                           : "bg-green-500/20 text-green-400 border-green-500/30"
                                       }`}
                                     >
-                                      {item.stock === "Low"
-                                        ? "Critical"
-                                        : item.stock === "Normal"
-                                        ? "Moderate"
-                                        : "Sufficient"}
+                                      {item.stock}
                                     </span>
                                   )}
                                 </td>
@@ -3147,18 +3217,16 @@ export default function ReportInventory() {
                               </div>
                               <span
                                 className={`px-3 py-1 rounded-full text-xs font-bold border ml-3 ${
-                                  item.stock === "Low"
+                                  item.stock === "Critical"
                                     ? "bg-red-500/20 text-red-400 border-red-500/30"
-                                    : item.stock === "Normal"
-                                    ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                                    : item.stock === "Low Stock"
+                                    ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                                    : item.stock === "Out Of Stock"
+                                    ? "bg-gray-500/20 text-gray-400 border-gray-500/30"
                                     : "bg-green-500/20 text-green-400 border-green-500/30"
                                 }`}
                               >
-                                {item.stock === "Low"
-                                  ? "Critical"
-                                  : item.stock === "Normal"
-                                  ? "Moderate"
-                                  : "Sufficient"}
+                                {item.stock}
                               </span>
                             </div>
 

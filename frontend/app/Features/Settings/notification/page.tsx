@@ -48,7 +48,7 @@ export default function NotificationSettings() {
   // New states for toggle confirmation
   const [showToggleModal, setShowToggleModal] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{
-    type: "lowStock" | "expiration";
+    type: "lowStock" | "expiration" | "transfer";
     value: boolean;
   } | null>(null);
 
@@ -62,7 +62,10 @@ export default function NotificationSettings() {
       settings.expiration_enabled !== expirationEnabled ||
       settings.expiration_days !== expirationDays ||
       JSON.stringify(settings.expiration_method) !==
-        JSON.stringify(expirationMethod)
+        JSON.stringify(expirationMethod) ||
+      settings.transfer_enabled !== transferEnabled ||
+      JSON.stringify(settings.transfer_method) !==
+        JSON.stringify(transferMethod)
     );
   };
   // Intercept navigation to settings (side nav or cancel)
@@ -93,7 +96,7 @@ export default function NotificationSettings() {
   };
 
   const handleToggleRequest = (
-    type: "lowStock" | "expiration",
+    type: "lowStock" | "expiration" | "transfer",
     value: boolean
   ) => {
     setPendingToggle({ type, value });
@@ -116,6 +119,8 @@ export default function NotificationSettings() {
       expiration_enabled: expirationEnabled,
       expiration_days: expirationDays,
       expiration_method: expirationMethod,
+      transfer_enabled: transferEnabled,
+      transfer_method: transferMethod,
     };
 
     const ok = await updateSettings(newSettings);
@@ -161,7 +166,7 @@ export default function NotificationSettings() {
   useEffect(() => {
     console.log("[NotificationSettings] fetched settings:", settings);
   }, [settings]);
-  
+
   // Add local state for settings to allow setSettings usage
   const [localSettings, setSettings] = useState(settings);
 
@@ -218,18 +223,24 @@ export default function NotificationSettings() {
   // Sync UI state with backend settings from API hook
   useEffect(() => {
     if (localSettings) {
-      setLowStockEnabled(localSettings.low_stock_enabled);
+      setLowStockEnabled(Boolean(localSettings.low_stock_enabled));
       setExpirationDays(Number(localSettings.expiration_days));
       setLowStockMethod(
         Array.isArray(localSettings.low_stock_method)
           ? localSettings.low_stock_method
           : [localSettings.low_stock_method]
       );
-      setExpirationEnabled(localSettings.expiration_enabled);
+      setExpirationEnabled(Boolean(localSettings.expiration_enabled));
       setExpirationMethod(
         Array.isArray(localSettings.expiration_method)
           ? localSettings.expiration_method
           : [localSettings.expiration_method]
+      );
+      setTransferEnabled(Boolean(localSettings.transfer_enabled ?? true));
+      setTransferMethod(
+        Array.isArray(localSettings.transfer_method)
+          ? localSettings.transfer_method
+          : [localSettings.transfer_method || "inapp"]
       );
     }
   }, [localSettings]);
@@ -240,6 +251,8 @@ export default function NotificationSettings() {
   const [expirationEnabled, setExpirationEnabled] = useState(true);
   const [expirationDays, setExpirationDays] = useState(3);
   const [expirationMethod, setExpirationMethod] = useState<string[]>(["inapp"]);
+  const [transferEnabled, setTransferEnabled] = useState(true);
+  const [transferMethod, setTransferMethod] = useState<string[]>(["inapp"]);
 
   const handleConfirmToggle = () => {
     if (!pendingToggle) return;
@@ -247,6 +260,8 @@ export default function NotificationSettings() {
       setLowStockEnabled(pendingToggle.value);
     if (pendingToggle.type === "expiration")
       setExpirationEnabled(pendingToggle.value);
+    if (pendingToggle.type === "transfer")
+      setTransferEnabled(pendingToggle.value);
     setShowToggleModal(false);
     setPendingToggle(null);
   };
@@ -371,16 +386,33 @@ export default function NotificationSettings() {
               </div>
 
               <form className="flex flex-col gap-10 flex-1 justify-center">
-                {/* Low Stock Alert */}
+                {/* Stock Alert */}
                 <section
-                  className={`bg-[#151a23] rounded-xl xs:rounded-2xl p-4 xs:p-6 sm:p-8 flex flex-col gap-6 shadow-lg w-full ${
+                  className={`bg-gradient-to-br from-[#151a23] to-[#1a2030] rounded-xl xs:rounded-2xl p-4 xs:p-6 sm:p-8 flex flex-col gap-6 shadow-lg w-full border border-yellow-500/20 ${
                     !lowStockEnabled ? "opacity-50" : ""
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xl font-bold text-yellow-400">
-                      Low Stock Alert
-                    </h3>
+                    <div className="flex items-center gap-3">
+                      <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 p-3 rounded-lg">
+                        <svg
+                          className="w-6 h-6 text-yellow-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                          />
+                        </svg>
+                      </div>
+                      <h3 className="text-xl font-bold text-yellow-400">
+                        Stock Alert
+                      </h3>
+                    </div>
                     <label className="inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
@@ -407,21 +439,127 @@ export default function NotificationSettings() {
                     </label>
                   </div>
                   <p className="text-gray-300 text-base mb-2">
-                    Get notified when ingredients or supplies are running low so
-                    you can reorder before you run out.
+                    Get notified about all stock level issues
                   </p>
+
+                  {/* Alert Info Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Out of Stock */}
+                    <div className="bg-gradient-to-br from-[#1a2030] to-[#0f1419] rounded-lg p-5 border border-yellow-500/30 hover:border-yellow-400/50 transition-all duration-300">
+                      <div className="flex items-start gap-3">
+                        <div className="bg-gradient-to-br from-gray-500/20 to-gray-600/20 p-2.5 rounded-lg flex-shrink-0">
+                          <svg
+                            className="w-5 h-5 text-gray-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-white font-semibold text-sm mb-1">
+                            Out of Stock
+                          </h4>
+                          <p className="text-gray-400 text-xs leading-relaxed">
+                            Items completely depleted (0 quantity)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Critical Stock */}
+                    <div className="bg-gradient-to-br from-[#1a2030] to-[#0f1419] rounded-lg p-5 border border-yellow-500/30 hover:border-yellow-400/50 transition-all duration-300">
+                      <div className="flex items-start gap-3">
+                        <div className="bg-gradient-to-br from-red-500/20 to-red-600/20 p-2.5 rounded-lg flex-shrink-0">
+                          <svg
+                            className="w-5 h-5 text-red-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-white font-semibold text-sm mb-1">
+                            Critical Stock
+                          </h4>
+                          <p className="text-gray-400 text-xs leading-relaxed">
+                            Items at or below 50% of threshold
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Low Stock */}
+                    <div className="bg-gradient-to-br from-[#1a2030] to-[#0f1419] rounded-lg p-5 border border-yellow-500/30 hover:border-yellow-400/50 transition-all duration-300">
+                      <div className="flex items-start gap-3">
+                        <div className="bg-gradient-to-br from-orange-500/20 to-orange-600/20 p-2.5 rounded-lg flex-shrink-0">
+                          <svg
+                            className="w-5 h-5 text-orange-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-white font-semibold text-sm mb-1">
+                            Low Stock
+                          </h4>
+                          <p className="text-gray-400 text-xs leading-relaxed">
+                            Items between 50-100% of threshold
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </section>
 
                 {/* Expiration Alert */}
                 <section
-                  className={`bg-[#151a23] rounded-xl xs:rounded-2xl p-4 xs:p-6 sm:p-8 flex flex-col gap-6 shadow-lg w-full ${
+                  className={`bg-gradient-to-br from-[#151a23] to-[#1a2030] rounded-xl xs:rounded-2xl p-4 xs:p-6 sm:p-8 flex flex-col gap-6 shadow-lg w-full border border-yellow-500/20 ${
                     !expirationEnabled ? "opacity-50" : ""
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xl font-bold text-yellow-400">
-                      Expiration Alert
-                    </h3>
+                    <div className="flex items-center gap-3">
+                      <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-600/20 p-3 rounded-lg">
+                        <svg
+                          className="w-6 h-6 text-red-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                          />
+                        </svg>
+                      </div>
+                      <h3 className="text-xl font-bold text-red-400">
+                        Expiration Alert
+                      </h3>
+                    </div>
                     <label className="inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
@@ -433,7 +571,7 @@ export default function NotificationSettings() {
                       />
                       <span
                         className={`w-12 h-6 flex items-center rounded-full p-1 transition ${
-                          expirationEnabled ? "bg-yellow-400" : "bg-gray-700"
+                          expirationEnabled ? "bg-red-400" : "bg-gray-700"
                         }`}
                       >
                         <span
@@ -442,41 +580,322 @@ export default function NotificationSettings() {
                           }`}
                         />
                       </span>
-                      <span className="ml-2 text-base font-semibold text-yellow-400">
+                      <span className="ml-2 text-base font-semibold text-red-400">
                         {expirationEnabled ? "Enabled" : "Disabled"}
                       </span>
                     </label>
                   </div>
                   <p className="text-gray-300 text-base mb-2">
                     Get notified{" "}
-                    <span className="font-semibold text-yellow-400">
+                    <span className="font-semibold text-red-400">
                       {expirationDays}
                     </span>{" "}
-                    day(s) before ingredients or products expire, so you can use
-                    or replace them in time.
+                    day(s) before items expire
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-6 items-center">
-                    <label
-                      htmlFor="expirationDays"
-                      className="text-gray-200 text-base"
-                    >
-                      Days before expiration:
+
+                  {/* Expiration Settings Card */}
+                  <div className="bg-gradient-to-br from-[#1a2030] to-[#0f1419] rounded-lg p-6 border border-yellow-500/30">
+                    <div className="flex flex-col gap-5">
+                      {/* Days Input Section */}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 p-2.5 rounded-lg flex-shrink-0">
+                            <svg
+                              className="w-5 h-5 text-blue-400"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <label
+                              htmlFor="expirationDays"
+                              className="text-white font-semibold text-sm mb-1 block"
+                            >
+                              Notification Window
+                            </label>
+                            <p className="text-gray-400 text-xs">
+                              Days before expiration
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <input
+                            id="expirationDays"
+                            type="number"
+                            min={1}
+                            max={365}
+                            value={expirationDays}
+                            onChange={(e) =>
+                              setExpirationDays(Number(e.target.value))
+                            }
+                            className="w-20 bg-gray-800 text-white text-center rounded-lg px-3 py-2.5 border-2 border-gray-600 focus:border-yellow-400 focus:outline-none text-base font-semibold transition-colors"
+                            disabled={!expirationEnabled}
+                          />
+                          <span className="text-gray-400 text-sm font-medium">
+                            days
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Info Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-gray-700/50">
+                        <div className="flex items-start gap-2">
+                          <svg
+                            className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <div>
+                            <p className="text-white text-xs font-medium">
+                              Prevent Waste
+                            </p>
+                            <p className="text-gray-400 text-xs">
+                              Use items before expiry
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <svg
+                            className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <div>
+                            <p className="text-white text-xs font-medium">
+                              Stay Informed
+                            </p>
+                            <p className="text-gray-400 text-xs">
+                              Track expiration dates
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Transfer Notifications */}
+                <section
+                  className={`bg-gradient-to-br from-[#151a23] to-[#1a2030] rounded-xl xs:rounded-2xl p-4 xs:p-6 sm:p-8 flex flex-col gap-6 shadow-lg w-full border border-blue-500/20 ${
+                    !transferEnabled ? "opacity-50" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 p-3 rounded-lg">
+                        <svg
+                          className="w-6 h-6 text-blue-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                          />
+                        </svg>
+                      </div>
+                      <h3 className="text-xl font-bold text-blue-400">
+                        Transfer Notifications
+                      </h3>
+                    </div>
+                    <label className="inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={transferEnabled}
+                        onChange={() =>
+                          handleToggleRequest("transfer", !transferEnabled)
+                        }
+                        className="sr-only"
+                      />
+                      <span
+                        className={`w-12 h-6 flex items-center rounded-full p-1 transition ${
+                          transferEnabled ? "bg-blue-400" : "bg-gray-700"
+                        }`}
+                      >
+                        <span
+                          className={`bg-white w-5 h-5 rounded-full shadow-md transform transition ${
+                            transferEnabled ? "translate-x-6" : ""
+                          }`}
+                        />
+                      </span>
+                      <span className="ml-2 text-base font-semibold text-blue-400">
+                        {transferEnabled ? "Enabled" : "Disabled"}
+                      </span>
                     </label>
-                    <input
-                      id="expirationDays"
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={expirationDays}
-                      onChange={(e) =>
-                        setExpirationDays(Number(e.target.value))
-                      }
-                      className="w-24 bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-yellow-400 text-base"
-                      disabled={!expirationEnabled}
-                    />
-                    <span className="text-gray-400 text-sm">
-                      (Set how many days in advance you want to be notified)
-                    </span>
+                  </div>
+                  <p className="text-gray-300 text-base mb-2">
+                    Get notified when automatic inventory transfers occur
+                  </p>
+
+                  {/* Transfer Cards Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {/* Today's Inventory Card */}
+                    <div className="bg-gradient-to-br from-[#1a2030] to-[#0f1419] rounded-lg p-5 border border-blue-500/30 hover:border-blue-400/50 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 p-2.5 rounded-lg flex-shrink-0">
+                          <svg
+                            className="w-5 h-5 text-emerald-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-white font-semibold text-sm mb-1">
+                            Today's Inventory
+                          </h4>
+                          <p className="text-gray-400 text-xs leading-relaxed">
+                            Transfer from surplus to today's stock
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-700/50">
+                        <svg
+                          className="w-4 h-4 text-emerald-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <span className="text-emerald-400 text-xs font-medium">
+                          6:00 AM Daily
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Master Inventory Card */}
+                    <div className="bg-gradient-to-br from-[#1a2030] to-[#0f1419] rounded-lg p-5 border border-blue-500/30 hover:border-blue-400/50 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 p-2.5 rounded-lg flex-shrink-0">
+                          <svg
+                            className="w-5 h-5 text-purple-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-white font-semibold text-sm mb-1">
+                            Master Inventory
+                          </h4>
+                          <p className="text-gray-400 text-xs leading-relaxed">
+                            Transfer top selling items to stock
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-700/50">
+                        <svg
+                          className="w-4 h-4 text-purple-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <span className="text-purple-400 text-xs font-medium">
+                          6:00 AM Daily
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Surplus Inventory Card */}
+                    <div className="bg-gradient-to-br from-[#1a2030] to-[#0f1419] rounded-lg p-5 border border-blue-500/30 hover:border-blue-400/50 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10 md:col-span-2 xl:col-span-1">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="bg-gradient-to-br from-amber-500/20 to-amber-600/20 p-2.5 rounded-lg flex-shrink-0">
+                          <svg
+                            className="w-5 h-5 text-amber-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-white font-semibold text-sm mb-1">
+                            Surplus Inventory
+                          </h4>
+                          <p className="text-gray-400 text-xs leading-relaxed">
+                            Transfer unsold items to surplus
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-700/50">
+                        <svg
+                          className="w-4 h-4 text-amber-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <span className="text-amber-400 text-xs font-medium">
+                          10:00 PM Daily
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </section>
               </form>

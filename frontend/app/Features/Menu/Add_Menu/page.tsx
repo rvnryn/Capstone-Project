@@ -17,6 +17,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import { useInventoryItemNames } from "@/app/hooks/Itemnames";
+import { getUnitsForCategory } from "@/app/constants/unitOptions";
 
 export default function AddMenuPage() {
   const router = useRouter();
@@ -63,6 +64,10 @@ export default function AddMenuPage() {
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+
+  // Collapsible sections state
+  const [showBasicInfo, setShowBasicInfo] = useState(true);
+  const [showIngredients, setShowIngredients] = useState(true);
 
   // Restore cached form/ingredients if offline
   useEffect(() => {
@@ -334,10 +339,10 @@ export default function AddMenuPage() {
       <ResponsiveMain>
         <main
           className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
-          aria-label="Add Menu main content"
+          aria-label="Add menu main content"
           tabIndex={-1}
         >
-          <div className="max-w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-4xl 2xl:max-w-5xl mx-auto w-full">
+          <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
             <div className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl xs:rounded-3xl shadow-2xl border border-gray-800/50 p-2 xs:p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10 2xl:p-12 w-full">
               <div className="flex flex-row items-center justify-center gap-4 mb-6 w-full">
                 <div className="relative flex-shrink-0">
@@ -355,309 +360,647 @@ export default function AddMenuPage() {
                   </p>
                 </div>
               </div>
-              <div className="relative mb-3 xs:mb-4 sm:mb-6 md:mb-8">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gradient-to-r from-transparent via-yellow-400/50 to-transparent"></div>
-                </div>
-                <div className="relative flex justify-center">
-                  <span className="bg-gradient-to-br from-gray-900 to-black px-2 xs:px-3 sm:px-4 text-yellow-400/70 text-xs xs:text-sm">
-                    Enter Dish Details
-                  </span>
-                </div>
-              </div>
-              <form
-                onSubmit={handleSubmit}
-                className="space-y-3 xs:space-y-4 sm:space-y-6 md:space-y-8"
-              >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8">
-                  <div className="space-y-4">
-                    <div className="group">
-                      <label
-                        htmlFor="itemcode"
-                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                      >
-                        Item Code
-                        <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="itemcode"
-                        name="itemcode"
-                        required
-                        value={formData.itemcode}
-                        onChange={handleChange}
-                        placeholder="Enter item code..."
-                        className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                      />
+              {/* Quick Stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-blue-900/40 to-blue-800/40 backdrop-blur-sm rounded-xl p-4 border border-blue-500/30 hover:border-blue-400/50 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-blue-300 text-xs font-medium mb-1">
+                        Basic Info
+                      </p>
+                      <p className="text-white text-xl font-bold">
+                        {
+                          [
+                            formData.itemcode,
+                            formData.dish_name,
+                            formData.category,
+                            formData.price,
+                          ].filter(Boolean).length
+                        }
+                        /4
+                      </p>
                     </div>
-                    <div className="group">
-                      <label
-                        htmlFor="dish_name"
-                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                    <div className="bg-blue-500/20 p-3 rounded-lg">
+                      <svg
+                        className="w-5 h-5 text-blue-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        Dish Name
-                        <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="dish_name"
-                        name="dish_name"
-                        required
-                        value={formData.dish_name}
-                        onChange={handleChange}
-                        placeholder="Enter dish name..."
-                        className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                      />
-                    </div>
-                    <div className="group">
-                      <label
-                        htmlFor="category"
-                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                      >
-                        Category
-                        <span className="text-red-400">*</span>
-                      </label>
-                      <select
-                        id="category"
-                        name="category"
-                        required
-                        value={formData.category}
-                        onChange={handleChange}
-                        className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 cursor-pointer border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                      >
-                        <option value="" className="bg-gray-800">
-                          Select Category...
-                        </option>
-                        <option>Bagnet Meals</option>
-                        <option>Sizzlers</option>
-                        <option>Unli Rice w/ Bone Marrow</option>
-                        <option>Soups w/ Bone Marrow</option>
-                        <option>Combo</option>
-                        <option>For Sharing</option>
-                        <option>Noodles</option>
-                        <option>Desserts</option>
-                        <option>Sides</option>
-                        <option>Drinks</option>
-                      </select>
-                    </div>
-                    <div className="group">
-                      <label
-                        htmlFor="price"
-                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                      >
-                        Price (₱)
-                        <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        id="price"
-                        name="price"
-                        required
-                        min={0}
-                        step="0.01"
-                        value={formData.price}
-                        onChange={handleChange}
-                        placeholder="Enter price..."
-                        className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                      />
-                    </div>
-                    <div className="group">
-                      <label
-                        htmlFor="description"
-                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                      >
-                        Description
-                      </label>
-                      <textarea
-                        id="description"
-                        name="description"
-                        value={formData.description}
-                        onChange={(e) => {
-                          setIsDirty(true);
-                          setFormData((prev) => ({
-                            ...prev,
-                            description: e.target.value,
-                          }));
-                        }}
-                        placeholder="Enter dish description..."
-                        className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70 resize-vertical min-h-[80px]"
-                        rows={3}
-                      />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
                     </div>
                   </div>
-                  <div className="flex flex-col items-center justify-center w-full gap-2">
-                    <label className="flex items-center gap-2 text-gray-300 mb-2 font-medium text-sm sm:text-base">
-                      Dish Image
-                    </label>
-                    <div className="relative w-32 h-32 xs:w-44 xs:h-44 md:w-44 md:h-52 border-2 border-dashed border-yellow-400/40 bg-gray-900 rounded-lg flex items-center justify-center">
-                      {previewUrl ? (
-                        <Image
-                          src={previewUrl}
-                          alt="Selected"
-                          width={208}
-                          height={208}
-                          className="w-full h-full object-contain rounded-lg shadow-xl"
-                          style={{ objectFit: "contain" }}
-                          unoptimized
-                        />
-                      ) : (
-                        <span className="text-gray-500">No Image</span>
-                      )}
+                </div>
+
+                <div className="bg-gradient-to-br from-green-900/40 to-green-800/40 backdrop-blur-sm rounded-xl p-4 border border-green-500/30 hover:border-green-400/50 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-green-300 text-xs font-medium mb-1">
+                        Ingredients
+                      </p>
+                      <p className="text-white text-xl font-bold">
+                        {
+                          ingredients.filter((ing) => ing.name && ing.quantity)
+                            .length
+                        }
+                      </p>
                     </div>
-                    <label className="mt-4 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-0.5 rounded-lg font-semibold shadow cursor-pointer transition">
-                      Upload Image
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        className="hidden"
-                      />
-                    </label>
-                    <span className="text-xs text-gray-400 mt-1">
-                      Choose an image to upload.
+                    <div className="bg-green-500/20 p-3 rounded-lg">
+                      <svg
+                        className="w-5 h-5 text-green-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-900/40 to-purple-800/40 backdrop-blur-sm rounded-xl p-4 border border-purple-500/30 hover:border-purple-400/50 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-purple-300 text-xs font-medium mb-1">
+                        Image
+                      </p>
+                      <p className="text-white text-xl font-bold">
+                        {selectedImage ? "✓" : "—"}
+                      </p>
+                    </div>
+                    <div className="bg-purple-500/20 p-3 rounded-lg">
+                      <svg
+                        className="w-5 h-5 text-purple-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Steps */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between max-w-2xl mx-auto">
+                  <div className="flex flex-col items-center flex-1">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center shadow-lg">
+                      <span className="text-black font-bold text-sm">1</span>
+                    </div>
+                    <span className="text-xs text-yellow-400 font-medium mt-2">
+                      Basic Info
+                    </span>
+                  </div>
+                  <div className="flex-1 h-1 bg-gradient-to-r from-yellow-400 to-gray-600 mx-2"></div>
+                  <div className="flex flex-col items-center flex-1">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${
+                        ingredients.some((ing) => ing.name && ing.quantity)
+                          ? "bg-gradient-to-br from-yellow-400 to-yellow-500"
+                          : "bg-gray-700 border-2 border-gray-600"
+                      }`}
+                    >
+                      <span
+                        className={`font-bold text-sm ${
+                          ingredients.some((ing) => ing.name && ing.quantity)
+                            ? "text-black"
+                            : "text-gray-400"
+                        }`}
+                      >
+                        2
+                      </span>
+                    </div>
+                    <span
+                      className={`text-xs font-medium mt-2 ${
+                        ingredients.some((ing) => ing.name && ing.quantity)
+                          ? "text-yellow-400"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      Ingredients
+                    </span>
+                  </div>
+                  <div className="flex-1 h-1 bg-gray-600 mx-2"></div>
+                  <div className="flex flex-col items-center flex-1">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${
+                        selectedImage
+                          ? "bg-gradient-to-br from-yellow-400 to-yellow-500"
+                          : "bg-gray-700 border-2 border-gray-600"
+                      }`}
+                    >
+                      <span
+                        className={`font-bold text-sm ${
+                          selectedImage ? "text-black" : "text-gray-400"
+                        }`}
+                      >
+                        3
+                      </span>
+                    </div>
+                    <span
+                      className={`text-xs font-medium mt-2 ${
+                        selectedImage ? "text-yellow-400" : "text-gray-500"
+                      }`}
+                    >
+                      Image
                     </span>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-yellow-300 mb-4 font-semibold text-lg">
-                    Ingredients
-                  </label>
-                  <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl">
-                    <div className="space-y-3">
-                      {ingredients.map((ing, idx) => (
-                        <div
-                          key={idx}
-                          className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end bg-gray-800/50 rounded-xl p-4 border border-gray-700/30 hover:border-yellow-400/30 transition-all"
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Basic Information Section */}
+                <section>
+                  {/* Collapsible Header */}
+                  <button
+                    type="button"
+                    onClick={() => setShowBasicInfo(!showBasicInfo)}
+                    className="w-full flex items-center justify-between bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-4 sm:p-5 border border-gray-700/50 hover:border-yellow-400/30 transition-all duration-300 mb-4 group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 p-2.5 rounded-lg">
+                        <svg
+                          className="w-5 h-5 text-yellow-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          {/* Ingredient Name */}
-                          <div className="sm:col-span-5">
-                            <label className="block mb-2 text-sm font-medium text-yellow-300">
-                              Ingredient Name *
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      </div>
+                      <div className="text-left">
+                        <h2 className="text-lg font-bold text-yellow-300">
+                          Basic Information
+                        </h2>
+                        <p className="text-xs text-gray-400">
+                          Item code, name, category, and pricing
+                        </p>
+                      </div>
+                    </div>
+                    <svg
+                      className={`w-6 h-6 text-gray-400 transition-transform duration-300 ${
+                        showBasicInfo ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </button>
+
+                  {/* Collapsible Content */}
+                  {showBasicInfo && (
+                    <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 shadow-xl animate-fade-in">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <div className="group">
+                            <label
+                              htmlFor="itemcode"
+                              className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                            >
+                              Item Code
+                              <span className="text-red-400">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              id="itemcode"
+                              name="itemcode"
+                              required
+                              value={formData.itemcode}
+                              onChange={handleChange}
+                              placeholder="Enter item code..."
+                              className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                            />
+                          </div>
+                          <div className="group">
+                            <label
+                              htmlFor="dish_name"
+                              className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                            >
+                              Dish Name
+                              <span className="text-red-400">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              id="dish_name"
+                              name="dish_name"
+                              required
+                              value={formData.dish_name}
+                              onChange={handleChange}
+                              placeholder="Enter dish name..."
+                              className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                            />
+                          </div>
+                          <div className="group">
+                            <label
+                              htmlFor="category"
+                              className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                            >
+                              Category
+                              <span className="text-red-400">*</span>
                             </label>
                             <select
-                              value={ing.name}
-                              onChange={(e) =>
-                                handleIngredientChange(
-                                  idx,
-                                  "name",
-                                  e.target.value
-                                )
-                              }
-                              className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
-                              disabled={itemNamesLoading}
+                              id="category"
+                              name="category"
+                              required
+                              value={formData.category}
+                              onChange={handleChange}
+                              className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 cursor-pointer border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
                             >
-                              <option value="">Select Ingredient</option>
-                              {items
-                                .filter(
-                                  (item) =>
-                                    item.category !== "Seasonings & Condiments"
-                                )
-                                .map((item) => (
-                                  <option
-                                    key={item.item_name}
-                                    value={item.item_name}
-                                  >
-                                    {item.item_name}
-                                  </option>
-                                ))}
+                              <option value="" className="bg-gray-800">
+                                Select Category...
+                              </option>
+                              <option>Bagnet Meals</option>
+                              <option>Sizzlers</option>
+                              <option>Unli Rice w/ Bone Marrow</option>
+                              <option>Soups w/ Bone Marrow</option>
+                              <option>Combo</option>
+                              <option>For Sharing</option>
+                              <option>Noodles</option>
+                              <option>Desserts</option>
+                              <option>Sides</option>
+                              <option>Drinks</option>
                             </select>
                           </div>
-
-                          {/* Quantity */}
-                          <div className="sm:col-span-3">
-                            <label className="block mb-2 text-sm font-medium text-yellow-300">
-                              Quantity *
+                          <div className="group">
+                            <label
+                              htmlFor="price"
+                              className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                            >
+                              Price (₱)
+                              <span className="text-red-400">*</span>
                             </label>
                             <input
                               type="number"
+                              id="price"
+                              name="price"
+                              required
                               min={0}
-                              step={1}
-                              placeholder="0"
-                              value={ing.quantity}
-                              onChange={(e) =>
-                                handleIngredientChange(
-                                  idx,
-                                  "quantity",
-                                  e.target.value
-                                )
-                              }
-                              className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                              step="0.01"
+                              value={formData.price}
+                              onChange={handleChange}
+                              placeholder="Enter price..."
+                              className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
                               inputMode="numeric"
                               pattern="[0-9]*"
                             />
                           </div>
-
-                          {/* Unit */}
-                          <div className="sm:col-span-3">
-                            <label className="block mb-2 text-sm font-medium text-yellow-300">
-                              Unit *
+                          <div className="group">
+                            <label
+                              htmlFor="description"
+                              className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                            >
+                              Description
                             </label>
-                            <select
-                              value={ing.measurement}
-                              onChange={(e) =>
-                                handleIngredientChange(
-                                  idx,
-                                  "measurement",
-                                  e.target.value
-                                )
-                              }
-                              className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
-                            >
-                              <option value="g">g</option>
-                              <option value="kg">kg</option>
-                              <option value="ml">ml</option>
-                              <option value="l">L</option>
-                              <option value="pcs">pcs</option>
-                              <option value="tbsp">tbsp</option>
-                              <option value="tsp">tsp</option>
-                              <option value="cup">cup</option>
-                              <option value="oz">oz</option>
-                            </select>
-                          </div>
-
-                          {/* Remove Button */}
-                          <div className="sm:col-span-1 flex items-end">
-                            <button
-                              type="button"
-                              onClick={() => removeIngredient(idx)}
-                              className="w-full sm:w-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-400/50 px-4 py-3 rounded-lg font-medium transition-all duration-300 flex items-center justify-center gap-2"
-                              aria-label="Remove ingredient"
-                              disabled={ingredients.length < 1}
-                            >
-                              <FaTrash className="w-4 h-4" />
-                              <span className="sm:hidden">Remove</span>
-                            </button>
+                            <textarea
+                              id="description"
+                              name="description"
+                              value={formData.description}
+                              onChange={(e) => {
+                                setIsDirty(true);
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  description: e.target.value,
+                                }));
+                              }}
+                              placeholder="Enter dish description..."
+                              className="w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70 resize-vertical min-h-[80px]"
+                              rows={3}
+                            />
                           </div>
                         </div>
-                      ))}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={addIngredient}
-                      className="mt-4 w-full sm:w-auto bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-yellow-400/50 transition-all duration-300 flex items-center justify-center gap-2"
-                    >
-                      <span className="text-xl">+</span>
-                      Add Ingredient
-                    </button>
-
-                    <p className="text-gray-400 text-xs mt-4 flex items-start gap-2">
-                      <span className="text-yellow-400 mt-0.5">💡</span>
-                      <span>
-                        Tip: Add all ingredients with their amounts. You can
-                        remove or edit any ingredient before saving.
-                      </span>
-                    </p>
-                  </div>
-                  {error && (
-                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm mt-4 flex items-center gap-2">
-                      <FiAlertTriangle className="w-5 h-5 flex-shrink-0" />
-                      <span>{error}</span>
+                        <div className="flex flex-col items-center justify-center w-full gap-2">
+                          <label className="flex items-center gap-2 text-gray-300 mb-2 font-medium text-sm sm:text-base">
+                            Dish Image
+                          </label>
+                          <div className="relative w-32 h-32 xs:w-44 xs:h-44 md:w-44 md:h-52 border-2 border-dashed border-yellow-400/40 bg-gray-900 rounded-lg flex items-center justify-center">
+                            {previewUrl ? (
+                              <Image
+                                src={previewUrl}
+                                alt="Selected"
+                                width={208}
+                                height={208}
+                                className="w-full h-full object-contain rounded-lg shadow-xl"
+                                style={{ objectFit: "contain" }}
+                                unoptimized
+                              />
+                            ) : (
+                              <span className="text-gray-500">No Image</span>
+                            )}
+                          </div>
+                          <label className="mt-4 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-0.5 rounded-lg font-semibold shadow cursor-pointer transition">
+                            Upload Image
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleImageChange}
+                              className="hidden"
+                            />
+                          </label>
+                          <span className="text-xs text-gray-400 mt-1">
+                            Choose an image to upload.
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   )}
-                </div>
+                </section>
+
+                {/* Ingredients Section */}
+                <section>
+                  {/* Collapsible Header */}
+                  <button
+                    type="button"
+                    onClick={() => setShowIngredients(!showIngredients)}
+                    className="w-full flex items-center justify-between bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-4 sm:p-5 border border-gray-700/50 hover:border-yellow-400/30 transition-all duration-300 mb-4 group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="bg-gradient-to-br from-green-400/20 to-green-500/20 p-2.5 rounded-lg">
+                        <svg
+                          className="w-5 h-5 text-green-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                          />
+                        </svg>
+                      </div>
+                      <div className="text-left">
+                        <h2 className="text-lg font-bold text-green-300">
+                          Ingredients
+                        </h2>
+                        <p className="text-xs text-gray-400">
+                          {
+                            ingredients.filter(
+                              (ing) => ing.name && ing.quantity
+                            ).length
+                          }{" "}
+                          ingredient
+                          {ingredients.filter((ing) => ing.name && ing.quantity)
+                            .length !== 1
+                            ? "s"
+                            : ""}{" "}
+                          added
+                        </p>
+                      </div>
+                    </div>
+                    <svg
+                      className={`w-6 h-6 text-gray-400 transition-transform duration-300 ${
+                        showIngredients ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </button>
+
+                  {/* Collapsible Content */}
+                  {showIngredients && (
+                    <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl animate-fade-in">
+                      <div className="space-y-3">
+                        {ingredients.map((ing, idx) => (
+                          <div
+                            key={idx}
+                            className="group grid grid-cols-1 sm:grid-cols-12 gap-3 items-end bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-xl p-4 border border-gray-700/30 hover:border-green-400/30 hover:shadow-lg hover:shadow-green-400/10 transition-all duration-300"
+                          >
+                            {/* Ingredient Number Badge */}
+                            <div className="hidden sm:block sm:col-span-12 mb-2">
+                              <div className="flex items-center gap-2">
+                                <div className="bg-gradient-to-br from-green-400/20 to-green-500/20 px-3 py-1 rounded-full border border-green-500/30">
+                                  <span className="text-green-400 text-xs font-bold">
+                                    #{idx + 1}
+                                  </span>
+                                </div>
+                                <div className="flex-1 h-px bg-gradient-to-r from-green-400/20 to-transparent"></div>
+                              </div>
+                            </div>
+
+                            {/* Ingredient Name */}
+                            <div className="sm:col-span-5">
+                              <label className="block mb-2 text-sm font-medium text-yellow-300">
+                                Ingredient Name *
+                              </label>
+                              <select
+                                value={ing.name}
+                                onChange={(e) =>
+                                  handleIngredientChange(
+                                    idx,
+                                    "name",
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                                disabled={itemNamesLoading}
+                              >
+                                <option value="">Select Ingredient</option>
+                                {items
+                                  .filter((item) => {
+                                    const measurement =
+                                      item.measurement?.toLowerCase() || "";
+                                    const category =
+                                      item.category?.toLowerCase() || "";
+
+                                    // Filter out items with gallon/liter measurements
+                                    if (["l", "gal"].includes(measurement)) {
+                                      return false;
+                                    }
+
+                                    // Filter out items with "pack" measurement, except for Meats and Seafood
+                                    if (measurement === "pack") {
+                                      const allowedCategories = [
+                                        "meats",
+                                        "seafood",
+                                      ];
+                                      if (
+                                        !allowedCategories.includes(category)
+                                      ) {
+                                        return false;
+                                      }
+                                    }
+
+                                    // If menu category is "Drinks", only show "Beverage" items
+                                    if (formData.category === "Drinks") {
+                                      return category === "beverage";
+                                    }
+
+                                    // If menu category is NOT "Drinks", exclude "Beverage" items
+                                    if (
+                                      formData.category !== "Drinks" &&
+                                      category === "beverage"
+                                    ) {
+                                      return false;
+                                    }
+
+                                    return true;
+                                  })
+                                  .map((item) => (
+                                    <option
+                                      key={item.item_name}
+                                      value={item.item_name}
+                                    >
+                                      {item.item_name}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+
+                            {/* Quantity */}
+                            <div className="sm:col-span-3">
+                              <label className="block mb-2 text-sm font-medium text-yellow-300">
+                                Quantity *
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                placeholder="0"
+                                value={ing.quantity}
+                                onChange={(e) =>
+                                  handleIngredientChange(
+                                    idx,
+                                    "quantity",
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                              />
+                            </div>
+
+                            {/* Unit */}
+                            <div className="sm:col-span-3">
+                              <label className="block mb-2 text-sm font-medium text-yellow-300">
+                                Unit *
+                              </label>
+                              <select
+                                value={ing.measurement}
+                                onChange={(e) =>
+                                  handleIngredientChange(
+                                    idx,
+                                    "measurement",
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                              >
+                                <option value="" disabled>
+                                  Select unit
+                                </option>
+                                {(() => {
+                                  const selectedItem = items.find(
+                                    (item) => item.item_name === ing.name
+                                  );
+                                  const category = selectedItem?.category || "";
+                                  const availableUnits =
+                                    getUnitsForCategory(category);
+
+                                  return availableUnits.map((unit) => (
+                                    <option key={unit.value} value={unit.value}>
+                                      {unit.label}
+                                    </option>
+                                  ));
+                                })()}
+                              </select>
+                            </div>
+
+                            {/* Remove Button */}
+                            <div className="sm:col-span-1 flex items-end">
+                              <button
+                                type="button"
+                                onClick={() => removeIngredient(idx)}
+                                className="w-full sm:w-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-400/50 px-4 py-3 rounded-lg font-medium transition-all duration-300 flex items-center justify-center gap-2"
+                                aria-label="Remove ingredient"
+                                disabled={ingredients.length < 1}
+                              >
+                                <FaTrash className="w-4 h-4" />
+                                <span className="sm:hidden">Remove</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={addIngredient}
+                        className="group mt-4 w-full sm:w-auto bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-black px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-green-400/50 transition-all duration-300 flex items-center justify-center gap-2"
+                      >
+                        <svg
+                          className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 4v16m8-8H4"
+                          />
+                        </svg>
+                        <span>Add Ingredient</span>
+                      </button>
+
+                      <p className="text-gray-400 text-xs mt-4 flex items-start gap-2">
+                        <span className="text-yellow-400 mt-0.5">💡</span>
+                        <span>
+                          Tip: Add all ingredients with their amounts. You can
+                          remove or edit any ingredient before saving.
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                </section>
+
+                {/* Error Message */}
+                {error && (
+                  <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                    <FiAlertTriangle className="w-5 h-5 flex-shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
                 <div className="flex flex-col xs:flex-row justify-end gap-2 xs:gap-3 sm:gap-4 md:gap-4 pt-4 xs:pt-5 sm:pt-6 md:pt-8 border-t border-gray-700/50">
                   <button
                     type="button"

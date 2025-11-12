@@ -7,6 +7,7 @@ import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { useAuth } from "@/app/context/AuthContext";
 import { routes } from "@/app/routes/routes";
+import { useSpoilageItem } from "@/app/Features/Inventory/hook/use-inventoryQuery";
 import {
   FiEye,
   FiCalendar,
@@ -25,8 +26,11 @@ export default function ViewSpoilageInventoryItem() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isMenuOpen, isMobile } = useNavigation();
-  const [item, setItem] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const spoilageId = searchParams.get("id");
+
+  // Use React Query hook for auto-refresh!
+  const { data: rawData, isLoading, error } = useSpoilageItem(spoilageId);
+
   const [isOnline, setIsOnline] = useState(true);
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -40,60 +44,36 @@ export default function ViewSpoilageInventoryItem() {
     };
   }, []);
 
-  const spoilageId = searchParams.get("id");
+  // Format item data when it loads
+  const item = rawData ? {
+    spoilage_id: rawData.spoilage_id,
+    item_id: rawData.item_id,
+    item_name: rawData.item_name,
+    quantity_spoiled: rawData.quantity_spoiled,
+    expiration_date: rawData.expiration_date,
+    spoilage_date: rawData.spoilage_date,
+    reason: rawData.reason,
+    user_id: rawData.user_id,
+    created_at: rawData.created_at,
+    updated_at: rawData.updated_at,
+    unit_price:
+      rawData.unit_price !== undefined ? Number(rawData.unit_price) : null,
+  } : null;
 
+  // Redirect if no spoilageId
   useEffect(() => {
-    const fetchItem = async () => {
-      if (!spoilageId) {
-        router.push(routes.spoilage_inventory);
-        return;
-      }
-      try {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const response = await fetch(
-          `/api/inventory-spoilage?skip=0&limit=100`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const item = Array.isArray(data)
-          ? data.find((x) => String(x.spoilage_id) === String(spoilageId))
-          : null;
-        if (!item) throw new Error("Not found");
-        setItem({
-          spoilage_id: item.spoilage_id,
-          item_id: item.item_id,
-          item_name: item.item_name,
-          quantity_spoiled: item.quantity_spoiled,
-          expiration_date: item.expiration_date,
-          spoilage_date: item.spoilage_date,
-          reason: item.reason,
-          user_id: item.user_id,
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          unit_price:
-            item.unit_price !== undefined ? Number(item.unit_price) : null,
-        });
-      } catch (error) {
-        console.error("Error fetching spoilage item:", error);
-        router.push(routes.spoilage_inventory);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchItem();
+    if (!spoilageId) {
+      router.push(routes.spoilage_inventory);
+    }
   }, [spoilageId, router]);
+
+  // Redirect if error (item not found)
+  useEffect(() => {
+    if (error) {
+      console.error("Error fetching spoilage item:", error);
+      router.push(routes.spoilage_inventory);
+    }
+  }, [error, router]);
 
   const formatDateOnly = (input: string | null): string => {
     if (!input) return "-";

@@ -5,7 +5,7 @@ export function useDashboardQuery() {
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   console.log("API_BASE_URL (runtime):", API_BASE_URL);
-  // Low Stock
+  // Low Stock - AUTO-REFRESHES every 2 minutes for real-time updates!
   const lowStock = useQuery({
     queryKey: ["dashboard", "low-stock"],
     queryFn: async () => {
@@ -33,13 +33,13 @@ export function useDashboardQuery() {
         return cached ? JSON.parse(cached) : [];
       }
     },
-  refetchInterval: false,
-  staleTime: 5 * 60 * 1000,
-  refetchOnWindowFocus: false,
-  refetchOnReconnect: false,
+    refetchInterval: 2 * 60 * 1000, // Auto-refresh every 2 minutes
+    staleTime: 1 * 60 * 1000, // Consider data fresh for 1 minute
+    refetchOnWindowFocus: true, // Refresh when user returns to tab
+    refetchOnReconnect: true, // Refresh when internet reconnects
   });
 
-  // Expiring
+  // Expiring - AUTO-REFRESHES every 2 minutes
   const expiring = useQuery({
     queryKey: ["dashboard", "expiring"],
     queryFn: async () => {
@@ -67,10 +67,10 @@ export function useDashboardQuery() {
         return cached ? JSON.parse(cached) : [];
       }
     },
-    refetchInterval: false,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchInterval: 2 * 60 * 1000, // Auto-refresh every 2 minutes
+    staleTime: 1 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   // Surplus
@@ -101,13 +101,13 @@ export function useDashboardQuery() {
         return cached ? JSON.parse(cached) : [];
       }
     },
-    refetchInterval: false,
-    staleTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  }); // <-- Add closing brace and comma for surplus query
+    refetchInterval: 5 * 60 * 1000, // Auto-refresh every 5 minutes (less critical)
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
 
-  // Expired
+  // Expired - AUTO-REFRESHES every 5 minutes
   const expired = useQuery({
     queryKey: ["dashboard", "expired"],
     queryFn: async () => {
@@ -151,18 +151,18 @@ export function useDashboardQuery() {
         return cached ? JSON.parse(cached) : [];
       }
     },
-    refetchInterval: false,
-    staleTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchInterval: 5 * 60 * 1000, // Auto-refresh every 5 minutes
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
-  // Custom Holidays
+  // Custom Holidays - Refreshes on demand
   const customHolidays = useQuery({
     queryKey: ["dashboard", "custom-holidays"],
     queryFn: async () => {
       try {
-  const response = await fetch(`${API_BASE_URL}/api/custom-holidays/`, {
+        const response = await fetch(`${API_BASE_URL}/api/custom-holidays/`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -181,9 +181,8 @@ export function useDashboardQuery() {
         return cached ? JSON.parse(cached) : [];
       }
     },
-    refetchInterval: false,
-    staleTime: 30 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 10 * 60 * 1000, // Holidays don't change often
+    refetchOnWindowFocus: false, // Don't auto-refresh holidays
     refetchOnReconnect: false,
   });
 
@@ -269,12 +268,13 @@ export function useDashboardQuery() {
     },
   });
 
+  // Out of Stock - With table parameter for multi-batch support
   const outOfStock = useQuery({
-    queryKey: ["dashboard", "out-of-stock"],
+    queryKey: ["dashboard", "out-of-stock", "inventory_today"],
     queryFn: async () => {
       try {
         const response = await fetch(
-          `${API_BASE_URL}/api/dashboard/out-of-stock`,
+          `${API_BASE_URL}/api/dashboard/out-of-stock?table=inventory_today`,
           {
             method: "GET",
             headers: {
@@ -296,12 +296,13 @@ export function useDashboardQuery() {
         return cached ? JSON.parse(cached) : [];
       }
     },
-  refetchInterval: false,
-  staleTime: 5 * 60 * 1000,
-  refetchOnWindowFocus: false,
-  refetchOnReconnect: false,
+    staleTime: 0, // Always fresh data for inventory changes
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
+  // Spoilage - AUTO-REFRESHES every 5 minutes
   const spoilage = useQuery({
     queryKey: ["dashboard", "spoilage"],
     queryFn: async () => {
@@ -326,10 +327,10 @@ export function useDashboardQuery() {
         return cached ? JSON.parse(cached) : [];
       }
     },
-  refetchInterval: false,
-  staleTime: 10 * 60 * 1000,
-  refetchOnWindowFocus: false,
-  refetchOnReconnect: false,
+    refetchInterval: 5 * 60 * 1000, // Auto-refresh every 5 minutes
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   return {

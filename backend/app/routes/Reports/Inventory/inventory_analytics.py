@@ -34,32 +34,88 @@ async def get_inventory_analytics(
         if not start_date:
             start_date = (datetime.now().date() - timedelta(days=30)).isoformat()
 
-        # 1. Current Stock Overview
+        # 1. Current Stock Overview (includes archived items for complete reporting)
         stock_query = text("""
             SELECT
                 COUNT(DISTINCT item_name) as total_items,
                 SUM(stock_quantity) as total_quantity,
                 COUNT(DISTINCT category) as total_categories,
                 SUM(CASE WHEN stock_quantity <= 0 THEN 1 ELSE 0 END) as out_of_stock_items
-            FROM inventory
+            FROM (
+                SELECT item_name, stock_quantity, category FROM inventory
+                UNION ALL
+                SELECT item_name, stock_quantity, category FROM archived_inventory
+            ) AS combined_inventory
         """)
         stock_result = await session.execute(stock_query)
         stock_overview = dict(stock_result.fetchone()._mapping)
 
-        # 2. Stock by Category
+        # 2. Stock by Category (includes archived items for complete reporting)
         category_query = text("""
             SELECT
                 category,
                 COUNT(DISTINCT item_name) as item_count,
                 SUM(stock_quantity) as total_quantity
-            FROM inventory
+            FROM (
+                SELECT item_name, stock_quantity, category FROM inventory
+                UNION ALL
+                SELECT item_name, stock_quantity, category FROM archived_inventory
+            ) AS combined_inventory
             GROUP BY category
             ORDER BY total_quantity DESC
         """)
         category_result = await session.execute(category_query)
         stock_by_category = [dict(row._mapping) for row in category_result.fetchall()]
 
-        # 3. Low Stock Items (below threshold)
+        # 3. Critical Stock Items (stock <= 50% of threshold but > 0)
+        critical_stock_query = text("""
+            SELECT
+                i.item_name,
+                i.category,
+                i.stock_quantity,
+                COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10) as threshold
+            FROM inventory i
+            LEFT JOIN inventory_settings s ON i.item_name = s.name
+            WHERE i.stock_quantity <= (COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10) * 0.5)
+            AND i.stock_quantity > 0
+            ORDER BY i.stock_quantity ASC
+        """)
+        critical_stock_result = await session.execute(critical_stock_query)
+        critical_stock_items = [dict(row._mapping) for row in critical_stock_result.fetchall()]
+
+        # 4. Out of Stock Items (stock = 0, includes archived for complete reporting)
+        outOfStock_query = text("""
+            SELECT
+                i.item_name,
+                i.category,
+                i.stock_quantity,
+                COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10) as threshold,
+                i.batch_date,
+                i.archived_at
+            FROM (
+                SELECT
+                    item_name::VARCHAR,
+                    category::VARCHAR,
+                    stock_quantity::FLOAT,
+                    batch_date::DATE,
+                    NULL::TIMESTAMP as archived_at
+                FROM inventory WHERE stock_quantity = 0
+                UNION ALL
+                SELECT
+                    item_name::VARCHAR,
+                    category::VARCHAR,
+                    stock_quantity::FLOAT,
+                    batch_date::DATE,
+                    archived_at::TIMESTAMP
+                FROM archived_inventory WHERE stock_quantity = 0
+            ) i
+            LEFT JOIN inventory_settings s ON i.item_name = s.name
+            ORDER BY i.item_name ASC, i.batch_date DESC
+        """)
+        outOfStock_result = await session.execute(outOfStock_query)
+        outOfStock_items = [dict(row._mapping) for row in outOfStock_result.fetchall()]
+
+        # 5. Low Stock Items (between 50% and 100% of threshold)
         low_stock_query = text("""
             SELECT
                 i.item_name,
@@ -68,15 +124,29 @@ async def get_inventory_analytics(
                 COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10) as threshold
             FROM inventory i
             LEFT JOIN inventory_settings s ON i.item_name = s.name
-            WHERE i.stock_quantity <= COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10)
-            AND i.stock_quantity > 0
+            WHERE i.stock_quantity > (COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10) * 0.5)
+            AND i.stock_quantity <= COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10)
             ORDER BY i.stock_quantity ASC
-            LIMIT 10
         """)
         low_stock_result = await session.execute(low_stock_query)
         low_stock_items = [dict(row._mapping) for row in low_stock_result.fetchall()]
 
-        # 4. Expiring Soon Items (next 7 days)
+        # 6. Normal Stock Items (stock > threshold)
+        normal_items_query = text("""
+            SELECT
+                i.item_name,
+                i.category,
+                i.stock_quantity,
+                COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10) as threshold
+            FROM inventory i
+            LEFT JOIN inventory_settings s ON i.item_name = s.name
+            WHERE i.stock_quantity > COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10)
+            ORDER BY i.stock_quantity DESC
+        """)
+        normal_items_result = await session.execute(normal_items_query)
+        normal_items = [dict(row._mapping) for row in normal_items_result.fetchall()]
+
+        # 7. Expiring Soon Items (next 7 days)
         expiring_query = text("""
             SELECT
                 item_name,
@@ -158,14 +228,14 @@ async def get_inventory_analytics(
         except:
             inventory_movement = []
 
-        # 9. Stock Status Distribution
+        # 9. Stock Status Distribution (Out of Stock, Critical, Low Stock, Normal)
         stock_status_query = text("""
             SELECT
                 CASE
                     WHEN stock_quantity = 0 THEN 'Out of Stock'
+                    WHEN stock_quantity <= (COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10) * 0.5) THEN 'Critical'
                     WHEN stock_quantity <= COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10) THEN 'Low Stock'
-                    WHEN stock_quantity <= COALESCE(CAST(s.low_stock_threshold AS INTEGER), 10) * 2 THEN 'Medium Stock'
-                    ELSE 'High Stock'
+                    ELSE 'Normal'
                 END as status,
                 COUNT(*) as count
             FROM inventory i
@@ -181,7 +251,10 @@ async def get_inventory_analytics(
             "period": {"start_date": start_date, "end_date": end_date},
             "stock_overview": stock_overview,
             "stock_by_category": stock_by_category,
+            "critical_stock_items": critical_stock_items,
+            "outOfStock_items": outOfStock_items,
             "low_stock_items": low_stock_items,
+            "normal_items": normal_items,
             "expiring_items": expiring_items,
             "spoilage_summary": spoilage_summary,
             "spoilage_trend": spoilage_trend,

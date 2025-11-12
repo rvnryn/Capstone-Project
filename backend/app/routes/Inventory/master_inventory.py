@@ -370,6 +370,7 @@ class InventoryTodayItemCreate(BaseModel):
 
 class TransferRequest(BaseModel):
     """Transfer quantity validation"""
+    item_id: Optional[int] = Field(None, description="Item ID (optional, used for /inventory-today/transfer endpoint)")
     quantity: float = Field(
         ...,
         gt=0,
@@ -506,6 +507,7 @@ async def update_inventory_item(
                 update_data[key] = update_data[key].isoformat()
             # unit_price is included if present
         # If stock_quantity is being updated, recalculate stock_status
+        item_name_for_aggregate = None
         if "stock_quantity" in update_data:
 
             @run_blocking
@@ -525,6 +527,7 @@ async def update_inventory_item(
                 else None
             )
             if item_name:
+                item_name_for_aggregate = item_name  # Save for aggregate status update
                 threshold = await get_threshold_for_item(item_name)
                 update_data["stock_status"] = calculate_stock_status(
                     update_data["stock_quantity"], threshold
@@ -544,6 +547,16 @@ async def update_inventory_item(
         if not response.data:
             raise HTTPException(status_code=404, detail="Item not found")
         result = recalculate_stock_status()
+
+        # Update aggregate stock status for this item in master inventory
+        if item_name_for_aggregate:
+            try:
+                from app.routes.Inventory.aggregate_status import update_aggregate_stock_status
+                new_status = await update_aggregate_stock_status(item_name_for_aggregate, "inventory", db)
+                logger.info(f"Updated aggregate status for '{item_name_for_aggregate}' in master inventory: {new_status}")
+            except Exception as e:
+                logger.error(f"Failed to update aggregate status: {str(e)}")
+
         # Log recalc activity
         await log_user_activity(
             db,
@@ -758,6 +771,171 @@ async def transfer_to_today_inventory(
         }
     except Exception as e:
         logger.exception("Error during transfer_to_today_inventory")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@limiter.limit("10/minute")
+@router.post("/inventory-today/transfer")
+async def transfer_to_today_inventory_v2(
+    request: Request,
+    req: TransferRequest,
+    user=Depends(require_role("Owner", "General Manager", "Store Manager")),
+    db=Depends(get_db),
+):
+    """
+    Alternative endpoint for transferring items to Today's Inventory.
+    Accepts item_id in the request body instead of URL path.
+    """
+    try:
+        item_id = req.item_id
+        transfer_quantity = req.quantity
+
+        @run_blocking
+        def _fetch_inventory():
+            return (
+                postgrest_client.table("inventory")
+                .select("*")
+                .eq("item_id", item_id)
+                .single()
+                .execute()
+            )
+
+        response = await _fetch_inventory()
+        item = response.data
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found in inventory")
+        
+        if transfer_quantity <= 0 or transfer_quantity > item["stock_quantity"]:
+            raise HTTPException(status_code=400, detail="Invalid transfer quantity")
+        
+        threshold = await get_threshold_for_item(item["item_name"])
+        transfer_status = calculate_stock_status(transfer_quantity, threshold)
+        now = datetime.utcnow().isoformat()
+
+        # Check if item_id already exists in inventory_today
+        from postgrest.exceptions import APIError
+
+        @run_blocking
+        def _fetch_today():
+            try:
+                return (
+                    postgrest_client.table("inventory_today")
+                    .select("*")
+                    .eq("item_id", item_id)
+                    .single()
+                    .execute()
+                )
+            except APIError as e:
+                if getattr(e, "code", None) == "PGRST116":
+                    return None
+                raise
+
+        today_response = await _fetch_today()
+        today_item = today_response.data if today_response else None
+
+        if today_item:
+            # If exists, add to the stock_quantity and update stock_status
+            new_today_quantity = today_item["stock_quantity"] + transfer_quantity
+            new_today_status = calculate_stock_status(new_today_quantity, threshold)
+
+            @run_blocking
+            def _update_today():
+                return (
+                    postgrest_client.table("inventory_today")
+                    .update(
+                        {
+                            "stock_quantity": new_today_quantity,
+                            "stock_status": new_today_status,
+                            "updated_at": now,
+                        }
+                    )
+                    .eq("item_id", item_id)
+                    .execute()
+                )
+
+            insert_response = await _update_today()
+        else:
+            payload = {
+                "item_id": item["item_id"],
+                "item_name": item["item_name"],
+                "batch_date": item["batch_date"],
+                "category": item.get("category"),
+                "stock_quantity": transfer_quantity,
+                "stock_status": transfer_status,
+                "expiration_date": item.get("expiration_date"),
+                "created_at": now,
+                "updated_at": now,
+                "unit_cost": item.get("unit_cost", 0.00),
+            }
+
+            @run_blocking
+            def _insert_today():
+                return postgrest_client.table("inventory_today").insert(payload).execute()
+
+            insert_response = await _insert_today()
+
+        # Deduct from master inventory
+        new_master_quantity = item["stock_quantity"] - transfer_quantity
+        new_master_status = calculate_stock_status(new_master_quantity, threshold)
+
+        # If stock reaches 0, delete the item from master inventory
+        if new_master_quantity <= 0:
+            @run_blocking
+            def _delete_master():
+                return (
+                    postgrest_client.table("inventory")
+                    .delete()
+                    .eq("item_id", item_id)
+                    .execute()
+                )
+
+            await _delete_master()
+        else:
+            # Otherwise, update the stock quantity
+            @run_blocking
+            def _update_master():
+                return (
+                    postgrest_client.table("inventory")
+                    .update(
+                        {
+                            "stock_quantity": new_master_quantity,
+                            "stock_status": new_master_status,
+                            "updated_at": now,
+                        }
+                    )
+                    .eq("item_id", item_id)
+                    .execute()
+                )
+
+            await _update_master()
+
+        # Log the activity
+        await log_user_activity(
+            db,
+            user,
+            "transfer inventory to today's inventory",
+            f"Transferred {transfer_quantity} of Id {item['item_id']} | item {item['item_name']} to Today's Inventory",
+        )
+
+        # Create notification for the transfer
+        try:
+            user_row = getattr(user, "user_row", user)
+            user_id = user_row.get("user_id") if isinstance(user_row, dict) else getattr(user_row, "user_id", None)
+            if user_id:
+                create_notification(
+                    user_id=user_id,
+                    type="transfer",
+                    message=f"Transferred {transfer_quantity} units of {item['item_name']} to Today's Inventory"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to create transfer notification: {e}")
+
+        return {
+            "message": "Item transferred to Today's Inventory",
+            "data": insert_response.data,
+        }
+    except Exception as e:
+        logger.exception("Error during transfer_to_today_inventory_v2")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

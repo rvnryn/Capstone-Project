@@ -8,7 +8,7 @@ import { MdWarning } from "react-icons/md";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "../../components/ResponsiveMain";
 import { useAuth } from "../../context/AuthContext";
-import { useSupplierAPI } from "./hook/useSupplierAPI";
+import { useSupplierList, useDeleteSupplier } from "./hooks/use-supplierQuery";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { routes } from "@/app/routes/routes";
 
@@ -22,7 +22,7 @@ type SupplierItem = {
   address: string;
   created_at: string;
   [key: string]: string | number;
-}
+};
 
 function formatDateTime(dateString: string) {
   if (!dateString) return "";
@@ -63,7 +63,6 @@ const SupplierPage = () => {
     }
   }, []);
   const queryClient = useQueryClient();
-  const { listSuppliers, deleteSupplier } = useSupplierAPI();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sortConfig, setSortConfig] = useState({
@@ -76,62 +75,37 @@ const SupplierPage = () => {
   const router = useRouter();
   const { isMenuOpen, isMobile } = useNavigation();
 
-  // Patch: Use cached data when offline, and show offline message if no cache
-  const [offlineSuppliers, setOfflineSuppliers] = useState<SupplierItem[] | null>(null);
-  const [offlineError, setOfflineError] = useState<string | null>(null);
-  const {
-    data: supplierData = [],
-    isLoading,
-    isFetching,
-  } = useQuery<SupplierItem[]>({
-    queryKey: ["suppliers"],
-    queryFn: async () => {
-      if (typeof window !== "undefined" && !navigator.onLine) {
-        try {
-          const cached = localStorage.getItem("suppliersCache");
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            setOfflineSuppliers(parsed);
-            setOfflineError(null);
-            return parsed;
-          } else {
-            setOfflineSuppliers(null);
-            setOfflineError("No cached supplier data available. Please connect to the internet to load suppliers.");
-            return [];
-          }
-        } catch (e) {
-          setOfflineSuppliers(null);
-          setOfflineError("Failed to load cached supplier data.");
-          return [];
-        }
-      }
-      // Online: fetch and cache
-      const items = await listSuppliers();
-      if (typeof window !== "undefined") {
-        localStorage.setItem("suppliersCache", JSON.stringify(items));
-      }
-      setOfflineSuppliers(null);
-      setOfflineError(null);
-      return items;
-    },
-    refetchOnWindowFocus: true,
-  });
+  // React Query hooks with auto-refresh every 3 minutes
+  const { data: supplierData = [], isLoading, isFetching } = useSupplierList();
 
-  // Patch: reconstruct supplier objects with correct actions/icons when offline
-  let displaySuppliers: SupplierItem[] = [];
-  if (isOnline) {
-    displaySuppliers = supplierData;
-  } else if (offlineSuppliers) {
-    displaySuppliers = offlineSuppliers.map((item) => ({
-      ...item,
-      // Add any computed properties here if needed
-    }));
-  } else {
-    displaySuppliers = supplierData;
-  }
+  const deleteMutation = useDeleteSupplier();
+
+  // Patch: Use cached data when offline
+  const [offlineSuppliers, setOfflineSuppliers] = useState<
+    SupplierItem[] | null
+  >(null);
+
+  // Update offline suppliers from cache when offline
+  useEffect(() => {
+    if (!isOnline && typeof window !== "undefined") {
+      const cached = localStorage.getItem("suppliersCache");
+      if (cached) {
+        setOfflineSuppliers(JSON.parse(cached));
+      }
+    }
+  }, [isOnline]);
+
+  // Display suppliers: use online data if available, otherwise use cached
+  const displaySuppliers = isOnline
+    ? supplierData
+    : offlineSuppliers || supplierData;
 
   // If offline and no cached data, show a clear message
-  if (!isOnline && (!offlineSuppliers || offlineSuppliers.length === 0)) {
+  if (
+    !isOnline &&
+    (!offlineSuppliers || offlineSuppliers.length === 0) &&
+    supplierData.length === 0
+  ) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-yellow-400">
         <h2>No cached supplier data available.</h2>
@@ -142,9 +116,10 @@ const SupplierPage = () => {
 
   const filtered = useMemo(() => {
     return displaySuppliers.filter(
-      (item: SupplierItem) =>
+      (item: SupplierItem | any) =>
         !searchQuery ||
         Object.values(item)
+          .map((v) => (v === undefined ? "" : v))
           .join(" ")
           .toLowerCase()
           .includes(searchQuery.toLowerCase())
@@ -166,8 +141,8 @@ const SupplierPage = () => {
     if (!sortConfig.key) return data;
     if (sortConfig.key === "created_at") {
       return data.sort((a, b) => {
-        const aVal = a[sortConfig.key];
-        const bVal = b[sortConfig.key];
+        const aVal = (a as Record<string, any>)[sortConfig.key];
+        const bVal = (b as Record<string, any>)[sortConfig.key];
         const aDate = new Date(aVal as string | number | Date);
         const bDate = new Date(bVal as string | number | Date);
         return sortConfig.direction === "asc"
@@ -177,8 +152,12 @@ const SupplierPage = () => {
     }
     // For string columns
     return data.sort((a, b) => {
-      const valA = a[sortConfig.key]?.toString().toLowerCase() || "";
-      const valB = b[sortConfig.key]?.toString().toLowerCase() || "";
+      const valA =
+        (a as Record<string, any>)[sortConfig.key]?.toString().toLowerCase() ||
+        "";
+      const valB =
+        (b as Record<string, any>)[sortConfig.key]?.toString().toLowerCase() ||
+        "";
       return sortConfig.direction === "asc"
         ? valA.localeCompare(valB)
         : valB.localeCompare(valA);
@@ -203,17 +182,14 @@ const SupplierPage = () => {
     });
   };
 
-  const deleteMutation = useMutation({
-    mutationFn: async (supplierId: number) => {
-      await deleteSupplier(supplierId);
-    },
-  });
-
   const confirmDelete = async () => {
     if (supplierToDelete === null) return;
-    await deleteMutation.mutateAsync(supplierToDelete);
-    setShowDeleteModal(false);
-    queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+    deleteMutation.mutate(supplierToDelete, {
+      onSuccess: () => {
+        setShowDeleteModal(false);
+        setSupplierToDelete(null);
+      },
+    });
   };
 
   const columns = [
@@ -271,8 +247,8 @@ const SupplierPage = () => {
                       <span className="sm:inline">Refresh</span>
                     </button>
 
-                    {['Owner', 'General Manager', 'Store Manager'].includes(
-                      role || ''
+                    {["Owner", "General Manager", "Store Manager"].includes(
+                      role || ""
                     ) && (
                       <button
                         onClick={() => router.push(routes.addSupplier)}
@@ -380,29 +356,19 @@ const SupplierPage = () => {
                     </thead>
                     <tbody>
                       {isLoading || isFetching ? (
-                        offlineError ? (
-                          <tr>
-                            <td colSpan={columns.length} className="text-center py-8">
-                              <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                                <MdWarning className="text-yellow-400 text-3xl mx-auto" />
-                                <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                                  {offlineError}
-                                </div>
+                        <tr>
+                          <td
+                            colSpan={columns.length}
+                            className="text-center py-8"
+                          >
+                            <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
+                              <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+                              <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
+                                Loading supplier data...
                               </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          <tr>
-                            <td colSpan={columns.length} className="text-center py-8">
-                              <div className="flex flex-col items-center gap-2 xs:gap-3 sm:gap-4">
-                                <div className="w-8 xs:w-10 sm:w-12 h-8 xs:h-10 sm:h-12 border-2 xs:border-3 sm:border-4 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
-                                <div className="text-yellow-400 text-sm xs:text-base sm:text-lg md:text-xl font-medium">
-                                  Loading supplier data...
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )
+                            </div>
+                          </td>
+                        </tr>
                       ) : sortedData.length > 0 ? (
                         sortedData.map((item: any, index) => (
                           <tr
@@ -446,7 +412,11 @@ const SupplierPage = () => {
                             </td>
                             <td className="px-3 xl:px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-1 xl:gap-2">
-                                {["Owner", "General Manager", "Store Manager"].includes(role || "") && (
+                                {[
+                                  "Owner",
+                                  "General Manager",
+                                  "Store Manager",
+                                ].includes(role || "") && (
                                   <>
                                     <button
                                       onClick={(e) => {
@@ -458,7 +428,11 @@ const SupplierPage = () => {
                                           )
                                         );
                                       }}
-                                      className={`p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-400 hover:text-yellow-300 transition-all duration-200 border border-yellow-400/20 hover:border-yellow-400/40 ${!isOnline ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+                                      className={`p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-400 hover:text-yellow-300 transition-all duration-200 border border-yellow-400/20 hover:border-yellow-400/40 ${
+                                        !isOnline
+                                          ? "opacity-50 cursor-not-allowed pointer-events-none"
+                                          : "cursor-pointer"
+                                      }`}
                                       title="Edit"
                                       disabled={!isOnline}
                                     >
@@ -471,7 +445,11 @@ const SupplierPage = () => {
                                         setSupplierToDelete(item.supplier_id);
                                         setShowDeleteModal(true);
                                       }}
-                                      className={`p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-all duration-200 border border-red-500/20 hover:border-red-500/40 ${!isOnline ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+                                      className={`p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 transition-all duration-200 border border-red-500/20 hover:border-red-500/40 ${
+                                        !isOnline
+                                          ? "opacity-50 cursor-not-allowed pointer-events-none"
+                                          : "cursor-pointer"
+                                      }`}
                                       title="Delete"
                                       disabled={!isOnline}
                                     >
@@ -480,7 +458,6 @@ const SupplierPage = () => {
                                   </>
                                 )}
                               </div>
-                             
                             </td>
                           </tr>
                         ))

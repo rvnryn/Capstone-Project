@@ -11,6 +11,8 @@ export interface NotificationSettings {
   expiration_enabled: boolean;
   expiration_days: number;
   expiration_method: string[];
+  transfer_enabled: boolean;
+  transfer_method: string[];
 }
 
 export function useNotificationSettingsAPI(userId: number) {

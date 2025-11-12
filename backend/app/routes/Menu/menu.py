@@ -341,10 +341,14 @@ async def create_menu_with_ingredients(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Endpoint: get all menu items
+# Endpoint: get all menu items (OPTIMIZED - Batch queries)
 @router.get("/menu")
 async def get_menu():
+    import time
+    start_time = time.time()
+
     def sync_get_menu():
+        # Fetch all menu items
         res = postgrest_client.table("menu").select("*").execute()
         error = (
             getattr(res, "error", None)
@@ -365,139 +369,161 @@ async def get_menu():
 
         menu_ids = [item.get("id") or item.get("menu_id") for item in data]
         menu_ids = [mid for mid in menu_ids if mid is not None]
-        if menu_ids:
-            ing_res = (
-                postgrest_client.table("menu_ingredients")
-                .select("menu_id,ingredient_id,ingredient_name,quantity,measurements")
-                .in_("menu_id", menu_ids)
-                .execute()
-            )
-            ing_error = (
-                getattr(ing_res, "error", None)
-                if hasattr(ing_res, "error")
-                else ing_res.get("error") if isinstance(ing_res, dict) else None
-            )
-            if ing_error:
-                raise HTTPException(
-                    status_code=400, detail=getattr(ing_error, "message", str(ing_error))
-                )
-            ing_data = (
-                getattr(ing_res, "data", None)
-                if hasattr(ing_res, "data")
-                else ing_res.get("data") if isinstance(ing_res, dict) else None
-            )
-            ing_map = {}
-            for ing in ing_data or []:
-                mid = ing.get("menu_id")
-                if mid not in ing_map:
-                    ing_map[mid] = []
-                ing_map[mid].append(ing)
-            for item in data:
-                mid = item.get("id") or item.get("menu_id")
-                item["menu_id"] = item.get("menu_id", item.get("id"))
-                item["ingredients"] = ing_map.get(mid, [])
-                all_in_stock = True
-                for ing in item["ingredients"]:
-                    ing_name = ing.get("ingredient_name") or ing.get("name")
-                    available_stock = 0
-                    inv = (
-                        postgrest_client.table("inventory")
-                        .select("stock_quantity,expiration_date")
-                        .ilike("item_name", ing_name)
-                        .execute()
-                    )
-                    for inv_item in inv.data or []:
-                        stock = inv_item.get("stock_quantity", 0) or 0
-                        expiry = inv_item.get("expiration_date")
-                        is_expired = False
-                        if expiry:
-                            try:
-                                if (
-                                    datetime.strptime(expiry, "%Y-%m-%d").date()
-                                    < datetime.now().date()
-                                ):
-                                    is_expired = True
-                            except Exception:
-                                pass
-                        if not is_expired:
-                            available_stock += stock
-                    surplus = (
-                        postgrest_client.table("inventory_surplus")
-                        .select("stock_quantity,expiration_date")
-                        .ilike("item_name", ing_name)
-                        .execute()
-                    )
-                    for surplus_item in surplus.data or []:
-                        stock = surplus_item.get("stock_quantity", 0) or 0
-                        expiry = surplus_item.get("expiration_date")
-                        is_expired = False
-                        if expiry:
-                            try:
-                                if (
-                                    datetime.strptime(expiry, "%Y-%m-%d").date()
-                                    < datetime.now().date()
-                                ):
-                                    is_expired = True
-                            except Exception:
-                                pass
-                        if not is_expired:
-                            available_stock += stock
-                    today = (
-                        postgrest_client.table("inventory_today")
-                        .select("stock_quantity,expiration_date")
-                        .ilike("item_name", ing_name)
-                        .execute()
-                    )
-                    for today_item in today.data or []:
-                        stock = today_item.get("stock_quantity", 0) or 0
-                        expiry = today_item.get("expiration_date")
-                        is_expired = False
-                        if expiry:
-                            try:
-                                if (
-                                    datetime.strptime(expiry, "%Y-%m-%d").date()
-                                    < datetime.now().date()
-                                ):
-                                    is_expired = True
-                            except Exception:
-                                pass
-                        if not is_expired:
-                            available_stock += stock
-                    if not available_stock or available_stock <= 0:
-                        all_in_stock = False
-                        break
-                new_status = "Available" if all_in_stock else "Out of Stock"
-                if item.get("stock_status") != new_status:
-                    pk_column = "id" if "id" in item else "menu_id"
-                    pk_value = item.get("id") or item.get("menu_id")
-                    update_res = (
-                        postgrest_client.table("menu")
-                        .update({"stock_status": new_status})
-                        .eq(pk_column, pk_value)
-                        .execute()
-                    )
-                    print(
-                        f"Updating menu item {item.get('dish_name')} from {item.get('stock_status')} to {new_status}"
-                    )
-                    update_error = (
-                        getattr(update_res, "error", None)
-                        if hasattr(update_res, "error")
-                        else (
-                            update_res.get("error")
-                            if isinstance(update_res, dict)
-                            else None
-                        )
-                    )
-                    if update_error:
-                        print(
-                            f"Failed to update stock_status for menu item {item.get('dish_name')}: {update_error}"
-                        )
-                item["stock_status"] = new_status
-        else:
+
+        if not menu_ids:
             for item in data:
                 item["menu_id"] = item.get("menu_id", item.get("id"))
                 item["ingredients"] = []
+            return data
+
+        # Fetch all menu ingredients (1 query)
+        ing_res = (
+            postgrest_client.table("menu_ingredients")
+            .select("menu_id,ingredient_id,ingredient_name,quantity,measurements")
+            .in_("menu_id", menu_ids)
+            .execute()
+        )
+        ing_error = (
+            getattr(ing_res, "error", None)
+            if hasattr(ing_res, "error")
+            else ing_res.get("error") if isinstance(ing_res, dict) else None
+        )
+        if ing_error:
+            raise HTTPException(
+                status_code=400, detail=getattr(ing_error, "message", str(ing_error))
+            )
+        ing_data = (
+            getattr(ing_res, "data", None)
+            if hasattr(ing_res, "data")
+            else ing_res.get("data") if isinstance(ing_res, dict) else None
+        )
+
+        # Build ingredient map per menu item
+        ing_map = {}
+        all_ingredient_names = set()
+        for ing in ing_data or []:
+            mid = ing.get("menu_id")
+            if mid not in ing_map:
+                ing_map[mid] = []
+            ing_map[mid].append(ing)
+            ing_name = ing.get("ingredient_name") or ing.get("name")
+            if ing_name:
+                all_ingredient_names.add(ing_name.lower())
+
+        # OPTIMIZATION: Batch fetch ALL inventory data in 3 queries instead of N×M×3
+        today_date = datetime.now().date()
+        stock_map = {}  # {ingredient_name_lower: total_available_stock}
+
+        if all_ingredient_names:
+            ingredient_names_list = list(all_ingredient_names)
+
+            # Query 1: inventory (batch)
+            try:
+                inv_res = postgrest_client.table("inventory").select("item_name,stock_quantity,expiration_date").execute()
+                for inv_item in (inv_res.data or []):
+                    item_name = (inv_item.get("item_name") or "").lower()
+                    if item_name not in all_ingredient_names:
+                        continue
+                    stock = inv_item.get("stock_quantity", 0) or 0
+                    expiry = inv_item.get("expiration_date")
+                    is_expired = False
+                    if expiry:
+                        try:
+                            exp_date = datetime.strptime(expiry, "%Y-%m-%d").date()
+                            if exp_date < today_date:
+                                is_expired = True
+                        except Exception:
+                            pass
+                    if not is_expired and stock > 0:
+                        stock_map[item_name] = stock_map.get(item_name, 0) + stock
+            except Exception as e:
+                print(f"Error fetching inventory: {e}")
+
+            # Query 2: inventory_surplus (batch)
+            try:
+                surplus_res = postgrest_client.table("inventory_surplus").select("item_name,stock_quantity,expiration_date").execute()
+                for surplus_item in (surplus_res.data or []):
+                    item_name = (surplus_item.get("item_name") or "").lower()
+                    if item_name not in all_ingredient_names:
+                        continue
+                    stock = surplus_item.get("stock_quantity", 0) or 0
+                    expiry = surplus_item.get("expiration_date")
+                    is_expired = False
+                    if expiry:
+                        try:
+                            exp_date = datetime.strptime(expiry, "%Y-%m-%d").date()
+                            if exp_date < today_date:
+                                is_expired = True
+                        except Exception:
+                            pass
+                    if not is_expired and stock > 0:
+                        stock_map[item_name] = stock_map.get(item_name, 0) + stock
+            except Exception as e:
+                print(f"Error fetching inventory_surplus: {e}")
+
+            # Query 3: inventory_today (batch)
+            try:
+                today_res = postgrest_client.table("inventory_today").select("item_name,stock_quantity,expiration_date").execute()
+                for today_item in (today_res.data or []):
+                    item_name = (today_item.get("item_name") or "").lower()
+                    if item_name not in all_ingredient_names:
+                        continue
+                    stock = today_item.get("stock_quantity", 0) or 0
+                    expiry = today_item.get("expiration_date")
+                    is_expired = False
+                    if expiry:
+                        try:
+                            exp_date = datetime.strptime(expiry, "%Y-%m-%d").date()
+                            if exp_date < today_date:
+                                is_expired = True
+                        except Exception:
+                            pass
+                    if not is_expired and stock > 0:
+                        stock_map[item_name] = stock_map.get(item_name, 0) + stock
+            except Exception as e:
+                print(f"Error fetching inventory_today: {e}")
+
+        # Process each menu item using pre-fetched stock data (O(1) lookup)
+        items_to_update = []
+        for item in data:
+            mid = item.get("id") or item.get("menu_id")
+            item["menu_id"] = item.get("menu_id", item.get("id"))
+            item["ingredients"] = ing_map.get(mid, [])
+
+            all_in_stock = True
+            for ing in item["ingredients"]:
+                ing_name = (ing.get("ingredient_name") or ing.get("name") or "").lower()
+                available_stock = stock_map.get(ing_name, 0)
+
+                if not available_stock or available_stock <= 0:
+                    all_in_stock = False
+                    break
+
+            new_status = "Available" if all_in_stock else "Out of Stock"
+            if item.get("stock_status") != new_status:
+                pk_column = "id" if "id" in item else "menu_id"
+                pk_value = item.get("id") or item.get("menu_id")
+                items_to_update.append({
+                    "pk_column": pk_column,
+                    "pk_value": pk_value,
+                    "new_status": new_status,
+                    "dish_name": item.get("dish_name")
+                })
+            item["stock_status"] = new_status
+
+        # Batch update stock statuses (if needed)
+        for update_item in items_to_update:
+            try:
+                postgrest_client.table("menu").update({"stock_status": update_item["new_status"]}).eq(update_item["pk_column"], update_item["pk_value"]).execute()
+                print(f"Updated {update_item['dish_name']} to {update_item['new_status']}")
+            except Exception as e:
+                print(f"Failed to update {update_item['dish_name']}: {e}")
+
+        elapsed = time.time() - start_time
+        print(f"[PERFORMANCE] get_menu() took {elapsed:.3f}s - {len(data)} items, {len(all_ingredient_names)} unique ingredients")
+
         return data
+
     return await run_in_threadpool(sync_get_menu)
 
 
@@ -909,6 +935,9 @@ async def update_menu_with_image_and_ingredients(
 
 @router.get("/menu/{menu_id}")
 def get_menu_by_id(menu_id: int):
+    import time
+    start_time = time.time()
+
     res = postgrest_client.table("menu").select("*").eq("menu_id", menu_id).single().execute()
     error = (
         getattr(res, "error", None)
@@ -940,110 +969,61 @@ def get_menu_by_id(menu_id: int):
         else ing_res.get("data") if isinstance(ing_res, dict) else None
     )
 
-    # Check availability for each ingredient and calculate stock status
+    # OPTIMIZATION: Batch fetch inventory for all ingredients (3 queries instead of N×6)
+    ingredient_names = [ing.get("ingredient_name") or ing.get("name") for ing in ing_data or []]
+    today_date = datetime.now().date()
+
+    # Build stock map for all ingredients
+    stock_details = {}  # {ing_name_lower: {available, total, expired}}
+
+    if ingredient_names:
+        # Query all 3 tables once
+        for table_name in ["inventory", "inventory_surplus", "inventory_today"]:
+            try:
+                table_res = (
+                    postgrest_client.table(table_name)
+                    .select("item_name,stock_quantity,expiration_date")
+                    .execute()
+                )
+                for item in table_res.data or []:
+                    item_name = (item.get("item_name") or "").lower()
+                    if item_name not in [n.lower() for n in ingredient_names]:
+                        continue
+
+                    if item_name not in stock_details:
+                        stock_details[item_name] = {"available": 0, "total": 0, "expired": 0}
+
+                    item_stock = item.get("stock_quantity", 0) or 0
+                    stock_details[item_name]["total"] += item_stock
+
+                    expiry = item.get("expiration_date")
+                    is_expired = False
+                    if expiry:
+                        try:
+                            exp_date = datetime.strptime(expiry, "%Y-%m-%d").date()
+                            if exp_date < today_date:
+                                is_expired = True
+                                stock_details[item_name]["expired"] += item_stock
+                        except Exception:
+                            pass
+
+                    if not is_expired:
+                        stock_details[item_name]["available"] += item_stock
+            except Exception as e:
+                print(f"Error fetching {table_name}: {e}")
+
+    # Check availability for each ingredient using pre-fetched data
     ingredients_with_availability = []
     all_in_stock = True
 
     for ing in ing_data or []:
         ing_name = ing.get("ingredient_name") or ing.get("name")
-        stock = 0
-        expired = False
+        ing_name_lower = (ing_name or "").lower()
 
-        # Check inventory
-        inv = (
-            postgrest_client.table("inventory")
-            .select("stock_quantity,expiration_date")
-            .ilike("item_name", ing_name)
-            .limit(1)
-            .execute()
-        )
-        if inv.data and len(inv.data) > 0:
-            stock += inv.data[0].get("stock_quantity", 0) or 0
-            expiry = inv.data[0].get("expiration_date")
-            if expiry:
-                try:
-                    if (
-                        datetime.strptime(expiry, "%Y-%m-%d").date()
-                        < datetime.now().date()
-                    ):
-                        expired = True
-                except Exception:
-                    pass
-
-        # Check inventory_surplus
-        surplus = (
-            postgrest_client.table("inventory_surplus")
-            .select("stock_quantity,expiration_date")
-            .ilike("item_name", ing_name)
-            .limit(1)
-            .execute()
-        )
-        if surplus.data and len(surplus.data) > 0:
-            stock += surplus.data[0].get("stock_quantity", 0) or 0
-            expiry = surplus.data[0].get("expiration_date")
-            if expiry:
-                try:
-                    if (
-                        datetime.strptime(expiry, "%Y-%m-%d").date()
-                        < datetime.now().date()
-                    ):
-                        expired = True
-                except Exception:
-                    pass
-
-        # Check inventory_today
-        today = (
-            postgrest_client.table("inventory_today")
-            .select("stock_quantity,expiration_date")
-            .ilike("item_name", ing_name)
-            .limit(1)
-            .execute()
-        )
-        if today.data and len(today.data) > 0:
-            stock += today.data[0].get("stock_quantity", 0) or 0
-            expiry = today.data[0].get("expiration_date")
-            if expiry:
-                try:
-                    if (
-                        datetime.strptime(expiry, "%Y-%m-%d").date()
-                        < datetime.now().date()
-                    ):
-                        expired = True
-                except Exception:
-                    pass
-
-        # Determine detailed availability status for this ingredient
-        available_stock = 0
-        total_stock = 0
-        expired_stock = 0
-        unavailable_reason = None
-
-        # Check all inventory tables for detailed stock information
-        for table_name in ["inventory", "inventory_surplus", "inventory_today"]:
-            table_res = (
-                postgrest_client.table(table_name)
-                .select("stock_quantity,expiration_date")
-                .ilike("item_name", ing_name)
-                .execute()
-            )
-            for item in table_res.data or []:
-                item_stock = item.get("stock_quantity", 0) or 0
-                total_stock += item_stock
-                expiry = item.get("expiration_date")
-                is_expired = False
-                if expiry:
-                    try:
-                        if (
-                            datetime.strptime(expiry, "%Y-%m-%d").date()
-                            < datetime.now().date()
-                        ):
-                            is_expired = True
-                            expired_stock += item_stock
-                    except Exception:
-                        pass
-                # Only count non-expired stock as available
-                if not is_expired:
-                    available_stock += item_stock
+        details = stock_details.get(ing_name_lower, {"available": 0, "total": 0, "expired": 0})
+        available_stock = details["available"]
+        total_stock = details["total"]
+        expired_stock = details["expired"]
 
         # Determine specific unavailability reason
         is_unavailable = False
@@ -1053,9 +1033,7 @@ def get_menu_by_id(menu_id: int):
         elif available_stock <= 0 and expired_stock > 0:
             is_unavailable = True
             unavailable_reason = "expired"
-        elif (
-            available_stock > 0 and available_stock <= 5
-        ):  # Consider low stock threshold
+        elif available_stock > 0 and available_stock <= 5:
             is_unavailable = False  # Still available but low
             unavailable_reason = "low_stock"
         else:
@@ -1090,6 +1068,9 @@ def get_menu_by_id(menu_id: int):
             .execute()
         )
         data["stock_status"] = new_status
+
+    elapsed = time.time() - start_time
+    print(f"[PERFORMANCE] get_menu_by_id({menu_id}) took {elapsed:.3f}s - {len(ingredients_with_availability)} ingredients")
 
     return data
 

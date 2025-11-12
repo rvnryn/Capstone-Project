@@ -22,9 +22,8 @@ import { BiExport } from "react-icons/bi";
 import { MdCheckCircle, MdAssessment } from "react-icons/md";
 import { TbReportAnalytics } from "react-icons/tb";
 import { FiBarChart } from "react-icons/fi";
-import { useUserActivityLogAPI } from "./hook/use-userActivityLogAPI";
+import { useUserActivityLogs, useLogExport } from "../hooks/use-reportQuery";
 import { saveAs } from "file-saver";
-import { supabase } from "@/app/utils/Server/supabaseClient";
 import Pagination from "@/app/components/Pagination";
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID as string;
@@ -81,7 +80,9 @@ const Report_UserActivity = () => {
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [reportDate, setReportDate] = useState("");
-  const [period, setPeriod] = useState("all");
+  const [period, setPeriod] = useState<
+    "all" | "today" | "week" | "month" | "year" | "custom"
+  >("all");
   const [role, setRole] = useState("");
 
   // Additional filter states
@@ -90,8 +91,6 @@ const Report_UserActivity = () => {
   const [username, setUsername] = useState("");
   const [activityTimeFilter, setActivityTimeFilter] = useState("");
 
-  const [userActivityData, setUserActivityData] = useState<any[]>([]);
-  const [pastUserActivityData, setPastUserActivityData] = useState<any[]>([]);
   const [sortConfig, setSortConfig] = useState<{
     key: string;
     direction: "asc" | "desc";
@@ -108,99 +107,33 @@ const Report_UserActivity = () => {
     "Assistant Store Manager",
   ];
 
-  const {
-    logs,
-    loading: apiLoading,
-    error,
-    fetchLogs,
-  } = useUserActivityLogAPI();
-  const [loading, setLocalLoading] = useState(true);
-  const [offlineError, setOfflineError] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Robust offline/cached loading logic
-    const isCompletelyOffline =
-      typeof window !== "undefined" && !navigator.onLine;
-    const cacheKey = "cached_user_activity_logs";
-    const params: any = {};
-    if (reportDate) params.report_date = reportDate;
-    if (role) params.role = role;
-
-    if (isCompletelyOffline) {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          setUserActivityData(parsed);
-          setOfflineError(null);
-        } catch (e) {
-          setUserActivityData([]);
-          setOfflineError("Failed to parse cached data.");
-        }
-      } else {
-        setUserActivityData([]);
-        setOfflineError("Offline and no cached user activity logs available.");
-      }
-      setLocalLoading(false);
-      return;
-    }
-
-    // Online: fetch from API
-    setOfflineError(null);
-    setLocalLoading(true);
-    fetchLogs(params);
-
-    // Subscribe to changes as before
-    const channel = supabase
-      .channel("user_activity_log_changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "user_activity_log" },
-        () => {
-          const params: any = {};
-          if (reportDate) params.report_date = reportDate;
-          if (role) params.role = role;
-          fetchLogs(params);
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+  // React Query hook with auto-refresh every 5 minutes
+  const params = useMemo(() => {
+    const p: any = {};
+    if (reportDate) p.report_date = reportDate;
+    if (role) p.role = role;
+    return p;
   }, [reportDate, role]);
 
-  useEffect(() => {
-    setUserActivityData(logs);
-    // Cache logs if online
-    const isCompletelyOffline =
-      typeof window !== "undefined" && !navigator.onLine;
-    if (!isCompletelyOffline && logs && Array.isArray(logs)) {
-      localStorage.setItem("cached_user_activity_logs", JSON.stringify(logs));
-    }
-    // Only set loading false if not already offline error
-    setLocalLoading(false);
-  }, [logs]);
+  const { data: logs = [], isLoading: loading, error } = useUserActivityLogs(params);
+  const logExportMutation = useLogExport();
 
-  // Always use cached data if offline, or last available data if online fetch fails
+  // Handle offline case
   const isCompletelyOffline =
     typeof window !== "undefined" && !navigator.onLine;
   const cachedLogs =
     typeof window !== "undefined"
       ? localStorage.getItem("cached_user_activity_logs")
       : null;
-  const displayLogs = isCompletelyOffline
-    ? cachedLogs
-      ? JSON.parse(cachedLogs)
-      : []
-    : userActivityData;
+  const displayLogs = isCompletelyOffline && cachedLogs
+    ? JSON.parse(cachedLogs)
+    : logs;
 
   // If offline and no cached data, show a clear message
   if (
     isCompletelyOffline &&
     (!cachedLogs || JSON.parse(cachedLogs).length === 0)
   ) {
-    // Ensure loading spinner is not shown
-    if (loading) setLocalLoading(false);
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-yellow-400">
         <h2>No cached user activity logs available.</h2>
@@ -228,19 +161,19 @@ const Report_UserActivity = () => {
   }
 
   const uniqueReportDates = useMemo(() => {
-    const dates = [...userActivityData, ...pastUserActivityData]
-      .map((item) => item.report_date)
-      .filter((date) => !!date)
-      .map((date) => dayjs(date).format("YYYY-MM-DD"));
+    const dates = displayLogs
+      .map((item: any) => item.report_date)
+      .filter((date: any) => !!date)
+      .map((date: any) => dayjs(date).format("YYYY-MM-DD"));
     return [...new Set(dates)];
-  }, [userActivityData, pastUserActivityData]);
+  }, [displayLogs]);
 
   const uniqueUsernames = useMemo(() => {
-    const usernames = [...userActivityData, ...pastUserActivityData]
-      .map((item) => item.user_name)
-      .filter((name) => !!name);
+    const usernames = displayLogs
+      .map((item: any) => item.user_name)
+      .filter((name: any) => !!name);
     return [...new Set(usernames)];
-  }, [userActivityData, pastUserActivityData]);
+  }, [displayLogs]);
 
   // Sorting functionality
   const filteredActivity = useMemo(() => {
@@ -402,6 +335,40 @@ const Report_UserActivity = () => {
   const clearDateRange = useCallback(() => {
     setStartDate("");
     setEndDate("");
+  }, []);
+
+  // Handler for time period changes
+  const handleTimePeriodChange = useCallback((newPeriod: "all" | "today" | "week" | "month" | "year" | "custom") => {
+    setPeriod(newPeriod);
+
+    const now = dayjs();
+    const today = now.format("YYYY-MM-DD");
+
+    switch (newPeriod) {
+      case "today":
+        setStartDate(today);
+        setEndDate(today);
+        break;
+      case "week":
+        setStartDate(now.subtract(7, "day").format("YYYY-MM-DD"));
+        setEndDate(today);
+        break;
+      case "month":
+        setStartDate(now.subtract(30, "day").format("YYYY-MM-DD"));
+        setEndDate(today);
+        break;
+      case "year":
+        setStartDate(now.subtract(365, "day").format("YYYY-MM-DD"));
+        setEndDate(today);
+        break;
+      case "all":
+        setStartDate("");
+        setEndDate("");
+        break;
+      case "custom":
+        // Don't change date range, user will set manually
+        break;
+    }
   }, []);
   const clearUsername = useCallback(() => setUsername(""), []);
   const clearActivityTimeFilter = useCallback(
@@ -704,24 +671,10 @@ const Report_UserActivity = () => {
     setShowPopup(false);
 
     // Log export activity
-    try {
-      const token = localStorage.getItem("token");
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      await fetch(`${API_URL}/api/log-export`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          report_type: "user activity report",
-          record_count: paginatedActivity.length,
-        }),
-      });
-    } catch (error) {
-      console.log("Failed to log export activity:", error);
-      // Don't show error to user, just log it
-    }
+    logExportMutation.mutate({
+      report_type: "user activity report",
+      record_count: paginatedActivity.length,
+    });
   };
 
   const appendToGoogleSheet = async (
@@ -880,13 +833,8 @@ const Report_UserActivity = () => {
             aria-label="User Activity Report main content"
             tabIndex={-1}
           >
-            {/* Robust offline/cached error and loading UI */}
-            {offlineError && (
-              <div className="bg-red-700 text-white p-4 rounded-lg mb-4 text-center">
-                {offlineError}
-              </div>
-            )}
-            {loading && !offlineError && (
+            {/* Loading UI */}
+            {loading && (
               <div className="flex justify-center items-center min-h-[200px]">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
                 <span className="ml-4 text-white">
@@ -1118,6 +1066,29 @@ const Report_UserActivity = () => {
                     {/* Primary Filters Row */}
                     <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 xs:gap-3 sm:gap-4 mb-4">
                       <div>
+                        <label className="flex items-center gap-1.5 xs:gap-2 text-gray-300 text-xs xs:text-xs sm:text-sm font-medium mb-1.5 xs:mb-2">
+                          <FaCalendarAlt className="text-violet-400 text-xs flex-shrink-0" />
+                          <span className="truncate">Time Period</span>
+                        </label>
+                        <select
+                          value={period}
+                          onChange={(e) =>
+                            handleTimePeriodChange(
+                              e.target.value as "all" | "today" | "week" | "month" | "year" | "custom"
+                            )
+                          }
+                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-2 xs:px-3 py-2 xs:py-2.5 sm:py-3 border border-gray-600/50 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20 cursor-pointer text-xs xs:text-sm transition-all"
+                        >
+                          <option value="all">All Time</option>
+                          <option value="today">Today</option>
+                          <option value="week">This Week</option>
+                          <option value="month">This Month</option>
+                          <option value="year">This Year</option>
+                          <option value="custom">Custom Range</option>
+                        </select>
+                      </div>
+
+                      <div>
                         <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
                           Role
                         </label>
@@ -1179,31 +1150,41 @@ const Report_UserActivity = () => {
                       </div>
                     </div>
 
-                    {/* Date Range Filters */}
-                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 xs:gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
-                          Start Date
+                    {/* Custom Date Range (shown when Custom is selected) */}
+                    {period === "custom" && (
+                      <div className="mb-4 pb-4 border-b border-gray-700/30">
+                        <label className="flex items-center gap-1.5 xs:gap-2 text-gray-300 text-xs xs:text-xs sm:text-sm font-medium mb-1.5 xs:mb-2">
+                          <FaCalendarAlt className="text-violet-400 text-xs flex-shrink-0" />
+                          <span className="truncate">Custom Date Range</span>
                         </label>
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-violet-400 text-2xs xs:text-xs sm:text-sm transition-all"
-                        />
+                        <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 xs:gap-3 sm:gap-4">
+                          <div>
+                            <label className="block text-xs xs:text-sm text-gray-400 mb-1">
+                              Start Date
+                            </label>
+                            <input
+                              type="date"
+                              value={startDate}
+                              onChange={(e) => setStartDate(e.target.value)}
+                              className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20 text-2xs xs:text-xs sm:text-sm transition-all"
+                              placeholder="Start date"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs xs:text-sm text-gray-400 mb-1">
+                              End Date
+                            </label>
+                            <input
+                              type="date"
+                              value={endDate}
+                              onChange={(e) => setEndDate(e.target.value)}
+                              className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20 text-2xs xs:text-xs sm:text-sm transition-all"
+                              placeholder="End date"
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs xs:text-sm text-gray-300 mb-1 xs:mb-2">
-                          End Date
-                        </label>
-                        <input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full bg-gray-700/50 text-white rounded-md xs:rounded-lg px-3 xs:px-4 py-2 xs:py-2.5 border border-gray-600/50 focus:border-violet-400 text-2xs xs:text-xs sm:text-sm transition-all"
-                        />
-                      </div>
-                    </div>
+                    )}
 
                     {/* Clear All Button - only show when filters are active */}
                     {isClearAllVisible && (

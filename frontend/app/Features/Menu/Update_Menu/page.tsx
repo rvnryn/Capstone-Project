@@ -23,6 +23,7 @@ import {
   FiImage,
 } from "react-icons/fi";
 import { useInventoryItemNames } from "@/app/hooks/Itemnames";
+import { getUnitsForCategory } from "@/app/constants/unitOptions";
 
 const CATEGORY_OPTIONS = [
   "Bagnet Meals",
@@ -127,6 +128,9 @@ export default function EditMenuPage() {
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const [focusedField, setFocusedField] = useState<string>("");
   const [isSubmitted, setIsSubmitted] = useState(false);
+  // Collapsible sections state
+  const [showBasicInfo, setShowBasicInfo] = useState(true);
+  const [showIngredients, setShowIngredients] = useState(true);
 
   useEffect(() => {
     if (menu) {
@@ -385,6 +389,188 @@ export default function EditMenuPage() {
                 </div>
               </div>
 
+              {/* Quick Stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-blue-900/40 to-blue-800/40 backdrop-blur-sm rounded-xl p-4 border border-blue-500/30 hover:border-blue-400/50 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-blue-300 text-xs font-medium mb-1">
+                        Basic Info
+                      </p>
+                      <p className="text-white text-xl font-bold">
+                        {
+                          [
+                            formData.itemcode,
+                            formData.dish_name,
+                            formData.category,
+                            formData.price,
+                          ].filter(Boolean).length
+                        }
+                        /4
+                      </p>
+                    </div>
+                    <div className="bg-blue-500/20 p-3 rounded-lg">
+                      <svg
+                        className="w-5 h-5 text-blue-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-green-900/40 to-green-800/40 backdrop-blur-sm rounded-xl p-4 border border-green-500/30 hover:border-green-400/50 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-green-300 text-xs font-medium mb-1">
+                        Ingredients
+                      </p>
+                      <p className="text-white text-xl font-bold">
+                        {
+                          ingredients.filter((ing) => ing.name && ing.quantity)
+                            .length
+                        }
+                      </p>
+                    </div>
+                    <div className="bg-green-500/20 p-3 rounded-lg">
+                      <svg
+                        className="w-5 h-5 text-green-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-900/40 to-purple-800/40 backdrop-blur-sm rounded-xl p-4 border border-purple-500/30 hover:border-purple-400/50 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-purple-300 text-xs font-medium mb-1">
+                        Image
+                      </p>
+                      <p className="text-white text-xl font-bold">
+                        {selectedImage || previewUrl ? "✓" : "—"}
+                      </p>
+                    </div>
+                    <div className="bg-purple-500/20 p-3 rounded-lg">
+                      <svg
+                        className="w-5 h-5 text-purple-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Steps */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between max-w-2xl mx-auto">
+                  <div className="flex flex-col items-center flex-1">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center shadow-lg">
+                      <span className="text-black font-bold text-sm">1</span>
+                    </div>
+                    <span className="text-xs text-yellow-400 font-medium mt-2">
+                      Basic Info
+                    </span>
+                  </div>
+                  <div
+                    className={`flex-1 h-1 mx-2 ${
+                      ingredients.some((ing) => ing.name && ing.quantity)
+                        ? "bg-gradient-to-r from-yellow-400 to-yellow-400"
+                        : "bg-gradient-to-r from-yellow-400 to-gray-600"
+                    }`}
+                  ></div>
+                  <div className="flex flex-col items-center flex-1">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${
+                        ingredients.some((ing) => ing.name && ing.quantity)
+                          ? "bg-gradient-to-br from-yellow-400 to-yellow-500"
+                          : "bg-gray-700 border-2 border-gray-600"
+                      }`}
+                    >
+                      <span
+                        className={`font-bold text-sm ${
+                          ingredients.some((ing) => ing.name && ing.quantity)
+                            ? "text-black"
+                            : "text-gray-400"
+                        }`}
+                      >
+                        2
+                      </span>
+                    </div>
+                    <span
+                      className={`text-xs font-medium mt-2 ${
+                        ingredients.some((ing) => ing.name && ing.quantity)
+                          ? "text-yellow-400"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      Ingredients
+                    </span>
+                  </div>
+                  <div
+                    className={`flex-1 h-1 mx-2 ${
+                      selectedImage || previewUrl
+                        ? "bg-yellow-400"
+                        : "bg-gray-600"
+                    }`}
+                  ></div>
+                  <div className="flex flex-col items-center flex-1">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${
+                        selectedImage || previewUrl
+                          ? "bg-gradient-to-br from-yellow-400 to-yellow-500"
+                          : "bg-gray-700 border-2 border-gray-600"
+                      }`}
+                    >
+                      <span
+                        className={`font-bold text-sm ${
+                          selectedImage || previewUrl
+                            ? "text-black"
+                            : "text-gray-400"
+                        }`}
+                      >
+                        3
+                      </span>
+                    </div>
+                    <span
+                      className={`text-xs font-medium mt-2 ${
+                        selectedImage || previewUrl
+                          ? "text-yellow-400"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      Image
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <form
                 onSubmit={handleSubmit}
                 className="space-y-3 xs:space-y-4 sm:space-y-6 md:space-y-8"
@@ -396,373 +582,559 @@ export default function EditMenuPage() {
                     !isOnline ? { opacity: 0.6, pointerEvents: "none" } : {}
                   }
                 >
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8">
-                    <div className="space-y-4">
-                      <div className="group">
-                        <label
-                          htmlFor="itemcode"
-                          className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                        >
-                          Item Code
-                        </label>
-                        <input
-                          type="text"
-                          id="itemcode"
-                          name="itemcode"
-                          value={formData.itemcode}
-                          onChange={handleChange}
-                          onFocus={() => handleFocus("itemcode")}
-                          onBlur={handleBlur}
-                          className="w-full bg-gray-700 text-gray-400 rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base border-gray-600/50 cursor-not-allowed"
-                        />
-                      </div>
-                      {/* Dish Name */}
-                      <div className="group">
-                        <label
-                          htmlFor="dish_name"
-                          className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                        >
-                          <FiTag className="text-yellow-400" />
-                          Dish Name
-                          <span className="text-red-400">*</span>
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            id="dish_name"
-                            name="dish_name"
-                            required
-                            value={formData.dish_name}
-                            onChange={handleChange}
-                            onFocus={() => handleFocus("dish_name")}
-                            onBlur={handleBlur}
-                            placeholder="Enter dish name..."
-                            className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
-                              isSubmitted && !formData.dish_name
-                                ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                                : focusedField === "dish_name"
-                                ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                                : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                            }`}
-                            disabled={!isOnline}
-                          />
-                          {focusedField === "dish_name" && (
-                            <div className="absolute right-2 xs:right-3 top-1/2 transform -translate-y-1/2">
-                              <div className="w-1.5 xs:w-2 h-1.5 xs:h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Category */}
-                      <div className="group">
-                        <label
-                          htmlFor="category"
-                          className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                        >
-                          <FiPackage className="text-yellow-400" />
-                          Category
-                          <span className="text-red-400">*</span>
-                        </label>
-                        <div className="relative">
-                          <select
-                            id="category"
-                            name="category"
-                            required
-                            value={formData.category}
-                            onChange={handleChange}
-                            onFocus={() => handleFocus("category")}
-                            onBlur={handleBlur}
-                            className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 cursor-pointer ${
-                              isSubmitted && !formData.category
-                                ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                                : focusedField === "category"
-                                ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                                : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                            }`}
-                            disabled={!isOnline}
+                  {/* Basic Information Section */}
+                  <section className="mb-6">
+                    {/* Collapsible Header */}
+                    <button
+                      type="button"
+                      onClick={() => setShowBasicInfo(!showBasicInfo)}
+                      className="w-full flex items-center justify-between bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-4 sm:p-5 border border-gray-700/50 hover:border-yellow-400/30 transition-all duration-300 mb-4 group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 p-2.5 rounded-lg">
+                          <svg
+                            className="w-5 h-5 text-yellow-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
                           >
-                            <option value="" className="bg-gray-800">
-                              Select Category...
-                            </option>
-                            {CATEGORY_OPTIONS.map((cat) => (
-                              <option
-                                key={cat}
-                                value={cat}
-                                className="bg-gray-800"
-                              >
-                                {cat}
-                              </option>
-                            ))}
-                          </select>
-                          {focusedField === "category" && (
-                            <div className="absolute right-8 top-1/2 transform -translate-y-1/2">
-                              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                            </div>
-                          )}
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                        </div>
+                        <div className="text-left">
+                          <h2 className="text-lg font-bold text-yellow-300">
+                            Basic Information
+                          </h2>
+                          <p className="text-xs text-gray-400">
+                            Item code, name, category, and pricing
+                          </p>
                         </div>
                       </div>
-
-                      {/* Price */}
-                      <div className="group">
-                        <label
-                          htmlFor="price"
-                          className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                        >
-                          <FiHash className="text-yellow-400" />
-                          Price (₱)
-                          <span className="text-red-400">*</span>
-                        </label>
-                        <div className="relative max-w-md">
-                          <input
-                            type="number"
-                            id="price"
-                            name="price"
-                            required
-                            min={0}
-                            step="0.01"
-                            value={formData.price}
-                            onChange={handleChange}
-                            onFocus={() => handleFocus("price")}
-                            onBlur={handleBlur}
-                            placeholder="Enter price..."
-                            className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
-                              isSubmitted && !formData.price
-                                ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                                : focusedField === "price"
-                                ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                                : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                            }`}
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            disabled={!isOnline}
-                          />
-                          {focusedField === "price" && (
-                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Description */}
-                      <div className="group">
-                        <label
-                          htmlFor="description"
-                          className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                        >
-                          <FiTag className="text-yellow-400" />
-                          Description
-                        </label>
-                        <div className="relative">
-                          <textarea
-                            id="description"
-                            name="description"
-                            value={formData.description}
-                            onChange={handleChange}
-                            onFocus={() => handleFocus("description")}
-                            onBlur={handleBlur}
-                            placeholder="Enter dish description..."
-                            className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 resize-vertical min-h-[80px] ${
-                              focusedField === "description"
-                                ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                                : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                            }`}
-                            rows={3}
-                            disabled={!isOnline}
-                          />
-                          {focusedField === "description" && (
-                            <div className="absolute right-3 top-3">
-                              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {/* Image Preview & Upload */}
-                    <div className="flex flex-col items-center justify-center w-full gap-2">
-                      <label className="flex items-center gap-2 text-gray-300 mb-2 font-medium text-sm sm:text-base">
-                        <FiImage className="text-yellow-400" />
-                        Dish Image
-                      </label>
-                      {previewUrl ? (
-                        <div className="relative w-32 h-32 xs:w-44 xs:h-44 md:w-44 md:h-52 border-2 border-dashed border-yellow-400 bg-gray-900 rounded-lg flex items-center justify-center">
-                          <Image
-                            src={previewUrl}
-                            alt="Selected"
-                            width={208}
-                            height={208}
-                            className="w-full h-full object-contain rounded-lg shadow-xl"
-                            style={{ objectFit: "contain" }}
-                            unoptimized
-                          />
-                        </div>
-                      ) : (
-                        <span className="text-gray-500">No Image</span>
-                      )}
-                      <label
-                        className={`mt-4 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-0.5 rounded-lg font-semibold shadow cursor-pointer transition ${
-                          !isOnline ? "opacity-50 pointer-events-none" : ""
+                      <svg
+                        className={`w-6 h-6 text-gray-400 transition-transform duration-300 ${
+                          showBasicInfo ? "rotate-180" : ""
                         }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        Change Image
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageChange}
-                          className="hidden"
-                          disabled={!isOnline}
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
                         />
-                      </label>
-                      <span className="text-xs text-gray-400 mt-1">
-                        Choose a new image to update.
-                      </span>
-                    </div>
-                  </div>
+                      </svg>
+                    </button>
 
-                  {/* Ingredients Section */}
-                  <div>
-                    <label className="block text-yellow-300 mb-4 font-semibold text-lg">
-                      Ingredients
-                    </label>
-                    <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl">
-                      <div className="space-y-3">
-                        {ingredients.map((ing, idx) => (
-                          <div
-                            key={idx}
-                            className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end bg-gray-800/50 rounded-xl p-4 border border-gray-700/30 hover:border-yellow-400/30 transition-all"
-                          >
-                            {/* Ingredient Name */}
-                            <div className="sm:col-span-5">
-                              <label className="block mb-2 text-sm font-medium text-yellow-300">
-                                Ingredient Name *
-                              </label>
-                              <select
-                                value={ing.name}
-                                onChange={(e) =>
-                                  handleIngredientChange(
-                                    idx,
-                                    "name",
-                                    e.target.value
-                                  )
-                                }
-                                className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
-                                disabled={itemNamesLoading || !isOnline}
+                    {/* Collapsible Content */}
+                    {showBasicInfo && (
+                      <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 shadow-xl animate-fade-in">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8">
+                          <div className="space-y-4">
+                            <div className="group">
+                              <label
+                                htmlFor="itemcode"
+                                className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
                               >
-                                <option value="">Select Ingredient</option>
-                                {items
-                                  .filter(
-                                    (item) =>
-                                      item.category !==
-                                      "Seasonings & Condiments"
-                                  )
-                                  .map((item) => (
-                                    <option
-                                      key={item.item_name}
-                                      value={item.item_name}
-                                    >
-                                      {item.item_name}
-                                    </option>
-                                  ))}
-                              </select>
-                            </div>
-
-                            {/* Quantity */}
-                            <div className="sm:col-span-3">
-                              <label className="block mb-2 text-sm font-medium text-yellow-300">
-                                Quantity *
+                                Item Code
                               </label>
                               <input
-                                type="number"
-                                min={0}
-                                step={1}
-                                placeholder="0"
-                                value={ing.quantity}
-                                onChange={(e) =>
-                                  handleIngredientChange(
-                                    idx,
-                                    "quantity",
-                                    e.target.value
-                                  )
-                                }
-                                className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
+                                type="text"
+                                id="itemcode"
+                                name="itemcode"
+                                value={formData.itemcode}
+                                onChange={handleChange}
+                                onFocus={() => handleFocus("itemcode")}
+                                onBlur={handleBlur}
+                                className="w-full bg-gray-700 text-gray-400 rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base border-gray-600/50 cursor-not-allowed"
                               />
                             </div>
-
-                            {/* Unit */}
-                            <div className="sm:col-span-3">
-                              <label className="block mb-2 text-sm font-medium text-yellow-300">
-                                Unit *
-                              </label>
-                              <select
-                                value={ing.measurements || ""}
-                                onChange={(e) =>
-                                  handleIngredientChange(
-                                    idx,
-                                    "measurements",
-                                    e.target.value
-                                  )
-                                }
-                                className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                            {/* Dish Name */}
+                            <div className="group">
+                              <label
+                                htmlFor="dish_name"
+                                className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
                               >
-                                <option value="">Unit</option>
-                                <option value="g">g</option>
-                                <option value="kg">kg</option>
-                                <option value="ml">ml</option>
-                                <option value="l">L</option>
-                                <option value="pcs">pcs</option>
-                                <option value="tbsp">tbsp</option>
-                                <option value="tsp">tsp</option>
-                                <option value="cup">cup</option>
-                                <option value="oz">oz</option>
-                              </select>
+                                <FiTag className="text-yellow-400" />
+                                Dish Name
+                                <span className="text-red-400">*</span>
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  id="dish_name"
+                                  name="dish_name"
+                                  required
+                                  value={formData.dish_name}
+                                  onChange={handleChange}
+                                  onFocus={() => handleFocus("dish_name")}
+                                  onBlur={handleBlur}
+                                  placeholder="Enter dish name..."
+                                  className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-lg xs:rounded-xl px-2 xs:px-3 sm:px-4 md:px-5 py-1.5 xs:py-2 sm:py-3 md:py-4 border-2 text-xs xs:text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
+                                    isSubmitted && !formData.dish_name
+                                      ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                                      : focusedField === "dish_name"
+                                      ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                                      : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                                  }`}
+                                  disabled={!isOnline}
+                                />
+                                {focusedField === "dish_name" && (
+                                  <div className="absolute right-2 xs:right-3 top-1/2 transform -translate-y-1/2">
+                                    <div className="w-1.5 xs:w-2 h-1.5 xs:h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
-                            {/* Remove Button */}
-                            <div className="sm:col-span-1 flex items-end">
-                              <button
-                                type="button"
-                                onClick={() => removeIngredient(idx)}
-                                className="w-full sm:w-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-400/50 px-4 py-3 rounded-lg font-medium transition-all duration-300 flex items-center justify-center gap-2"
-                                aria-label="Remove ingredient"
-                                disabled={!isOnline || ingredients.length < 1}
+                            {/* Category */}
+                            <div className="group">
+                              <label
+                                htmlFor="category"
+                                className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
                               >
-                                <FaTrash className="w-4 h-4" />
-                                <span className="sm:hidden">Remove</span>
-                              </button>
+                                <FiPackage className="text-yellow-400" />
+                                Category
+                                <span className="text-red-400">*</span>
+                              </label>
+                              <div className="relative">
+                                <select
+                                  id="category"
+                                  name="category"
+                                  required
+                                  value={formData.category}
+                                  onChange={handleChange}
+                                  onFocus={() => handleFocus("category")}
+                                  onBlur={handleBlur}
+                                  className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 cursor-pointer ${
+                                    isSubmitted && !formData.category
+                                      ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                                      : focusedField === "category"
+                                      ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                                      : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                                  }`}
+                                  disabled={!isOnline}
+                                >
+                                  <option value="" className="bg-gray-800">
+                                    Select Category...
+                                  </option>
+                                  {CATEGORY_OPTIONS.map((cat) => (
+                                    <option
+                                      key={cat}
+                                      value={cat}
+                                      className="bg-gray-800"
+                                    >
+                                      {cat}
+                                    </option>
+                                  ))}
+                                </select>
+                                {focusedField === "category" && (
+                                  <div className="absolute right-8 top-1/2 transform -translate-y-1/2">
+                                    <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Price */}
+                            <div className="group">
+                              <label
+                                htmlFor="price"
+                                className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                              >
+                                <FiHash className="text-yellow-400" />
+                                Price (₱)
+                                <span className="text-red-400">*</span>
+                              </label>
+                              <div className="relative max-w-md">
+                                <input
+                                  type="number"
+                                  id="price"
+                                  name="price"
+                                  required
+                                  min={0}
+                                  step="0.01"
+                                  value={formData.price}
+                                  onChange={handleChange}
+                                  onFocus={() => handleFocus("price")}
+                                  onBlur={handleBlur}
+                                  placeholder="Enter price..."
+                                  className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
+                                    isSubmitted && !formData.price
+                                      ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                                      : focusedField === "price"
+                                      ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                                      : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                                  }`}
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  disabled={!isOnline}
+                                />
+                                {focusedField === "price" && (
+                                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                    <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Description */}
+                            <div className="group">
+                              <label
+                                htmlFor="description"
+                                className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                              >
+                                <FiTag className="text-yellow-400" />
+                                Description
+                              </label>
+                              <div className="relative">
+                                <textarea
+                                  id="description"
+                                  name="description"
+                                  value={formData.description}
+                                  onChange={handleChange}
+                                  onFocus={() => handleFocus("description")}
+                                  onBlur={handleBlur}
+                                  placeholder="Enter dish description..."
+                                  className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 resize-vertical min-h-[80px] ${
+                                    focusedField === "description"
+                                      ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                                      : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                                  }`}
+                                  rows={3}
+                                  disabled={!isOnline}
+                                />
+                                {focusedField === "description" && (
+                                  <div className="absolute right-3 top-3">
+                                    <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        ))}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={addIngredient}
-                        className="mt-4 w-full sm:w-auto bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-500 hover:to-yellow-600 text-black px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-yellow-400/50 transition-all duration-300 flex items-center justify-center gap-2"
-                        disabled={!isOnline}
-                      >
-                        <span className="text-xl">+</span>
-                        Add Ingredient
-                      </button>
-
-                      <p className="text-gray-400 text-xs mt-4 flex items-start gap-2">
-                        <span className="text-yellow-400 mt-0.5">💡</span>
-                        <span>
-                          Tip: Add all ingredients with their amounts. You can
-                          remove or edit any ingredient before saving.
-                        </span>
-                      </p>
-                    </div>
-
-                    {error && (
-                      <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm mt-4 flex items-center gap-2">
-                        <FiAlertTriangle className="w-5 h-5 flex-shrink-0" />
-                        <span>{error}</span>
+                          {/* Image Preview & Upload */}
+                          <div className="flex flex-col items-center justify-center w-full gap-2">
+                            <label className="flex items-center gap-2 text-gray-300 mb-2 font-medium text-sm sm:text-base">
+                              <FiImage className="text-yellow-400" />
+                              Dish Image
+                            </label>
+                            {previewUrl ? (
+                              <div className="relative w-32 h-32 xs:w-44 xs:h-44 md:w-44 md:h-52 border-2 border-dashed border-yellow-400 bg-gray-900 rounded-lg flex items-center justify-center">
+                                <Image
+                                  src={previewUrl}
+                                  alt="Selected"
+                                  width={208}
+                                  height={208}
+                                  className="w-full h-full object-contain rounded-lg shadow-xl"
+                                  style={{ objectFit: "contain" }}
+                                  unoptimized
+                                />
+                              </div>
+                            ) : (
+                              <span className="text-gray-500">No Image</span>
+                            )}
+                            <label
+                              className={`mt-4 bg-yellow-400 hover:bg-yellow-300 text-black px-4 py-0.5 rounded-lg font-semibold shadow cursor-pointer transition ${
+                                !isOnline
+                                  ? "opacity-50 pointer-events-none"
+                                  : ""
+                              }`}
+                            >
+                              Change Image
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImageChange}
+                                className="hidden"
+                                disabled={!isOnline}
+                              />
+                            </label>
+                            <span className="text-xs text-gray-400 mt-1">
+                              Choose a new image to update.
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     )}
-                  </div>
+                  </section>
+
+                  {/* Ingredients Section */}
+                  <section className="mb-6">
+                    {/* Collapsible Header */}
+                    <button
+                      type="button"
+                      onClick={() => setShowIngredients(!showIngredients)}
+                      className="w-full flex items-center justify-between bg-gradient-to-r from-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl p-4 sm:p-5 border border-gray-700/50 hover:border-yellow-400/30 transition-all duration-300 mb-4 group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="bg-gradient-to-br from-green-400/20 to-green-500/20 p-2.5 rounded-lg">
+                          <svg
+                            className="w-5 h-5 text-green-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                            />
+                          </svg>
+                        </div>
+                        <div className="text-left">
+                          <h2 className="text-lg font-bold text-green-300">
+                            Ingredients
+                          </h2>
+                          <p className="text-xs text-gray-400">
+                            {
+                              ingredients.filter(
+                                (ing) => ing.name && ing.quantity
+                              ).length
+                            }{" "}
+                            ingredient
+                            {ingredients.filter(
+                              (ing) => ing.name && ing.quantity
+                            ).length !== 1
+                              ? "s"
+                              : ""}{" "}
+                            added
+                          </p>
+                        </div>
+                      </div>
+                      <svg
+                        className={`w-6 h-6 text-gray-400 transition-transform duration-300 ${
+                          showIngredients ? "rotate-180" : ""
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
+
+                    {/* Collapsible Content */}
+                    {showIngredients && (
+                      <div className="bg-gray-900/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-xl animate-fade-in">
+                        <div className="space-y-3">
+                          {ingredients.map((ing, idx) => (
+                            <div
+                              key={idx}
+                              className="group grid grid-cols-1 sm:grid-cols-12 gap-3 items-end bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-xl p-4 border border-gray-700/30 hover:border-green-400/30 hover:shadow-lg hover:shadow-green-400/10 transition-all duration-300"
+                            >
+                              {/* Ingredient Number Badge */}
+                              <div className="hidden sm:block sm:col-span-12 mb-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="bg-gradient-to-br from-green-400/20 to-green-500/20 px-3 py-1 rounded-full border border-green-500/30">
+                                    <span className="text-green-400 text-xs font-bold">
+                                      #{idx + 1}
+                                    </span>
+                                  </div>
+                                  <div className="flex-1 h-px bg-gradient-to-r from-green-400/20 to-transparent"></div>
+                                </div>
+                              </div>
+                              {/* Ingredient Name */}
+                              <div className="sm:col-span-5">
+                                <label className="block mb-2 text-sm font-medium text-yellow-300">
+                                  Ingredient Name *
+                                </label>
+                                <select
+                                  value={ing.name}
+                                  onChange={(e) =>
+                                    handleIngredientChange(
+                                      idx,
+                                      "name",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                                  disabled={itemNamesLoading || !isOnline}
+                                >
+                                  <option value="">Select Ingredient</option>
+                                  {items
+                                    .filter((item) => {
+                                      const measurement =
+                                        item.measurement?.toLowerCase() || "";
+                                      const category =
+                                        item.category?.toLowerCase() || "";
+
+                                      // Filter out items with gallon/liter measurements
+                                      if (["l", "gal"].includes(measurement)) {
+                                        return false;
+                                      }
+
+                                      // Filter out items with "pack" measurement, except for Meats and Seafood
+                                      if (measurement === "pack") {
+                                        const allowedCategories = [
+                                          "meats",
+                                          "seafood",
+                                        ];
+                                        if (
+                                          !allowedCategories.includes(category)
+                                        ) {
+                                          return false;
+                                        }
+                                      }
+
+                                      // If menu category is "Drinks", only show "Beverage" items
+                                      if (formData.category === "Drinks") {
+                                        return category === "beverage";
+                                      }
+
+                                      // If menu category is NOT "Drinks", exclude "Beverage" items
+                                      if (
+                                        formData.category !== "Drinks" &&
+                                        category === "beverage"
+                                      ) {
+                                        return false;
+                                      }
+
+                                      return true;
+                                    })
+                                    .map((item) => (
+                                      <option
+                                        key={item.item_name}
+                                        value={item.item_name}
+                                      >
+                                        {item.item_name}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+
+                              {/* Quantity */}
+                              <div className="sm:col-span-3">
+                                <label className="block mb-2 text-sm font-medium text-yellow-300">
+                                  Quantity *
+                                </label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  placeholder="0"
+                                  value={ing.quantity}
+                                  onChange={(e) =>
+                                    handleIngredientChange(
+                                      idx,
+                                      "quantity",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                />
+                              </div>
+
+                              {/* Unit */}
+                              <div className="sm:col-span-3">
+                                <label className="block mb-2 text-sm font-medium text-yellow-300">
+                                  Unit *
+                                </label>
+                                <select
+                                  value={ing.measurements || ""}
+                                  onChange={(e) =>
+                                    handleIngredientChange(
+                                      idx,
+                                      "measurements",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-full bg-gray-700 text-white rounded-lg px-4 py-3 border border-gray-600 hover:border-yellow-400/50 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 focus:outline-none transition"
+                                >
+                                  <option value="" disabled>
+                                    Select unit
+                                  </option>
+                                  {(() => {
+                                    const selectedItem = items.find(
+                                      (item) => item.item_name === ing.name
+                                    );
+                                    const category =
+                                      selectedItem?.category || "";
+                                    const availableUnits =
+                                      getUnitsForCategory(category);
+
+                                    return availableUnits.map((unit) => (
+                                      <option
+                                        key={unit.value}
+                                        value={unit.value}
+                                      >
+                                        {unit.label}
+                                      </option>
+                                    ));
+                                  })()}
+                                </select>
+                              </div>
+
+                              {/* Remove Button */}
+                              <div className="sm:col-span-1 flex items-end">
+                                <button
+                                  type="button"
+                                  onClick={() => removeIngredient(idx)}
+                                  className="w-full sm:w-auto bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-400/50 px-4 py-3 rounded-lg font-medium transition-all duration-300 flex items-center justify-center gap-2"
+                                  aria-label="Remove ingredient"
+                                  disabled={!isOnline || ingredients.length < 1}
+                                >
+                                  <FaTrash className="w-4 h-4" />
+                                  <span className="sm:hidden">Remove</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={addIngredient}
+                          className="group mt-4 w-full sm:w-auto bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-black px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-green-400/50 transition-all duration-300 flex items-center justify-center gap-2"
+                          disabled={!isOnline}
+                        >
+                          <svg
+                            className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 4v16m8-8H4"
+                            />
+                          </svg>
+                          <span>Add Ingredient</span>
+                        </button>
+
+                        <p className="text-gray-400 text-xs mt-4 flex items-start gap-2">
+                          <span className="text-yellow-400 mt-0.5">💡</span>
+                          <span>
+                            Tip: Add all ingredients with their amounts. You can
+                            remove or edit any ingredient before saving.
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Error Message */}
+                  {error && (
+                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                      <FiAlertTriangle className="w-5 h-5 flex-shrink-0" />
+                      <span>{error}</span>
+                    </div>
+                  )}
                   {/* Action Buttons */}
                   <div className="flex flex-col xs:flex-row justify-end gap-2 xs:gap-3 sm:gap-4 md:gap-4 pt-4 xs:pt-5 sm:pt-6 md:pt-8 border-t border-gray-700/50">
                     <button

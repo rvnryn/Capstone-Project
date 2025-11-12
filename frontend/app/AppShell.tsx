@@ -2,10 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/app/context/AuthContext";
-import { OfflineProvider } from "@/app/context/OfflineContext";
 import { NetworkStatusIndicator } from "@/app/components/PWA/PWAComponents";
-import OfflineStatusBar from "@/app/components/OfflineStatusBar";
-import EnhancedOfflineStatusBar from "@/app/components/EnhancedOfflineStatus";
 import PWAInstallBanner from "@/app/components/PWA/PWAInstallBanner";
 import PWAInstallPrompt from "@/app/components/PWAInstallPrompt";
 import { DataPreloader } from "@/app/components/DataPreloader";
@@ -14,7 +11,6 @@ import { ToastContainer } from "react-toastify";
 import React, { useEffect } from "react";
 import { GlobalLoadingProvider } from "@/app/context/GlobalLoadingContext";
 import { GlobalLoadingOverlay } from "@/app/components/GlobalLoadingOverlay";
-import OfflineFallback from "@/app/components/OfflineFallback";
 // @ts-ignore - missing type declarations for CSS side-effect import
 import "react-toastify/dist/ReactToastify.css";
 
@@ -63,27 +59,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       hideBrowserInstallBanners();
     }
     const intervalId = setInterval(hideBrowserInstallBanners, 1000);
+
+    // Register minimal service worker (only for offline page fallback)
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
           .register("/service-worker.js")
           .then((registration) => {
-            console.log("✅ SW registered: ", registration);
-            if (registration.active) {
-              registration.active.postMessage({ type: 'CACHE_CRITICAL_ASSETS' });
-              console.log("🚀 Auto-caching all pages for offline use...");
-            }
-            navigator.serviceWorker.addEventListener("message", (event) => {
-              if (event.data.type === "CACHE_COMPLETE") {
-                console.log(`✅ Pre-cached ${event.data.cached} pages automatically!`);
-              }
-            });
+            console.log("✅ Minimal SW registered for offline fallback:", registration);
           })
-          .catch((registrationError) => {
-            console.log("❌ SW registration failed: ", registrationError);
+          .catch((error) => {
+            console.log("❌ SW registration failed:", error);
           });
       });
     }
+
     return () => {
       clearInterval(intervalId);
       window.removeEventListener(
@@ -97,19 +87,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <GlobalLoadingProvider>
         <AuthProvider>
-          <OfflineProvider>
-            <OfflineFallback />
             <DataPreloader />
             <PagePreloader />
-            <OfflineStatusBar />
             <GlobalLoadingOverlay />
             {children}
-            <EnhancedOfflineStatusBar />
             <PWAInstallBanner />
             <PWAInstallPrompt />
             <NetworkStatusIndicator />
             <ToastContainer />
-          </OfflineProvider>
         </AuthProvider>
       </GlobalLoadingProvider>
     </QueryClientProvider>

@@ -30,7 +30,10 @@ import {
   FiAlertTriangle,
   FiArrowRight,
 } from "react-icons/fi";
-import { useInventoryAPI } from "@/app/Features/Inventory/hook/use-inventoryAPI";
+import {
+  useInventoryItem,
+  useUpdateInventory,
+} from "@/app/Features/Inventory/hook/use-inventoryQuery";
 
 const CATEGORY_OPTIONS = [
   "Meats",
@@ -45,10 +48,12 @@ const CATEGORY_OPTIONS = [
 export default function EditInventoryItem() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { getItem, updateItem } = useInventoryAPI();
   const itemId = searchParams.get("id");
 
-  const [formData, setFormData] = useState<any>({});
+  // Use React Query hooks for auto-refresh!
+  const { data: rawData, isLoading, error } = useInventoryItem(itemId);
+  const updateMutation = useUpdateInventory(itemId || "");
+
   const { fetchSettings } = useInventorySettingsAPI();
   const [settings, setSettings] = useState<InventorySetting[]>([]);
   const [unit, setUnit] = useState<string>("");
@@ -57,8 +62,6 @@ export default function EditInventoryItem() {
     category: "",
     stock: "",
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -69,49 +72,55 @@ export default function EditInventoryItem() {
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [focusedField, setFocusedField] = useState<string>("");
+  const [formData, setFormData] = useState<any>({});
 
+  // Fetch settings
   useEffect(() => {
-    const fetchAll = async () => {
-      if (!itemId) {
-        router.push(routes.inventory);
-        return;
-      }
-      try {
-        // Call getItem and fetchSettings directly, not as dependencies
-        const [data, settingsData] = await Promise.all([
-          getItem(itemId),
-          fetchSettings(),
-        ]);
-        // Map fields to match form expectations
-        const mappedItem = {
-          id: data.item_id,
-          name: data.item_name,
-          batch: data.batch_date,
-          category: data.category,
-          stock: data.stock_quantity,
-          unit_cost: data.unit_cost || "",
-          status: data.stock_status,
-          added: new Date(data.created_at),
-          expiration_date: data.expiration_date?.split("T")[0] || "",
-        };
-        setFormData(mappedItem);
-        setInitialSettings(mappedItem); // Set initial settings for unsaved changes detection
-        setSettings(settingsData);
-        // Find unit from settings
-        const itemName = (data.item_name || "").toString().trim().toLowerCase();
-        const setting = settingsData.find(
-          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
-        );
-        setUnit(setting?.default_unit || "");
-      } catch (error) {
-        console.error("Error fetching item or settings:", error);
-        router.push(routes.inventory);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchAll();
-  }, [itemId, router]);
+    fetchSettings()
+      .then(setSettings)
+      .catch((err) => console.error("Error fetching settings:", err));
+  }, [fetchSettings]);
+
+  // Populate form when data loads
+  useEffect(() => {
+    if (rawData) {
+      const mappedItem = {
+        id: rawData.item_id,
+        name: rawData.item_name,
+        batch: rawData.batch_date,
+        category: rawData.category,
+        stock: rawData.stock_quantity,
+        unit_cost: rawData.unit_cost || "",
+        status: rawData.stock_status,
+        added: new Date(rawData.created_at),
+        expiration_date: rawData.expiration_date?.split("T")[0] || "",
+      };
+      setFormData(mappedItem);
+      setInitialSettings(mappedItem);
+    }
+  }, [rawData]);
+
+  // Find unit from settings
+  useEffect(() => {
+    if (rawData && settings.length > 0) {
+      const itemName = (rawData.item_name || "")
+        .toString()
+        .trim()
+        .toLowerCase();
+      const setting = settings.find(
+        (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+      );
+      setUnit(setting?.default_unit || "");
+    }
+  }, [rawData, settings]);
+
+  // Redirect if error
+  useEffect(() => {
+    if (error) {
+      console.error("Error fetching item:", error);
+      router.push(routes.inventory);
+    }
+  }, [error, router]);
 
   // Validation logic
   const validate = useCallback((data: any) => {
@@ -143,7 +152,7 @@ export default function EditInventoryItem() {
       newErrors.stock = "Quantity in stock is required.";
     } else if (
       !Number.isInteger(Number(data.stock)) ||
-      Number(data.stock) < 1
+      Number(data.stock) < 0
     ) {
       newErrors.stock = "Quantity must be a positive integer.";
     }
@@ -189,7 +198,6 @@ export default function EditInventoryItem() {
     if (!itemId) return;
 
     setIsSubmitted(true);
-    setIsSubmitting(true);
     setErrorMessage(null);
 
     const validationErrors = validate(formData);
@@ -200,33 +208,38 @@ export default function EditInventoryItem() {
       validationErrors.category ||
       validationErrors.stock
     ) {
-      setIsSubmitting(false);
       return;
     }
 
-    try {
-      await updateItem(itemId, {
+    // Use React Query mutation - auto-refreshes inventory list!
+    updateMutation.mutate(
+      {
         item_name: formData.name.trim(),
         category: formData.category,
         batch_date: formData.batch,
         stock_quantity: formData.stock,
         unit_cost: Number(formData.unit_cost) || 0,
         expiration_date: formData.expiration_date || null,
-      });
+      },
+      {
+        onSuccess: () => {
+          setShowSuccessMessage(true);
+          setIsDirty(false);
 
-      setShowSuccessMessage(true);
-      setIsDirty(false);
-
-      // Show success message for 2 seconds then redirect
-      setTimeout(() => {
-        setShowSuccessMessage(false);
-        router.push(routes.master_inventory);
-      }, 2000);
-    } catch (error) {
-      console.error("Error updating inventory item:", error);
-      setErrorMessage("Failed to update the inventory item. Please try again.");
-      setIsSubmitting(false);
-    }
+          // Show success message for 2 seconds then redirect
+          setTimeout(() => {
+            setShowSuccessMessage(false);
+            router.push(routes.master_inventory);
+          }, 2000);
+        },
+        onError: (error: any) => {
+          console.error("Error updating inventory item:", error);
+          setErrorMessage(
+            "Failed to update the inventory item. Please try again."
+          );
+        },
+      }
+    );
   };
 
   const handleSaveClick = () => {
@@ -546,8 +559,8 @@ export default function EditInventoryItem() {
                             id="stock"
                             name="stock"
                             required
-                            min={1}
-                            value={formData.stock === 0 ? "" : formData.stock}
+                            min={0}
+                            value={formData.stock ?? ""}
                             onChange={handleChange}
                             onFocus={() => handleFocus("stock")}
                             onBlur={handleBlur}
@@ -597,7 +610,7 @@ export default function EditInventoryItem() {
                           name="unit_cost"
                           min={0}
                           step="0.01"
-                          value={formData.unit_cost}
+                          value={formData.unit_cost ?? ""}
                           onChange={handleChange}
                           onFocus={() => handleFocus("unit_cost")}
                           onBlur={handleBlur}
@@ -625,10 +638,10 @@ export default function EditInventoryItem() {
                   <button
                     type="button"
                     onClick={handleSaveClick}
-                    disabled={isSubmitting}
+                    disabled={updateMutation.isPending}
                     className="group flex items-center justify-center gap-1.5 xs:gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 xs:px-5 sm:px-6 md:px-7 lg:px-8 py-2.5 xs:py-3 sm:py-3.5 md:py-4 rounded-lg xs:rounded-xl font-medium xs:font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-xs xs:text-sm sm:text-base w-full xs:w-auto shadow-lg hover:shadow-yellow-400/25 order-1 xs:order-2"
                   >
-                    {isSubmitting ? (
+                    {updateMutation.isPending ? (
                       <>
                         <div className="w-3.5 h-3.5 xs:w-4 xs:h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
                         <span className="hidden xs:inline">Saving...</span>
@@ -687,10 +700,10 @@ export default function EditInventoryItem() {
                 <button
                   type="button"
                   onClick={handleConfirmSave}
-                  disabled={isSubmitting}
+                  disabled={updateMutation.isPending}
                   className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 py-3 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base shadow-lg hover:shadow-yellow-400/25 cursor-pointer"
                 >
-                  {isSubmitting ? (
+                  {updateMutation.isPending ? (
                     <>
                       <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
                       <span className="hidden sm:inline">Saving...</span>
@@ -707,7 +720,7 @@ export default function EditInventoryItem() {
                 <button
                   type="button"
                   onClick={() => setShowSaveModal(false)}
-                  disabled={isSubmitting}
+                  disabled={updateMutation.isPending}
                   className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all duration-300 text-sm sm:text-base cursor-pointer"
                 >
                   Cancel

@@ -292,6 +292,7 @@ async def update_surplus_item(
                     update_data[key] = val.isoformat()
 
         # If stock_quantity is updated, recalc stock_status
+        item_name_for_aggregate = None
         if "stock_quantity" in update_data:
 
             @run_blocking
@@ -310,6 +311,7 @@ async def update_surplus_item(
                 item_resp.data["item_name"] if item_resp and item_resp.data else None
             )
             if item_name:
+                item_name_for_aggregate = item_name  # Save for aggregate status update
                 threshold = await get_threshold_for_item(item_name)
                 update_data["stock_status"] = calculate_stock_status(
                     update_data["stock_quantity"], threshold
@@ -329,6 +331,15 @@ async def update_surplus_item(
         response = await _update()
         if not response.data:
             raise HTTPException(status_code=404, detail="Item not found")
+
+        # Update aggregate stock status for this item in surplus inventory
+        if item_name_for_aggregate:
+            try:
+                from app.routes.Inventory.aggregate_status import update_aggregate_stock_status
+                new_status = await update_aggregate_stock_status(item_name_for_aggregate, "inventory_surplus", db)
+                logger.info(f"Updated aggregate status for '{item_name_for_aggregate}' in surplus inventory: {new_status}")
+            except Exception as e:
+                logger.error(f"Failed to update aggregate status: {str(e)}")
         # Log user activity for update
         try:
             if isinstance(response.data, list) and len(response.data) > 0:

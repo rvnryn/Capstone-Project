@@ -7,7 +7,7 @@
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#000000",
   "theme_color": "#000000",
-  "description": "A modern, responsive dashboard and management PWA for Cardiac Delights with offline capabilities, inventory management, menu planning, and comprehensive reporting.",
+  "description": "A modern, responsive dashboard and management application for Cardiac Delights with inventory management, menu planning, and comprehensive reporting.",
   "lang": "en",
   "orientation": "any",
   "dir": "ltr",

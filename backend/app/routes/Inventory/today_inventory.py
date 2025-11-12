@@ -217,11 +217,30 @@ async def update_inventory_today_item(
     try:
         update_data = item.dict(exclude_unset=True)
         update_data["updated_at"] = datetime.utcnow().isoformat()
-        
+
+        # Track item name for aggregate status update
+        item_name_for_aggregate = update_data.get("item_name")
+
         # Calculate and update stock status if quantity or item_name is provided
         if "stock_quantity" in update_data and "item_name" in update_data:
             threshold = await get_threshold_for_item(update_data["item_name"])
             update_data["stock_status"] = calculate_stock_status(update_data["stock_quantity"], threshold)
+
+        # If only stock_quantity is updated, fetch item_name for aggregate update
+        if "stock_quantity" in update_data and not item_name_for_aggregate:
+            @run_blocking
+            def _fetch_item_name():
+                return (
+                    postgrest_client.table("inventory_today")
+                    .select("item_name")
+                    .eq("item_id", item_id)
+                    .eq("batch_date", batch_date)
+                    .single()
+                    .execute()
+                )
+            item_resp = await _fetch_item_name()
+            if item_resp.data:
+                item_name_for_aggregate = item_resp.data.get("item_name")
 
         @run_blocking
         def _update():
@@ -236,6 +255,16 @@ async def update_inventory_today_item(
         response = await _update()
         if not response.data:
             raise HTTPException(status_code=404, detail="Item not found")
+
+        # Update aggregate stock status for this item in today's inventory
+        if item_name_for_aggregate and "stock_quantity" in update_data:
+            try:
+                from app.routes.Inventory.aggregate_status import update_aggregate_stock_status
+                new_status = await update_aggregate_stock_status(item_name_for_aggregate, "inventory_today", db)
+                logger.info(f"Updated aggregate status for '{item_name_for_aggregate}' in today's inventory: {new_status}")
+            except Exception as e:
+                logger.error(f"Failed to update aggregate status: {str(e)}")
+
         # Log user activity
         try:
             await log_user_activity(

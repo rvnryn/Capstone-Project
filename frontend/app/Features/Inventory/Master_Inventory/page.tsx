@@ -26,12 +26,13 @@ import {
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useAuth } from "@/app/context/AuthContext";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useInventoryAPI } from "../hook/use-inventoryAPI";
-// PWA Integration
-import { usePWA, useOfflineQueue } from "@/app/hooks/usePWA";
-import { PWAStatusBar } from "@/app/components/PWA/PWAStatus";
-import { useOfflineDataManager } from "@/app/hooks/useOfflineDataManager";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInventoryList,
+  useDeleteInventory,
+  useTransferToToday,
+  useTransferToSpoilage,
+} from "../hook/use-inventoryQuery";
 import Pagination from "@/app/components/Pagination";
 import { TableLoading, EmptyState } from "@/app/components/LoadingStates";
 
@@ -53,12 +54,6 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export default function InventoryPage() {
   const { role } = useAuth();
   console.log("Current role (RBAC check):", role);
-
-  // PWA Integration
-  const { isOnline } = usePWA();
-  const { addOfflineAction, getOfflineActions } = useOfflineQueue();
-  const offlineDataManager = useOfflineDataManager();
-  const offlineActionsCount = getOfflineActions().length;
 
   // Aggressively cache settings with React Query
   const {
@@ -118,8 +113,16 @@ export default function InventoryPage() {
   const queryClient = useQueryClient();
   // Prefetch inventory/settings on mount
   usePrefetchInventorySettings(queryClient);
-  const { listItems, deleteItem, transferToToday, transferToSpoilage } =
-    useInventoryAPI();
+
+  // Use React Query hooks for data fetching and mutations
+  const {
+    data: rawInventoryData = [],
+    isLoading: isInventoryLoading,
+    isFetching: isInventoryFetching,
+  } = useInventoryList();
+  const deleteMutation = useDeleteInventory();
+  const transferTodayMutation = useTransferToToday();
+  const transferSpoilageMutation = useTransferToSpoilage();
 
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedBatchDate, setSelectedBatchDate] = useState("");
@@ -149,283 +152,69 @@ export default function InventoryPage() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
-
+  const [selectedStatus, setSelectedStatus] = useState("");
   const router = useRouter();
 
-  // Fetch master inventory using React Query with localStorage fallback for offline support
-  const {
-    data: inventoryData = [],
-    isLoading,
-    isFetching,
-  } = useQuery<(InventoryItem & { unit?: string })[]>({
-    queryKey: ["masterInventory", settings],
-    queryFn: async (): Promise<(InventoryItem & { unit?: string })[]> => {
-      // Try to fetch from API if online, else fallback to localStorage
-      let items: any[] = [];
-      let fromCache = false;
-      try {
-        if (typeof window !== "undefined" && !navigator.onLine) {
-          // Offline: try to get from localStorage
-          const cached = localStorage.getItem("masterInventoryCache");
-          if (cached) {
-            items = JSON.parse(cached);
-            fromCache = true;
-          }
-        }
-        if (!fromCache) {
-          items = await listItems();
-          // Save to localStorage for offline use
-          if (typeof window !== "undefined") {
-            localStorage.setItem("masterInventoryCache", JSON.stringify(items));
-          }
-        }
-        return (items ?? []).map(
-          (item: any): InventoryItem & { unit?: string } => {
-            const itemName = (item.item_name || "")
-              .toString()
-              .trim()
-              .toLowerCase();
-            const setting = settings.find(
-              (s) => (s.name || "").toString().trim().toLowerCase() === itemName
-            );
-            // Ensure threshold is a number, fallback to 100 if not set
-            const threshold = Number(setting?.low_stock_threshold);
-            const fallbackThreshold = 100;
-            const useThreshold =
-              !isNaN(threshold) && threshold > 0
-                ? threshold
-                : fallbackThreshold;
-            // Ensure stock is a number
-            const stockQty = Number(item.stock_quantity);
-            // Get unit of measurement from settings
-            const unit = setting?.default_unit || "";
-
-            let status: "Out Of Stock" | "Critical" | "Low" | "Normal" =
-              "Normal";
-
-            // Determine stock status based on comprehensive business logic
-            if (stockQty === 0) {
-              status = "Out Of Stock";
-            } else if (stockQty <= useThreshold * 0.5) {
-              // Critical: when stock is 50% or less of the threshold
-              status = "Critical";
-            } else if (stockQty <= useThreshold) {
-              // Low: when stock is at or below threshold but above critical
-              status = "Low";
-            } else {
-              // Normal: when stock is above threshold
-              status = "Normal";
-            }
-            return {
-              ...item,
-              id: item.item_id,
-              name: setting?.name || item.item_name, // Use settings name if available
-              batch: item.batch_date,
-              category: item.category,
-              stock: stockQty,
-              status,
-              added: item.created_at ? new Date(item.created_at) : new Date(),
-              expires: item.expiration_date
-                ? new Date(item.expiration_date)
-                : null,
-              unit, // Add unit to item
-            };
-          }
-        );
-      } catch (err) {
-        console.error("Failed to fetch inventory items:", err);
-        // As a last resort, try to get from localStorage if not already tried
-        if (!fromCache && typeof window !== "undefined") {
-          const cached = localStorage.getItem("masterInventoryCache");
-          if (cached) {
-            try {
-              items = JSON.parse(cached);
-              return (items ?? []).map(
-                (item: any): InventoryItem & { unit?: string } => {
-                  const itemName = (item.item_name || "")
-                    .toString()
-                    .trim()
-                    .toLowerCase();
-                  const setting = settings.find(
-                    (s) =>
-                      (s.name || "").toString().trim().toLowerCase() ===
-                      itemName
-                  );
-                  const threshold = Number(setting?.low_stock_threshold);
-                  const fallbackThreshold = 100;
-                  const useThreshold =
-                    !isNaN(threshold) && threshold > 0
-                      ? threshold
-                      : fallbackThreshold;
-                  const stockQty = Number(item.stock_quantity);
-                  const unit = setting?.default_unit || "";
-                  let status: "Out Of Stock" | "Critical" | "Low" | "Normal" =
-                    "Normal";
-                  if (stockQty === 0) {
-                    status = "Out Of Stock";
-                  } else if (stockQty <= useThreshold * 0.5) {
-                    status = "Critical";
-                  } else if (stockQty <= useThreshold) {
-                    status = "Low";
-                  } else {
-                    status = "Normal";
-                  }
-                  return {
-                    ...item,
-                    id: item.item_id,
-                    name: setting?.name || item.item_name,
-                    batch: item.batch_date,
-                    category: item.category,
-                    stock: stockQty,
-                    status,
-                    added: item.created_at
-                      ? new Date(item.created_at)
-                      : new Date(),
-                    expires: item.expiration_date
-                      ? new Date(item.expiration_date)
-                      : null,
-                    unit,
-                  };
-                }
-              );
-            } catch (e) {
-              // Ignore parse errors
-            }
-          }
-        }
-        return [] as (InventoryItem & { unit?: string })[];
-      }
-    },
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchOnMount: true,
-    refetchInterval: 1000 * 60 * 1, // Poll every 5 seconds for real-time updates
-    refetchIntervalInBackground: false, // Only poll when tab is active
-  });
-
-  // Delete mutation with optimistic UI and offline support
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string | number) => {
-      if (!isOnline) {
-        // Queue action for when online
-        addOfflineAction("delete-inventory-item", { id, type: "master" });
-        throw new Error(
-          "Offline: Action queued for sync when connection is restored"
-        );
-      }
-      return deleteItem(id);
-    },
-    onMutate: async (id: string | number) => {
-      await queryClient.cancelQueries({ queryKey: ["masterInventory"] });
-      const previousInventory = queryClient.getQueryData<
-        (InventoryItem & { unit?: string })[]
-      >(["masterInventory", settings]);
-      if (previousInventory) {
-        queryClient.setQueryData<(InventoryItem & { unit?: string })[]>(
-          ["masterInventory", settings],
-          previousInventory.filter((item) => item.id !== id)
-        );
-      }
-      return { previousInventory };
-    },
-    onError: (error: any, variables, context) => {
-      if (context?.previousInventory) {
-        queryClient.setQueryData(
-          ["masterInventory", settings],
-          context.previousInventory
-        );
-      }
-      alert(
-        error?.response?.data?.detail || "Item not found or already deleted."
+  // Transform raw inventory data with settings (business logic)
+  const inventoryData = useMemo(() => {
+    // Save to localStorage for offline use
+    if (typeof window !== "undefined" && rawInventoryData.length > 0) {
+      localStorage.setItem(
+        "masterInventoryCache",
+        JSON.stringify(rawInventoryData)
       );
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
-    },
-  });
+    }
 
-  // Transfer mutation with optimistic UI and offline support
-  const transferMutation = useMutation({
-    mutationFn: async ({ id, quantity }: { id: number; quantity: number }) => {
-      if (!isOnline) {
-        // Queue action for when online
-        addOfflineAction("transfer-to-today", { id, quantity, type: "master" });
-        throw new Error(
-          "Offline: Transfer queued for sync when connection is restored"
+    return (rawInventoryData ?? []).map(
+      (item: any): InventoryItem & { unit?: string } => {
+        const itemName = (item.item_name || "").toString().trim().toLowerCase();
+        const setting = settings.find(
+          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
         );
-      }
-      await transferToToday(id, quantity);
-    },
-    onMutate: async ({ id }) => {
-      await queryClient.cancelQueries({ queryKey: ["masterInventory"] });
-      const previousInventory = queryClient.getQueryData<
-        (InventoryItem & { unit?: string })[]
-      >(["masterInventory", settings]);
-      if (previousInventory) {
-        queryClient.setQueryData<(InventoryItem & { unit?: string })[]>(
-          ["masterInventory", settings],
-          previousInventory.filter((item) => item.id !== id)
-        );
-      }
-      return { previousInventory };
-    },
-    onError: (error: any, variables, context) => {
-      if (context?.previousInventory) {
-        queryClient.setQueryData(
-          ["masterInventory", settings],
-          context.previousInventory
-        );
-      }
-      alert(error?.response?.data?.detail || "Transfer failed.");
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
-      queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
-    },
-  });
+        // Ensure threshold is a number, fallback to 100 if not set
+        const threshold = Number(setting?.low_stock_threshold);
+        const fallbackThreshold = 100;
+        const useThreshold =
+          !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
+        // Ensure stock is a number
+        const stockQty = Number(item.stock_quantity);
+        // Get unit of measurement from settings
+        const unit = setting?.default_unit || "";
 
-  const spoilageMutation = useMutation({
-    mutationFn: async ({
-      id,
-      batch,
-      quantity,
-      reason,
-    }: {
-      id: number;
-      batch: string;
-      quantity: number;
-      reason?: string;
-    }) => {
-      await transferToSpoilage(id, batch, quantity, reason);
-    },
-    onMutate: async ({ id }) => {
-      await queryClient.cancelQueries({ queryKey: ["masterInventory"] });
-      const previousInventory = queryClient.getQueryData<
-        (InventoryItem & { unit?: string })[]
-      >(["masterInventory", settings]);
-      if (previousInventory) {
-        queryClient.setQueryData<(InventoryItem & { unit?: string })[]>(
-          ["masterInventory", settings],
-          previousInventory.filter((item) => item.id !== id)
-        );
+        let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
+
+        // Determine stock status based on comprehensive business logic
+        if (stockQty === 0) {
+          status = "Out Of Stock";
+        } else if (stockQty <= useThreshold * 0.5) {
+          // Critical: when stock is 50% or less of the threshold
+          status = "Critical";
+        } else if (stockQty <= useThreshold) {
+          // Low: when stock is at or below threshold but above critical
+          status = "Low";
+        } else {
+          // Normal: when stock is above threshold
+          status = "Normal";
+        }
+        return {
+          ...item,
+          id: item.item_id,
+          name: setting?.name || item.item_name, // Use settings name if available
+          batch: item.batch_date,
+          category: item.category,
+          stock: stockQty,
+          status,
+          added: item.created_at ? new Date(item.created_at) : new Date(),
+          expires: item.expiration_date ? new Date(item.expiration_date) : null,
+          unit, // Add unit to item
+        };
       }
-      return { previousInventory };
-    },
-    onError: (error: any, variables, context) => {
-      if (context?.previousInventory) {
-        queryClient.setQueryData(
-          ["masterInventory", settings],
-          context.previousInventory
-        );
-      }
-      alert(error?.response?.data?.detail || "Spoilage transfer failed.");
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
-      queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] });
-    },
-  });
+    );
+  }, [rawInventoryData, settings]);
+
+  // Loading state combines both inventory and settings loading
+  const isLoading = isInventoryLoading || isSettingsLoading;
+  const isFetching = isInventoryFetching || isSettingsFetching;
 
   const formatDateTime = (date: string | Date | null): string => {
     if (!date) return "-";
@@ -455,7 +244,7 @@ export default function InventoryPage() {
   const batchDateOptions = useMemo(() => {
     // Group by batch date and sum stock
     const batchMap: Record<string, number> = {};
-    inventoryData.forEach((item) => {
+    inventoryData.forEach((item: InventoryItem) => {
       const dateStr = formatDateOnly(item.batch);
       batchMap[dateStr] = batchMap[dateStr];
     });
@@ -480,19 +269,39 @@ export default function InventoryPage() {
   // Get summary statistics
   const summaryStats = useMemo(() => {
     const total = inventoryData.length;
-    const outOfStock = inventoryData.filter(
-      (item: InventoryItem) => item.status === "Out Of Stock"
+
+    // Group items by name for aggregate status counting
+    const itemsByName = inventoryData.reduce((acc: Record<string, InventoryItem[]>, item: InventoryItem) => {
+      const name = String(item.item_name || item.name || '');
+      if (!(name in acc)) acc[name] = [];
+      acc[name].push(item);
+      return acc;
+    }, {} as Record<string, InventoryItem[]>);
+
+    // Count unique items by their aggregate status
+    // An item is "Out Of Stock" only if ALL its batches are out of stock
+    const outOfStock = Object.values(itemsByName).filter(batches => {
+      const totalStock = (batches as InventoryItem[]).reduce((sum, batch) => sum + (batch.stock || 0), 0);
+      return totalStock === 0;
+    }).length;
+
+    // For other statuses, count unique items (not individual batches)
+    const criticalStock: number = Object.values(itemsByName).filter(batches =>
+      (batches as InventoryItem[]).some(item => item.status === "Critical")
     ).length;
-    const criticalStock: number = inventoryData.filter(
-      (item: InventoryItem) => item.status === "Critical"
+
+    const lowStock = Object.values(itemsByName).filter(batches =>
+      (batches as InventoryItem[]).some(item => item.status === "Low")
     ).length;
-    const lowStock = inventoryData.filter(
-      (item: InventoryItem) => item.status === "Low"
+
+    const normalStock = Object.values(itemsByName).filter(batches =>
+      (batches as InventoryItem[]).every(item => item.status === "Normal")
     ).length;
-    const normalStock = inventoryData.filter(
-      (item: InventoryItem) => item.status === "Normal"
-    ).length;
-    const totalValue = inventoryData.reduce((sum, item) => sum + item.stock, 0);
+
+    const totalValue = inventoryData.reduce(
+      (sum: number, item: InventoryItem) => sum + item.stock,
+      0
+    );
 
     return {
       total,
@@ -505,23 +314,28 @@ export default function InventoryPage() {
   }, [inventoryData]);
 
   const filtered = useMemo(() => {
-    return inventoryData
-      .filter(
-        (item) =>
-          (!selectedCategory ||
-            item.category?.toLowerCase().trim() ===
-              selectedCategory.toLowerCase().trim()) &&
-          (!selectedBatchDate ||
-            formatDateOnly(item.batch) === selectedBatchDate) &&
-          (!searchQuery ||
-            [item.name, item.status, item.id?.toString()]
-              .filter(Boolean)
-              .join(" ")
-              .toLowerCase()
-              .includes(searchQuery.toLowerCase()))
-      )
-      .filter((item) => item.stock > 0 && item.status !== "Out Of Stock");
-  }, [inventoryData, selectedCategory, selectedBatchDate, searchQuery]);
+    return inventoryData.filter(
+      (item: InventoryItem) =>
+        (!selectedCategory ||
+          item.category?.toLowerCase().trim() ===
+            selectedCategory.toLowerCase().trim()) &&
+        (!selectedBatchDate ||
+          formatDateOnly(item.batch) === selectedBatchDate) &&
+        (!searchQuery ||
+          [item.name, item.status, item.id?.toString()]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())) &&
+        (!selectedStatus || item.status === selectedStatus)
+    );
+  }, [
+    inventoryData,
+    selectedCategory,
+    selectedBatchDate,
+    searchQuery,
+    selectedStatus,
+  ]);
 
   const sortedData = useMemo(() => {
     const data = [...filtered];
@@ -605,30 +419,17 @@ export default function InventoryPage() {
   const confirmSpoilage = async () => {
     if (!itemToSpoilage || !spoilageQuantity || spoilageQuantity <= 0) return;
 
-    const spoilageData = {
-      id: itemToSpoilage.id,
-      batch: itemToSpoilage.batch,
+    await transferSpoilageMutation.mutateAsync({
+      item_id: itemToSpoilage.id,
       quantity: Number(spoilageQuantity),
       reason:
         spoilageReason === "Others" ? customSpoilageReason : spoilageReason,
-    };
-
-    if (isOnline) {
-      await spoilageMutation.mutateAsync(spoilageData);
-    } else {
-      addOfflineAction("SPOILAGE_INVENTORY", {
-        endpoint: `/master_inventory/spoilage`,
-        method: "POST",
-        data: spoilageData,
-      });
-    }
+    });
 
     setShowSpoilageModal(false);
     setItemToSpoilage(null);
     setSpoilageQuantity("");
     setSpoilageReason("");
-    queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
-    queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] });
   };
 
   const handleCloseSpoilageModal = () => {
@@ -641,48 +442,24 @@ export default function InventoryPage() {
   const confirmDelete = async () => {
     if (itemToDelete === null) return;
 
-    if (isOnline) {
-      await deleteMutation.mutateAsync(itemToDelete);
-    } else {
-      addOfflineAction("DELETE_INVENTORY", {
-        endpoint: `/master_inventory/${itemToDelete}`,
-        method: "DELETE",
-        data: { id: itemToDelete },
-      });
-    }
+    await deleteMutation.mutateAsync(itemToDelete);
 
     setShowDeleteModal(false);
-    queryClient.invalidateQueries({ queryKey: ["masterInventory"] }); // <-- force refetch
+    setItemToDelete(null);
   };
 
   const confirmTransfer = async () => {
     if (!itemToTransfer || !transferQuantity || transferQuantity <= 0) return;
 
-    const transferData = {
-      id: itemToTransfer.id,
+    await transferTodayMutation.mutateAsync({
+      item_id: itemToTransfer.id,
       quantity: Number(transferQuantity),
-    };
-
-    if (isOnline) {
-      await transferMutation.mutateAsync(transferData);
-    } else {
-      addOfflineAction("TRANSFER_INVENTORY", {
-        endpoint: `/master_inventory/transfer`,
-        method: "PUT",
-        data: transferData,
-      });
-    }
+    });
 
     setShowTransferModal(false);
     setItemToTransfer(null);
     setTransferQuantity("");
-    queryClient.invalidateQueries({ queryKey: ["masterInventory"] }); // <-- force refetch
-    queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
-    setTransferSuccess(
-      isOnline
-        ? "Transfer successful! Item moved to Today's Inventory."
-        : "Transfer queued for processing when online."
-    );
+    setTransferSuccess("Transfer successful! Item moved to Today's Inventory.");
   };
 
   const handleCloseTransferModal = () => {
@@ -717,7 +494,7 @@ export default function InventoryPage() {
   useEffect(() => {
     console.log(
       "Mapped inventoryData:",
-      inventoryData.map((i) => i.category)
+      inventoryData.map((i: InventoryItem) => i.category)
     );
   }, [inventoryData]);
   return (
@@ -931,6 +708,7 @@ export default function InventoryPage() {
                   {(searchQuery ||
                     selectedCategory ||
                     selectedBatchDate ||
+                    selectedStatus ||
                     sortConfig.key) && (
                     <button
                       type="button"
@@ -990,6 +768,25 @@ export default function InventoryPage() {
                             {date}
                           </option>
                         ))}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label
+                        className="block text-gray-300 text-xs sm:text-sm font-medium mb-2"
+                        htmlFor="status-filter"
+                      >
+                        Stock Status
+                      </label>
+                      <select
+                        value={selectedStatus}
+                        onChange={(e) => setSelectedStatus(e.target.value)}
+                        className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
+                      >
+                        <option value="">All Status</option>
+                        <option value="Normal">Normal</option>
+                        <option value="Low">Low</option>
+                        <option value="Critical">Critical</option>
+                        <option value="Out Of Stock">Out Of Stock</option>
                       </select>
                     </div>
                   </fieldset>
@@ -1054,11 +851,7 @@ export default function InventoryPage() {
                             <TableLoading
                               rows={itemsPerPage}
                               columns={11}
-                              message={
-                                isOnline
-                                  ? "Refreshing inventory data..."
-                                  : "Loading from offline cache..."
-                              }
+                              message="Refreshing inventory data..."
                             />
                           </td>
                         </tr>
@@ -1378,18 +1171,18 @@ export default function InventoryPage() {
                       !transferQuantity ||
                       transferQuantity <= 0 ||
                       transferQuantity > itemToTransfer.stock ||
-                      transferMutation.status === "pending"
+                      transferTodayMutation.status === "pending"
                     }
                     className={`group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl font-semibold transition-all duration-300 order-2 sm:order-1 text-xs xs:text-sm sm:text-base ${
                       !transferQuantity ||
                       transferQuantity <= 0 ||
                       transferQuantity > itemToTransfer.stock ||
-                      transferMutation.status === "pending"
+                      transferTodayMutation.status === "pending"
                         ? "bg-gray-600/50 text-gray-400 cursor-not-allowed border-2 border-gray-600/50"
                         : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white border-2 border-blue-500/70 hover:border-blue-400/70 cursor-pointer"
                     }`}
                   >
-                    {transferMutation.status === "pending" ? (
+                    {transferTodayMutation.status === "pending" ? (
                       <>
                         <div className="w-3 xs:w-4 h-3 xs:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                         Transferring...
@@ -1505,18 +1298,18 @@ export default function InventoryPage() {
                     !spoilageQuantity ||
                     spoilageQuantity <= 0 ||
                     spoilageQuantity > itemToSpoilage.stock ||
-                    spoilageMutation.status === "pending"
+                    transferSpoilageMutation.status === "pending"
                   }
                   className={`group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl font-semibold transition-all duration-300 order-2 sm:order-1 text-xs xs:text-sm sm:text-base ${
                     !spoilageQuantity ||
                     spoilageQuantity <= 0 ||
                     spoilageQuantity > itemToSpoilage.stock ||
-                    spoilageMutation.status === "pending"
+                    transferSpoilageMutation.status === "pending"
                       ? "bg-gray-600/50 text-gray-400 cursor-not-allowed border-2 border-gray-600/50"
                       : "bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-400 hover:to-pink-500 text-white border-2 border-pink-500/70 hover:border-pink-400/70 cursor-pointer"
                   }`}
                 >
-                  {spoilageMutation.status === "pending" ? (
+                  {transferSpoilageMutation.status === "pending" ? (
                     <>
                       <div className="w-3 xs:w-4 h-3 xs:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                       Transferring...

@@ -14,14 +14,6 @@ import Chart from "chart.js/auto";
 import NavigationBar from "@/app/components/navigation/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { usePWA } from "@/app/hooks/usePWA";
-import { useOfflineDataManager } from "@/app/hooks/useOfflineDataManager";
-import {
-  OfflineDataBanner,
-  OfflineCard,
-  OfflineLoading,
-  OfflineError,
-  SyncButton,
-} from "@/app/components/OfflineComponents";
 import {
   FaChartLine,
   FaExclamationTriangle,
@@ -36,7 +28,7 @@ import {
   FaListUl,
 } from "react-icons/fa";
 import { AiOutlineInfoCircle } from "react-icons/ai";
-import { FiWifiOff, FiTrendingUp, FiTrendingDown } from "react-icons/fi";
+import { FiTrendingUp, FiTrendingDown } from "react-icons/fi";
 import {
   MdDashboard,
   MdTrendingUp,
@@ -67,20 +59,57 @@ export default function Dashboard() {
     const t = setTimeout(() => setShowList(true), 120);
     return () => clearTimeout(t);
   }, [filterType, topItemsCount]);
-  // Ref to store last chart data for deep comparison
-  const lastChartDataRef = useRef<any>(null);
-  const topSalesCanvasRef = useRef<HTMLCanvasElement>(null);
-  // Removed showHistoricalView; always show Top Performers
 
-  // Use only historical analytics for Top Selling
-  // Map period to days
-  const periodDays =
-    filterType === "daily" ? 1 : filterType === "weekly" ? 7 : 30;
+  function getMondayToSundayRange(date = new Date()) {
+    const day = date.getDay();
+    // getDay: 0=Sunday, 1=Monday, ..., 6=Saturday
+    const monday = new Date(date);
+    monday.setDate(date.getDate() - ((day + 6) % 7)); // move to Monday
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6); // move to Sunday
+    return {
+      start: monday.toISOString().split("T")[0],
+      end: sunday.toISOString().split("T")[0],
+    };
+  }
+
+  function getMonthRange(date = new Date()) {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    return {
+      start: firstDay.toISOString().split("T")[0],
+      end: lastDay.toISOString().split("T")[0],
+    };
+  }
+
+  let startDate = "";
+  let endDate = "";
+
+  if (filterType === "daily") {
+    const today = new Date();
+    startDate = today.toISOString().split("T")[0];
+    endDate = startDate;
+  } else if (filterType === "weekly") {
+    const { start, end } = getMondayToSundayRange();
+    startDate = start;
+    endDate = end;
+  } else if (filterType === "monthly") {
+    const { start, end } = getMonthRange();
+    startDate = start;
+    endDate = end;
+  }
+
+  // Pass startDate and endDate to your analytics hook
   const { historical, loading, error } = useSalesAnalytics(
     filterType,
     topItemsCount,
-    periodDays // If your hook supports this, otherwise just filterType
+    undefined,
+    startDate || undefined,
+    endDate || undefined
   );
+
   const historicalData:
     | import("./hook/useSalesPrediction").HistoricalAnalysis
     | null =
@@ -119,20 +148,6 @@ export default function Dashboard() {
     deleteHoliday,
   } = useDashboardQuery();
 
-  // Define variables for inventory cache status and last update
-  const inventoryFromCache =
-    (lowStock && "isFromCache" in lowStock && (lowStock as any).isFromCache) ||
-    (expiring && "isFromCache" in expiring && (expiring as any).isFromCache) ||
-    (surplus && "isFromCache" in surplus && (surplus as any).isFromCache) ||
-    (expired && "isFromCache" in expired && (expired as any).isFromCache) ||
-    false;
-  const lastDataUpdate =
-    lowStock.dataUpdatedAt ||
-    expiring.dataUpdatedAt ||
-    surplus.dataUpdatedAt ||
-    expired.dataUpdatedAt ||
-    null;
-
   // Define variables for low stock, out of stock, and expiring ingredients
   type InventoryIngredient = {
     item_id: string | number;
@@ -170,6 +185,7 @@ export default function Dashboard() {
     setModalDate(null);
     setModalOpen(true);
   };
+
   // Save handler
   const handleSaveHoliday = async (data: {
     date: string;
@@ -216,7 +232,9 @@ export default function Dashboard() {
   );
 
   // Pagination calculations for expiring items
-  const expiringTotalPages = Math.ceil(expiringIngredients.length / expiringItemsPerPage);
+  const expiringTotalPages = Math.ceil(
+    expiringIngredients.length / expiringItemsPerPage
+  );
   const paginatedExpiringItems = expiringIngredients.slice(
     (expiringPage - 1) * expiringItemsPerPage,
     expiringPage * expiringItemsPerPage
@@ -404,21 +422,6 @@ export default function Dashboard() {
       </div>
     </div>
   );
-
-  const offlineDataManager = useOfflineDataManager();
-
-  const { isOnline } = usePWA();
-
-  console.log("Dashboard State:", {
-    loading,
-    isOnline,
-    historicalData: historical.data ? "loaded" : "none",
-    lowStockCount: lowStock.data?.length,
-    expiringCount: expiring.data?.length,
-    expiredCount: expired.data?.length,
-    surplusCount: surplus.data?.length,
-    filterType,
-  });
 
   // ML Forecast Chart as a child component
   function MLForecastChart() {
@@ -626,10 +629,6 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
-              <SyncButton
-                onSync={() => window.location.reload()}
-                isLoading={false}
-              />
             </header>
 
             <Tabs defaultValue="overview" className="w-full">
@@ -643,120 +642,65 @@ export default function Dashboard() {
               <TabsContent value="overview">
                 <div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                    {/* Offline Data Banner */}
-                    {inventoryFromCache && (
-                      <OfflineDataBanner
-                        dataType="dashboard and inventory"
-                        isFromCache={inventoryFromCache}
-                      />
-                    )}
-                    <OfflineCard
-                      isFromCache={inventoryFromCache}
-                      lastUpdated={
-                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                    <StatCard
+                      icon={
+                        <FaClock className="text-red-400 text-lg sm:text-xl" />
                       }
-                      dataType="inventory"
-                    >
-                      <StatCard
-                        icon={
-                          <FaClock className="text-red-400 text-lg sm:text-xl" />
-                        }
-                        title="Expired Items"
-                        count={expiredItem.length}
-                        color="border-l-red-500"
-                        bgColor="bg-black/75"
-                      />
-                    </OfflineCard>
+                      title="Expired Items"
+                      count={expiredItem.length}
+                      color="border-l-red-500"
+                      bgColor="bg-black/75"
+                    />
 
-                    <OfflineCard
-                      isFromCache={inventoryFromCache}
-                      lastUpdated={
-                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                    <StatCard
+                      icon={
+                        <FaClock className="text-amber-400 text-lg sm:text-xl" />
                       }
-                      dataType="inventory"
-                    >
-                      <StatCard
-                        icon={
-                          <FaClock className="text-amber-400 text-lg sm:text-xl" />
-                        }
-                        title="Expiring Soon"
-                        count={expiringIngredients.length}
-                        color="border-l-amber-500"
-                        bgColor="bg-black/75"
-                      />
-                    </OfflineCard>
+                      title="Expiring Soon"
+                      count={expiringIngredients.length}
+                      color="border-l-amber-500"
+                      bgColor="bg-black/75"
+                    />
 
-                    <OfflineCard
-                      isFromCache={inventoryFromCache}
-                      lastUpdated={
-                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                    <StatCard
+                      icon={
+                        <GiBiohazard className="text-pink-400 text-lg sm:text-xl" />
                       }
-                      dataType="inventory"
-                    >
-                      <StatCard
-                        icon={
-                          <GiBiohazard className="text-pink-400 text-lg sm:text-xl" />
-                        }
-                        title="Spoilage"
-                        count={spoilage?.data?.length ?? 0}
-                        color="border-l-pink-500"
-                        bgColor="bg-black/75"
-                      />
-                    </OfflineCard>
+                      title="Spoilage"
+                      count={spoilage?.data?.length ?? 0}
+                      color="border-l-pink-500"
+                      bgColor="bg-black/75"
+                    />
 
-                    <OfflineCard
-                      isFromCache={inventoryFromCache}
-                      lastUpdated={
-                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                    <StatCard
+                      icon={
+                        <FaExclamationTriangle className="text-orange-400 text-lg sm:text-xl" />
                       }
-                      dataType="inventory"
-                    >
-                      <StatCard
-                        icon={
-                          <FaExclamationTriangle className="text-orange-400 text-lg sm:text-xl" />
-                        }
-                        title="Out of Stock Items"
-                        count={outOfStockItems.length}
-                        color="border-l-orange-500"
-                        bgColor="bg-black/75"
-                      />
-                    </OfflineCard>
+                      title="Out of Stock Items"
+                      count={outOfStockItems.length}
+                      color="border-l-orange-500"
+                      bgColor="bg-black/75"
+                    />
 
-                    <OfflineCard
-                      isFromCache={inventoryFromCache}
-                      lastUpdated={
-                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                    <StatCard
+                      icon={
+                        <FaExclamationTriangle className="text-yellow-400 text-lg sm:text-xl" />
                       }
-                      dataType="inventory"
-                    >
-                      <StatCard
-                        icon={
-                          <FaExclamationTriangle className="text-yellow-400 text-lg sm:text-xl" />
-                        }
-                        title="Low Stock Items"
-                        count={lowStockIngredients.length}
-                        color="border-l-yellow-500"
-                        bgColor="bg-black/75"
-                      />
-                    </OfflineCard>
+                      title="Low Stock Items"
+                      count={lowStockIngredients.length}
+                      color="border-l-yellow-500"
+                      bgColor="bg-black/75"
+                    />
 
-                    <OfflineCard
-                      isFromCache={inventoryFromCache}
-                      lastUpdated={
-                        lastDataUpdate ? String(lastDataUpdate) : undefined
+                    <StatCard
+                      icon={
+                        <FaExclamationTriangle className="text-green-400 text-lg sm:text-xl" />
                       }
-                      dataType="inventory"
-                    >
-                      <StatCard
-                        icon={
-                          <FaExclamationTriangle className="text-green-400 text-lg sm:text-xl" />
-                        }
-                        title="Surplus Items"
-                        count={surplus.data?.length ?? 0}
-                        color="border-l-green-500"
-                        bgColor="bg-black/75"
-                      />
-                    </OfflineCard>
+                      title="Surplus Items"
+                      count={surplus.data?.length ?? 0}
+                      color="border-l-green-500"
+                      bgColor="bg-black/75"
+                    />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <section
@@ -970,7 +914,7 @@ export default function Dashboard() {
                   </section>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-                    {/* Out of Stock List */}
+                    {/* Out of Stock List - Multi-Batch Support */}
                     <section
                       aria-label="Out of Stock"
                       className="bg-gradient-to-br from-black/95 to-slate-800 rounded-2xl shadow-2xl p-3 sm:p-4 lg:p-6 border border-orange-400"
@@ -981,12 +925,11 @@ export default function Dashboard() {
                         </div>
                         <div>
                           <h2 className="text-base sm:text-lg font-bold text-orange-200">
-                            Out of Stock
+                            Out of Stock (Today&apos;s Inventory)
                           </h2>
                           <p className="text-orange-400 text-xs">
-                            These items are currently out of stock and
-                            unavailable for use or sale. Please reorder or
-                            restock as soon as possible to avoid disruptions.
+                            Items where ALL batches are completely depleted.
+                            Restock immediately to avoid service disruptions.
                           </p>
                         </div>
                       </header>
@@ -995,56 +938,60 @@ export default function Dashboard() {
                           <div className="text-center py-3 sm:py-4">
                             <FaBoxes className="text-orange-500 text-lg sm:text-xl mx-auto mb-2" />
                             <p className="text-orange-400 text-xs sm:text-sm">
-                              No items are currently out of stock
+                              No items are completely out of stock
                             </p>
                           </div>
                         ) : (
-                          outOfStockItems.map(
-                            (
-                              item: {
-                                id?: string | number;
-                                item_id?: string | number;
-                                item_name?: string;
-                                stock_quantity?: number;
-                                expiration_date?: string;
-                              },
-                              idx: number
-                            ) => (
-                              <div
-                                key={item.id || `${item.item_name}-${idx}`}
-                                className="bg-orange-700/10 border border-orange-700/20 rounded-lg p-2 sm:p-3 hover:bg-orange-700/15 transition-colors duration-200"
-                              >
-                                <div className="flex justify-between items-center">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                      <span className="text-orange-300 font-semibold">
-                                        ID:
-                                      </span>{" "}
-                                      {item.item_id}
-                                      <span className="mx-1 text-orange-400">
-                                        |
-                                      </span>
-                                      <span className="font-semibold">
-                                        {item.item_name}
-                                      </span>
-                                    </p>
-                                  </div>
-                                  <div className="text-right flex-shrink-0 ml-2">
-                                    <p className="text-orange-400 text-xs">
-                                      {item.expiration_date
-                                        ? new Date(
-                                            item.expiration_date
-                                          ).toLocaleDateString("en-US", {
-                                            month: "short",
-                                            day: "numeric",
-                                          })
-                                        : "N/A"}
-                                    </p>
-                                  </div>
+                          // Group by item_name to show aggregate view
+                          Object.entries(
+                            outOfStockItems.reduce((acc: any, item: any) => {
+                              if (!acc[item.item_name]) {
+                                acc[item.item_name] = [];
+                              }
+                              acc[item.item_name].push(item);
+                              return acc;
+                            }, {})
+                          ).map(([itemName, batches]: [string, any]) => (
+                            <div
+                              key={itemName}
+                              className="bg-orange-700/10 border border-orange-700/20 rounded-lg p-2 sm:p-3 hover:bg-orange-700/15 transition-colors duration-200"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-bold text-white text-xs sm:text-sm">
+                                    {itemName}
+                                  </p>
+                                  <p className="text-orange-400 text-xs mt-1">
+                                    All {batches.length} batch(es) depleted
+                                  </p>
+                                </div>
+                                <div className="text-right flex-shrink-0 ml-2">
+                                  <span className="inline-block px-2 py-0.5 bg-orange-600/30 text-orange-300 text-xs rounded">
+                                    {batches[0]?.category || "N/A"}
+                                  </span>
                                 </div>
                               </div>
-                            )
-                          )
+                              {/* Show batch details in collapsed view */}
+                              <details className="mt-2">
+                                <summary className="cursor-pointer text-orange-400 text-xs hover:text-orange-300">
+                                  View batches
+                                </summary>
+                                <ul className="ml-3 mt-2 space-y-1">
+                                  {batches.map((batch: any, idx: number) => (
+                                    <li
+                                      key={idx}
+                                      className="text-xs text-gray-400"
+                                    >
+                                      <span className="text-orange-400">•</span>{" "}
+                                      Batch {batch.batch_date || "N/A"}{" "}
+                                      {batch.expiration_date &&
+                                        `(exp: ${batch.expiration_date})`}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            </div>
+                          ))
                         )}
                       </div>
                     </section>

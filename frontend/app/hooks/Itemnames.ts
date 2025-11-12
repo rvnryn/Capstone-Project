@@ -5,6 +5,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export type InventoryItem = {
   item_name: string;
   category: string;
+  measurement: string;
 };
 
 export function useInventoryItemNames() {

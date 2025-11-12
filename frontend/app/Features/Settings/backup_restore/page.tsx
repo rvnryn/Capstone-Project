@@ -310,7 +310,7 @@ export default function BackupRestorePage() {
               <span className="ml-4 text-white">Loading backup history...</span>
             </div>
           )}
-          <div className="max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto w-full">
+          <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
             <article className="bg-gradient-to-br from-gray-900/95 to-black/95 rounded-xl shadow-2xl border border-gray-800/50 p-6 w-full">
               <header className="flex flex-col space-y-4 mb-8">
                 <div className="flex items-center gap-4">

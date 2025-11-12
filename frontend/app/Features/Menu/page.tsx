@@ -20,7 +20,12 @@ import {
   FaClock,
   FaCalendarAlt,
 } from "react-icons/fa";
-import { useMenuAPI, MenuItem as MenuItemType } from "./hook/use-menu";
+import {
+  useMenuList,
+  useDeleteMenu,
+  useRecalculateStockStatus,
+  MenuItem as MenuItemType,
+} from "./hooks/use-menuQuery";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { FiEye, FiMinus, FiRefreshCw, FiTrendingDown } from "react-icons/fi";
 import { MdWarning, MdCheckCircle } from "react-icons/md";
@@ -90,7 +95,6 @@ const Menu: React.FC = () => {
     };
   }, []);
   const router = useRouter();
-  const { fetchMenu, deleteMenu } = useMenuAPI();
   const queryClient = useQueryClient();
 
   const [selectedCategory, setSelectedCategory] = useState("");
@@ -101,74 +105,37 @@ const Menu: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
 
-  // Patch: Use cached data when offline, and show offline message if no cache
+  // React Query hooks with auto-refresh every 3 minutes
+  const { data: menuData = [], isLoading, isFetching, isError } = useMenuList();
+
+  const deleteMutation = useDeleteMenu();
+  const recalculateStockMutation = useRecalculateStockStatus();
+
+  // Patch: Use cached data when offline
   const [offlineMenu, setOfflineMenu] = useState<MenuItemType[] | null>(null);
-  const [offlineError, setOfflineError] = useState<string | null>(null);
-  const {
-    data: menuData = [],
-    isLoading,
-    isFetching,
-    isError,
-  } = useQuery({
-    queryKey: ["menu"],
-    queryFn: async () => {
-      // Try to fetch from network
-      try {
-        const items = await fetchMenu();
-        if (typeof window !== "undefined") {
-          localStorage.setItem("menuCache", JSON.stringify(items));
-        }
-        setOfflineMenu(null);
-        setOfflineError(null);
-        return items;
-      } catch (e) {
-        // On error, fallback to cache
-        if (typeof window !== "undefined") {
-          const cached = localStorage.getItem("menuCache");
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            setOfflineMenu(parsed);
-            setOfflineError(null);
-            return parsed;
-          } else {
-            setOfflineMenu(null);
-            setOfflineError(
-              "No cached menu data available. Please connect to the internet to load menu."
-            );
-            return [];
-          }
-        }
-        setOfflineMenu(null);
-        setOfflineError("Failed to load cached menu data.");
-        return [];
+
+  // Update offline menu from cache when offline
+  useEffect(() => {
+    if (!isOnline && typeof window !== "undefined") {
+      const cached = localStorage.getItem("menuCache");
+      if (cached) {
+        setOfflineMenu(JSON.parse(cached));
       }
-    },
-    refetchOnWindowFocus: true,
-  });
+    }
+  }, [isOnline]);
 
-  // Robust loading state: if offline and no cache, do not show spinner
-  const shouldShowLoading =
-    (isLoading || isFetching) &&
-    !offlineError &&
-    (typeof window === "undefined" ||
-      navigator.onLine ||
-      !!localStorage.getItem("menuCache"));
+  // Display menu: use online data if available, otherwise use cached
+  const displayMenu = isOnline ? menuData : offlineMenu || menuData;
 
-  // Patch: Always reconstruct icons/actions from code when offline
-  let displayMenu: MenuItemType[] = [];
-  if (isOnline) {
-    displayMenu = menuData;
-  } else if (offlineMenu) {
-    displayMenu = offlineMenu.map((item) => ({
-      ...item,
-      // Add any computed properties here if needed
-    }));
-  } else {
-    displayMenu = menuData;
-  }
+  // Robust loading state
+  const shouldShowLoading = (isLoading || isFetching) && isOnline;
 
   // If offline and no cached data, show a clear message
-  if (!isOnline && (!offlineMenu || offlineMenu.length === 0)) {
+  if (
+    !isOnline &&
+    (!offlineMenu || offlineMenu.length === 0) &&
+    menuData.length === 0
+  ) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-yellow-400">
         <h2>No cached menu data available.</h2>
@@ -178,18 +145,9 @@ const Menu: React.FC = () => {
   }
 
   const handleRefresh = () => {
-    console.log("Refreshing inventory table...");
+    console.log("Refreshing menu table...");
     queryClient.invalidateQueries({ queryKey: ["menu"] });
   };
-
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: deleteMenu,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["menu"] });
-      setShowDeleteModal(false);
-    },
-  });
 
   const handleClear = () => {
     setSearchQuery("");
@@ -309,7 +267,12 @@ const Menu: React.FC = () => {
 
   const confirmDelete = async () => {
     if (!itemToDelete) return;
-    deleteMutation.mutate(itemToDelete);
+    deleteMutation.mutate(itemToDelete, {
+      onSuccess: () => {
+        setShowDeleteModal(false);
+        setItemToDelete(null);
+      },
+    });
   };
 
   return (
@@ -567,17 +530,6 @@ const Menu: React.FC = () => {
                                   : "Loading from offline cache..."
                               }
                             />
-                          </td>
-                        </tr>
-                      ) : offlineError ? (
-                        <tr>
-                          <td colSpan={columns.length}>
-                            <div className="flex flex-col items-center gap-4 py-12">
-                              <MdWarning className="text-yellow-400 text-5xl" />
-                              <div className="text-yellow-400 text-lg font-medium text-center">
-                                {offlineError}
-                              </div>
-                            </div>
                           </td>
                         </tr>
                       ) : isError ? (

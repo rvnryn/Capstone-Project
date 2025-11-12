@@ -37,7 +37,10 @@ import {
   useInventorySettingsAPI,
   InventorySetting,
 } from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
-import { useInventoryAPI } from "../hook/use-inventoryAPI";
+import {
+  useDeleteSurplusInventory,
+  useTransferToSpoilage,
+} from "../hook/use-inventoryQuery";
 import { TableLoading, EmptyState } from "@/app/components/LoadingStates";
 type InventoryItem = {
   id: number;
@@ -81,7 +84,10 @@ export default function SurplusInventoryPage() {
     };
   }, []);
   const { isMobile } = useNavigation();
-  const { deleteSurplusItem, transferSurplusToSpoilage } = useInventoryAPI();
+
+  // React Query mutations
+  const deleteSurplusMutation = useDeleteSurplusInventory();
+  const transferToSpoilageMutation = useTransferToSpoilage();
 
   // Aggressively cache settings with React Query, prefetch on mount, avoid unnecessary refetches
   const { fetchSettings } = useInventorySettingsAPI();
@@ -230,7 +236,7 @@ export default function SurplusInventoryPage() {
     refetchOnWindowFocus: true,
     refetchOnMount: true,
     refetchOnReconnect: true,
-    refetchInterval: 5000, // Poll every 5 seconds for real-time updates
+    // refetchInterval: 5000, // Poll every 5 seconds for real-time updates
     refetchIntervalInBackground: false, // Only poll when tab is active
   });
   const inventoryData: InventoryItem[] = Array.isArray(inventoryQuery.data)
@@ -244,22 +250,15 @@ export default function SurplusInventoryPage() {
     queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
   };
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const item = inventoryData.find((item) => item.id === id);
-      const batch_date = item?.batch;
-      await deleteSurplusItem(id, batch_date as string);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
-      setShowDeleteModal(false);
-      setItemToDelete(null);
-    },
-  });
-
   const confirmDelete = async () => {
     if (itemToDelete) {
-      await deleteMutation.mutateAsync(itemToDelete);
+      const item = inventoryData.find((item) => item.id === itemToDelete);
+      const batch_date = item?.batch;
+
+      await deleteSurplusMutation.mutateAsync(itemToDelete);
+
+      setShowDeleteModal(false);
+      setItemToDelete(null);
     }
   };
 
@@ -451,35 +450,6 @@ export default function SurplusInventoryPage() {
     setShowSpoilageModal(true);
   };
 
-  // Spoilage mutation
-  const spoilageMutation = useMutation({
-    mutationFn: async ({
-      id,
-      batch,
-      quantity,
-      reason,
-    }: {
-      id: number;
-      batch: string;
-      quantity: number;
-      reason: string;
-    }) => {
-      await transferSurplusToSpoilage(id, batch, quantity, reason);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
-      setShowSpoilageModal(false);
-      setItemToSpoilage(null);
-      setSpoilageQuantity("");
-      setSpoilageReason("");
-      setCustomSpoilageReason("");
-    },
-    onError: (error) => {
-      // Optionally show error toast
-      console.error("Failed to transfer to spoilage:", error);
-    },
-  });
-
   // Confirm spoilage transfer
   const confirmSpoilage = () => {
     if (
@@ -487,19 +457,34 @@ export default function SurplusInventoryPage() {
       !spoilageQuantity ||
       Number(spoilageQuantity) <= 0 ||
       Number(spoilageQuantity) > itemToSpoilage.stock ||
-      spoilageMutation.status === "pending"
+      transferToSpoilageMutation.isPending
     )
       return;
+
     let reason = spoilageReason;
     if (spoilageReason === "Others" && customSpoilageReason.trim()) {
       reason = customSpoilageReason.trim();
     }
-    spoilageMutation.mutate({
-      id: itemToSpoilage.id,
-      batch: itemToSpoilage.batch,
-      quantity: Number(spoilageQuantity),
-      reason,
-    });
+
+    transferToSpoilageMutation.mutate(
+      {
+        item_id: itemToSpoilage.id,
+        quantity: Number(spoilageQuantity),
+        reason,
+      },
+      {
+        onSuccess: () => {
+          setShowSpoilageModal(false);
+          setItemToSpoilage(null);
+          setSpoilageQuantity("");
+          setSpoilageReason("");
+          setCustomSpoilageReason("");
+        },
+        onError: (error) => {
+          console.error("Failed to transfer to spoilage:", error);
+        },
+      }
+    );
   };
 
   const handleCloseSpoilageModal = () => {
@@ -529,7 +514,10 @@ export default function SurplusInventoryPage() {
 
   return (
     <section className="text-white font-poppins">
-      <NavigationBar showDeleteModal={showDeleteModal} />
+      <NavigationBar
+        showDeleteModal={showDeleteModal}
+        showTransferModal={showSpoilageModal}
+      />
       <ResponsiveMain>
         <main
           className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
@@ -902,11 +890,11 @@ export default function SurplusInventoryPage() {
                                         e.stopPropagation();
                                         handleTransferToSpoilage(item);
                                       }}
-                                      className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 hover:text-purple-400 transition-all duration-200 cursor-pointer border border-purple-500/20 hover:border-purple-500/40"
+                                      className="p-1 xs:p-1.5 sm:p-2 rounded-md xs:rounded-lg bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 hover:text-pink-300 transition-all duration-200 cursor-pointer border border-purple-500/20 hover:border-purple-500/40"
                                       title="Transfer to Spoilage"
                                       aria-label={`Transfer ${item.name} to spoilage`}
                                     >
-                                      <FaExchangeAlt className="text-xs xs:text-sm" />
+                                      <FaBiohazard className="text-xs xs:text-sm" />
                                     </button>
                                   </div>
                                 </td>
@@ -1086,18 +1074,18 @@ export default function SurplusInventoryPage() {
                     !spoilageQuantity ||
                     Number(spoilageQuantity) <= 0 ||
                     Number(spoilageQuantity) > itemToSpoilage.stock ||
-                    spoilageMutation.status === "pending"
+                    transferToSpoilageMutation.status === "pending"
                   }
                   className={`group flex items-center justify-center gap-1 xs:gap-2 px-3 xs:px-4 sm:px-6 md:px-8 py-2 xs:py-3 sm:py-4 rounded-lg xs:rounded-xl font-semibold transition-all duration-300 order-2 sm:order-1 text-xs xs:text-sm sm:text-base ${
                     !spoilageQuantity ||
                     Number(spoilageQuantity) <= 0 ||
                     Number(spoilageQuantity) > itemToSpoilage.stock ||
-                    spoilageMutation.status === "pending"
+                    transferToSpoilageMutation.status === "pending"
                       ? "bg-gray-600/50 text-gray-400 cursor-not-allowed border-2 border-gray-600/50"
                       : "bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-400 hover:to-pink-500 text-white border-2 border-pink-500/70 hover:border-pink-400/70 cursor-pointer"
                   }`}
                 >
-                  {spoilageMutation.status === "pending" ? (
+                  {transferToSpoilageMutation.status === "pending" ? (
                     <>
                       <div className="w-3 xs:w-4 h-3 xs:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                       Transferring...

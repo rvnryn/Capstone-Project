@@ -18,7 +18,25 @@ export interface InventoryAnalytics {
     item_count: number;
     total_quantity: number;
   }>;
+  outOfStock_items: Array<{
+    item_name: string;
+    category: string;
+    stock_quantity: number;
+    threshold: number;
+  }>;
+  critical_stock_items: Array<{
+    item_name: string;
+    category: string;
+    stock_quantity: number;
+    threshold: number;
+  }>;
   low_stock_items: Array<{
+    item_name: string;
+    category: string;
+    stock_quantity: number;
+    threshold: number;
+  }>;
+  normal_items: Array<{
     item_name: string;
     category: string;
     stock_quantity: number;
@@ -64,6 +82,24 @@ export function useInventoryAnalytics(startDate?: string, endDate?: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Derived counts
+  const criticalCount = analytics?.low_stock_items
+    ? analytics.low_stock_items.filter(
+        (item) =>
+          item.stock_quantity <= 0.5 * item.threshold && item.stock_quantity > 0
+      ).length
+    : 0;
+
+  const outOfStockCount = analytics?.low_stock_items
+    ? analytics.low_stock_items.filter((item) => item.stock_quantity === 0)
+        .length
+    : 0;
+
+  const normal_stock_items =
+    analytics?.normal_items?.filter(
+      (item) => item.stock_quantity > item.threshold // Normal: above threshold
+    ) || [];
+
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -99,5 +135,7 @@ export function useInventoryAnalytics(startDate?: string, endDate?: string) {
     loading,
     error,
     refetch: fetchAnalytics,
+    criticalCount,
+    outOfStockCount,
   };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   FaTachometerAlt,
   FaBoxes,
@@ -13,15 +14,12 @@ import {
   FaUser,
   FaTimes,
   FaChevronRight,
-  FaWifi,
   FaAngleLeft,
 } from "react-icons/fa";
 import { GiHamburgerMenu } from "react-icons/gi";
 import {
   MdFullscreen,
   MdFullscreenExit,
-  MdSignalWifiOff,
-  MdWifiOff,
 } from "react-icons/md";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
@@ -30,7 +28,6 @@ import { logoutUser } from "@/app/utils/API/LoginAPI";
 import { supabase } from "@/app/utils/Server/supabaseClient";
 import { useAuth } from "@/app/context/AuthContext";
 import { useNavigation, navigationUtils } from "./hook/use-navigation";
-import { usePWA, useOfflineQueue } from "@/app/hooks/usePWA";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -170,28 +167,12 @@ const NavigationBar = ({
     deviceType,
     orientation,
     isPWA,
-    isOnline,
     reducedMotion,
     screenSize,
     toggleMenu,
     closeMenu,
   } = useNavigation();
 
-  // PWA Integration
-  const {
-    isOnline: pwaOnline,
-    isInstalled,
-    canInstall,
-    install: installPWA,
-    pwaFeatures,
-  } = usePWA();
-
-  const { addOfflineAction, getOfflineActions, syncWhenOnline } =
-    useOfflineQueue();
-
-  // Use PWA online status as primary source
-  const isActuallyOnline = pwaOnline ?? isOnline;
-  const offlineActionsCount = getOfflineActions().length;
 
   // Component state
   const [showModal, setShowModal] = useState(false);
@@ -199,9 +180,20 @@ const NavigationBar = ({
   const [notificationModalState, setNotificationModal] =
     useState<Notification | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
+  const [bellPosition, setBellPosition] = useState<{ top: number; right: number } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const bellRef = useRef<HTMLDivElement>(null);
+
+  // Debug: Track notification modal state changes
+  useEffect(() => {
+    console.log("[DEBUG] notificationModalState changed:", notificationModalState);
+  }, [notificationModalState]);
+
+  // Debug: Track bellOpen state changes
+  useEffect(() => {
+    console.log("[Bell State Changed]:", bellOpen);
+  }, [bellOpen]);
   const router = useRouter();
   const pathname = usePathname();
   const [loggingOut, setLoggingOut] = useState(false);
@@ -360,19 +352,7 @@ const NavigationBar = ({
     return isCompactDevice() && isMenuOpen;
   };
 
-  // PWA Installation handling with enhanced hooks
-  useEffect(() => {
-    // Custom banner removed - using browser's default install prompt
-  }, [canInstall, isInstalled]);
-
-  // PWA Install handler using enhanced hooks
-  const handleInstallPWA = async () => {
-    try {
-      await installPWA();
-    } catch (error) {
-      console.error("PWA installation failed:", error);
-    }
-  };
+  // PWA Installation - removed (using PWAInstallBanner component instead)
 
   // Fullscreen handling for PWA
   useEffect(() => {
@@ -405,14 +385,34 @@ const NavigationBar = ({
   // Notifications handling
 
   const fetchNotifications = React.useCallback(async () => {
-    const userId = user?.user_id || user?.id;
-    console.log("[Notifications] Fetching for user:", userId);
+    // Try user_id first (number), then fallback to parsing id if it's a string
+    let userId = user?.user_id;
+
+    // If user_id is not available, try to parse id if it's a string number
+    if (!userId && user?.id) {
+      if (typeof user.id === "number") {
+        userId = user.id;
+      } else if (typeof user.id === "string") {
+        const parsed = parseInt(user.id, 10);
+        if (!isNaN(parsed)) {
+          userId = parsed;
+        }
+      }
+    }
+
+    console.log("[Notifications] Full user object:", user);
+    console.log("[Notifications] user.user_id:", user?.user_id);
+    console.log("[Notifications] user.id:", user?.id);
+    console.log("[Notifications] Resolved userId:", userId);
+    console.log("[Notifications] userId type:", typeof userId);
+
     if (userId && typeof userId === "number") {
       try {
         const res = await fetch(
           `${API_BASE_URL}/api/notifications?user_id=${userId}`
         );
         const data = await res.json();
+        console.log("[Notifications] API Response:", data);
         console.log("[Notifications] Received:", data.notifications?.length || 0, "notifications");
         setNotifications(data.notifications || []);
       } catch (error) {
@@ -420,7 +420,7 @@ const NavigationBar = ({
         setNotifications([]);
       }
     } else {
-      console.log("[Notifications] No valid user ID");
+      console.log("[Notifications] No valid user ID - userId:", userId, "type:", typeof userId);
       setNotifications([]);
     }
   }, [user]);
@@ -439,12 +439,24 @@ const NavigationBar = ({
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (bellRef.current && !bellRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      // Check if click is inside bell icon
+      const isInsideBell = bellRef.current && bellRef.current.contains(target);
+
+      // Check if click is inside notification dropdown (which is rendered via portal)
+      const isInsideDropdown = (target as Element).closest('.notification-dropdown-portal');
+
+      if (!isInsideBell && !isInsideDropdown) {
+        console.log("[Bell] Click outside detected, closing");
         setBellOpen(false);
       }
     }
     if (bellOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
+      // Use setTimeout to avoid race condition with the click event that opened the dropdown
+      setTimeout(() => {
+        document.addEventListener("mousedown", handleClickOutside);
+      }, 0);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
@@ -580,7 +592,9 @@ const NavigationBar = ({
   }
 
   async function handleNotificationClick(n: Notification) {
+    console.log("[DEBUG] Notification clicked:", n);
     setNotificationModal(n); // This sets notificationModalState
+    console.log("[DEBUG] Notification modal state set to:", n);
     setBellOpen(false);
     const userId = user?.user_id || user?.id;
     // Only mark as read if notification has a valid ID
@@ -596,7 +610,9 @@ const NavigationBar = ({
           }
         );
         fetchNotifications();
-      } catch {}
+      } catch (error) {
+        console.error("[DEBUG] Error marking notification as read:", error);
+      }
     }
   }
 
@@ -670,6 +686,7 @@ const NavigationBar = ({
     showSaveModal ||
     showRemoveIngredientModal ||
     notificationModal ||
+    notificationModalState ||  // Check local notification modal state
     showPasswordModal ||
     showToggleModal ||
     showRestoreSourceModal ||
@@ -694,39 +711,52 @@ const NavigationBar = ({
       {!isMenuOpen && (
         <button
           onClick={handleBurgerClick}
-          className={`fixed group ${
+          className={`fixed group z-[60] transition-all duration-300 ${
             anyModalOpen
-              ? "opacity-50"
-              : "group-hover:scale-105 group-hover:text-yellow-400"
+              ? "opacity-50 cursor-not-allowed"
+              : "opacity-100 hover:scale-105 active:scale-95"
           }`}
           aria-label={anyModalOpen ? "Go back" : "Open menu"}
           style={{
-            top: "0.5rem",
-            left: "1rem",
-            width: "3rem",
-            height: "3rem",
-            zIndex: 60,
+            top: isCompactDevice() ? "0.75rem" : "0.5rem",
+            left: isCompactDevice()
+              ? "0.75rem"
+              : screenSize === "md"
+                ? "calc(35px - 1.5rem)" // 70px / 2 - half button width
+                : screenSize === "lg"
+                  ? "calc(40px - 1.5rem)" // 80px / 2 - half button width
+                  : screenSize === "xl"
+                    ? "calc(45px - 1.5rem)" // 90px / 2 - half button width
+                    : "calc(50px - 1.5rem)", // 100px / 2 - half button width (2xl)
+            width: isCompactDevice() ? "2.75rem" : "3rem",
+            height: isCompactDevice() ? "2.75rem" : "3rem",
           }}
           disabled={anyModalOpen}
           tabIndex={anyModalOpen ? -1 : 0}
         >
           <div
-            className={`relative w-full h-full rounded-xl flex items-center justify-center
-      ${
-        anyModalOpen
-          ? "bg-black/90 border border-transparent shadow-none"
-          : "bg-gradient-to-br from-slate-900/90 via-black/90 to-gray-800/90 border border-yellow-400/20 shadow-xl group-hover:border-yellow-400/30 group-hover:shadow-yellow-400/10 backdrop-blur-lg transition-all duration-300 ml-2"
-      }`}
+            className={`relative w-full h-full rounded-xl flex items-center justify-center transition-all duration-300
+        ${
+          anyModalOpen
+            ? "bg-black/90 border border-transparent shadow-none"
+            : "bg-gradient-to-br from-slate-900/95 via-black/95 to-gray-800/95 border border-yellow-400/30 shadow-xl hover:border-yellow-400/50 hover:shadow-yellow-400/20 backdrop-blur-xl hover:from-slate-800/95 hover:via-black/95 hover:to-gray-700/95"
+        }`}
             style={anyModalOpen ? { border: "none", boxShadow: "none" } : {}}
           >
-            <div className="relative flex flex-col gap-1.5 w-5 h-4 items-center justify-center">
+            <div className="relative flex items-center justify-center">
               <GiHamburgerMenu
-                className={`text-yellow-500 ${
-                  !anyModalOpen ? "" : "text-yellow-500/30 backdrop-blur-3xl"
+                className={`transition-all duration-300 ${
+                  anyModalOpen
+                    ? "text-yellow-500/30"
+                    : "text-yellow-400 group-hover:text-yellow-300 group-hover:scale-110"
                 }`}
-                size={25}
+                size={isCompactDevice() ? 22 : 24}
               />
             </div>
+            {/* Glow effect on hover */}
+            {!anyModalOpen && (
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-yellow-400/0 via-yellow-300/0 to-yellow-200/0 group-hover:from-yellow-400/10 group-hover:via-yellow-300/5 group-hover:to-yellow-200/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            )}
           </div>
         </button>
       )}
@@ -763,7 +793,7 @@ const NavigationBar = ({
               ? "translateX(-100%)"
               : "translateX(0)",
           transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-          zIndex: isCompactDevice() ? 50 : 45,
+          zIndex: isMenuOpen ? 65 : (isCompactDevice() ? 50 : 45),
           // Enhanced responsive shadows based on device type
           boxShadow: isMenuOpen
             ? "4px 0 32px rgba(0, 0, 0, 0.5), inset -1px 0 0 rgba(251, 191, 36, 0.1)"
@@ -778,32 +808,10 @@ const NavigationBar = ({
             "medium"
           )} ${getSpacing(
             "medium"
-          )} border-b border-yellow-400/20 bg-gradient-to-r from-black/60 via-black/50 to-black/60 backdrop-blur-xl relative group`}
-          style={{ height: getHeaderHeight() }}
+          )} border-b border-yellow-400/20 bg-gradient-to-r from-black/60 via-black/50 to-black/60 backdrop-blur-xl relative group overflow-hidden`}
+          style={{ height: getHeaderHeight(), minHeight: getHeaderHeight() }}
         >
-          {/* Collapsed state - Centered logo with enhanced responsive styling */}
-          {!isMenuOpen && !isCompactDevice() && (
-            <div className="w-full flex justify-center">
-              <div
-                className="relative rounded-xl overflow-hidden shadow-lg border border-yellow-400/20 bg-gradient-to-br from-yellow-400/5 via-transparent to-yellow-300/3 group-hover:border-yellow-400/30 group-hover:shadow-yellow-400/15 transition-all duration-300 group-hover:scale-105"
-                style={{
-                  width: getIconSize() + (isExpandedDevice() ? 20 : 16),
-                  height: getIconSize() + (isExpandedDevice() ? 20 : 16),
-                }}
-              >
-                <Image
-                  src="/logo.png"
-                  alt="Logo"
-                  width={getIconSize() + (isExpandedDevice() ? 20 : 16)}
-                  height={getIconSize() + (isExpandedDevice() ? 20 : 16)}
-                  className="w-full h-full object-contain relative z-10"
-                  priority
-                />
-                <div className="absolute inset-0 bg-gradient-to-br from-yellow-400/8 via-yellow-300/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                <div className="absolute inset-0 bg-gradient-to-br from-transparent via-yellow-400/3 to-yellow-300/5"></div>
-              </div>
-            </div>
-          )}
+          {/* Collapsed state - Logo hidden when sidebar is closed */}
 
           {/* Expanded state - Enhanced responsive layout */}
           {(isMenuOpen || isCompactDevice()) && (
@@ -1299,18 +1307,17 @@ const NavigationBar = ({
 
       {/* Enhanced Responsive Header */}
       <header
-        className={`fixed bg-gradient-to-r from-black/95 via-black/90 to-black/95 backdrop-blur-xl text-yellow-100 z-40 flex items-center shadow-2xl border-b border-yellow-400/20 ${getPadding(
-          "medium"
-        )}
+        className={`fixed bg-gradient-to-r from-black/95 via-black/90 to-black/95 backdrop-blur-xl text-yellow-100 z-40 shadow-2xl border-b border-yellow-400/20 overflow-hidden
           ${
             screenSize === "xs" || screenSize === "sm"
-              ? "justify-center left-0 right-0"
-              : "justify-between right-0"
+              ? "left-0 right-0 flex-col px-3 py-2"
+              : `flex items-center justify-between right-0 ${getPadding("medium")}`
           }`}
         style={{
           transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
           top: "0",
-          height: getHeaderHeight(),
+          height: isCompactDevice() ? "auto" : getHeaderHeight(),
+          minHeight: getHeaderHeight(),
           left:
             screenSize === "xs" || screenSize === "sm"
               ? 0
@@ -1323,64 +1330,65 @@ const NavigationBar = ({
             "0 4px 20px rgba(0, 0, 0, 0.3), inset 0 -1px 0 rgba(251, 191, 36, 0.1)",
         }}
       >
-        {/* Enhanced Responsive Header */}
-        <section
-          className={`flex items-center ${
-            isCompactDevice() ? "justify-center w-full" : ""
-          }`}
-        >
-          <div className="relative">
-            <span
-              className={`font-medium whitespace-nowrap overflow-hidden text-ellipsis bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent drop-shadow-sm ${getTextSize(
-                "medium"
-              )}`}
-            >
-              {clientDate}
-            </span>
-            <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/5 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          </div>
-        </section>
+        {/* Date Section - Hidden on mobile, show on desktop */}
+        {!isCompactDevice() && (
+          <section className="flex items-center">
+            <div className="relative">
+              <span
+                className={`font-medium whitespace-nowrap overflow-hidden text-ellipsis bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent drop-shadow-sm ${getTextSize(
+                  "medium"
+                )}`}
+              >
+                {clientDate}
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/5 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            </div>
+          </section>
+        )}
 
         {/* Enhanced Mobile User Profile - Show on compact devices */}
         {isCompactDevice() && user && (
-          <div
-            className={`flex items-center justify-between w-full mt-1 mb-1 ${getPadding(
-              "xs"
-            )}`}
-          >
+          <div className="flex items-center justify-between w-full gap-2">
             {/* User Info Section */}
-            <div className={`flex items-center ${getSpacing("xs")}`}>
-              {/* Avatar Button */}
-              <button
-                className={`flex items-center justify-center rounded-full bg-yellow-500/90 text-black font-bold border-2 border-yellow-400 shadow-md ${
-                  isMobileDevice() ? "w-8 h-8 text-sm" : "w-9 h-9 text-base"
+            <div className={`flex items-center ${getSpacing("xs")} min-w-0 flex-1`}>
+              {/* Enhanced Avatar */}
+              <div
+                className={`flex-shrink-0 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 text-black font-bold flex items-center justify-center border-2 border-yellow-300 shadow-md ${
+                  isMobileDevice() ? "w-9 h-9 text-sm" : "w-10 h-10 text-base"
                 }`}
                 style={{
-                  minWidth: isMobileDevice() ? 32 : 36,
-                  minHeight: isMobileDevice() ? 32 : 36,
+                  minWidth: isMobileDevice() ? 36 : 40,
+                  minHeight: isMobileDevice() ? 36 : 40,
                 }}
-                aria-label="User menu"
               >
                 {user?.name
-                  ? user.name.charAt(0).toUpperCase()
+                  ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
                   : user?.email?.charAt(0).toUpperCase() || "U"}
-              </button>
-              {/* Name and Role */}
-              <div className="flex flex-col items-start min-w-0">
+              </div>
+              {/* Name and Role Badge Only */}
+              <div className="flex flex-col items-start min-w-0 flex-1 ml-2">
                 <span
-                  className={`text-yellow-100 font-semibold leading-tight truncate ${getTextSize(
+                  className={`font-bold bg-gradient-to-r from-yellow-200 to-yellow-300 bg-clip-text text-transparent leading-tight truncate w-full ${getTextSize(
                     "xs"
-                  )} ${isMobileDevice() ? "max-w-[70px]" : "max-w-[90px]"}`}
+                  )}`}
+                  style={{
+                    maxWidth: isMobileDevice() ? "100px" : "140px"
+                  }}
+                  title={user?.name || user?.email || "User"}
                 >
                   {user?.name || user?.email || "User"}
                 </span>
                 {role && (
                   <span
-                    className={`text-yellow-300 leading-tight capitalize truncate ${getTextSize(
-                      "xs"
-                    )} ${isMobileDevice() ? "max-w-[70px]" : "max-w-[90px]"}`}
+                    className="px-1.5 py-0.5 bg-yellow-500/20 border border-yellow-400/30 rounded-full text-yellow-300 text-[9px] font-semibold uppercase tracking-wide w-fit mt-0.5 truncate"
+                    style={{
+                      maxWidth: isMobileDevice() ? "60px" : "80px"
+                    }}
                   >
-                    {role}
+                    {role === "Owner" ? "Own" :
+                     role === "General Manager" ? "GM" :
+                     role === "Store Manager" ? "SM" :
+                     role === "Assistant Store Manager" ? "ASM" : ""}
                   </span>
                 )}
               </div>
@@ -1388,15 +1396,6 @@ const NavigationBar = ({
 
             {/* Connection Status and Controls */}
             <div className={`flex items-center ${getSpacing("xs")}`}>
-              {/* Connection Status Indicator */}
-              <div className="flex items-center">
-                {isActuallyOnline ? (
-                  <FaWifi className={`text-green-400 ${getTextSize("xs")}`} />
-                ) : (
-                  <MdWifiOff className={`text-red-400 ${getTextSize("xs")}`} />
-                )}
-              </div>
-
               {/* Notification Bell for compact devices */}
               <div className="relative" ref={bellRef}>
                 <button
@@ -1404,7 +1403,11 @@ const NavigationBar = ({
                     "small"
                   )}`}
                   aria-label="Notifications"
-                  onClick={() => setBellOpen(!bellOpen)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log("[Bell Mobile] Clicked! Current state:", bellOpen);
+                    setBellOpen(!bellOpen);
+                  }}
                 >
                   <FaBell
                     className="text-yellow-300 group-hover:text-yellow-200 transition-colors duration-300"
@@ -1423,7 +1426,7 @@ const NavigationBar = ({
 
                 {/* Mobile Notification Dropdown */}
                 {bellOpen && (
-                  <div>
+                  <div className="notification-dropdown-portal" onClick={(e) => e.stopPropagation()}>
                     <div
                       className={`absolute right-0 mt-3 bg-gradient-to-br from-black/98 via-gray-900/98 to-black/98 backdrop-blur-xl text-yellow-100 rounded-2xl shadow-2xl z-50 border border-yellow-400/20 ${
                         isMobileDevice()
@@ -1452,7 +1455,10 @@ const NavigationBar = ({
                           )}
                         </div>
                       </div>
-                      <div className="max-h-64 overflow-y-auto">
+                      <div
+                        className="max-h-64 overflow-y-auto"
+                        onClick={() => console.log("[CONTAINER] Notification container clicked!")}
+                      >
                         {notifications.length === 0 ? (
                           <div className="p-6 text-center">
                             <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-yellow-400/10 to-yellow-300/5 flex items-center justify-center">
@@ -1514,7 +1520,11 @@ const NavigationBar = ({
                               <div
                                 key={`notification-${n.id}-${n.created_at}`}
                                 className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl ${bgColor} flex items-start gap-3 group`}
-                                onClick={() => handleNotificationClick(n)}
+                                style={{ pointerEvents: 'auto' }}
+                                onClick={() => {
+                                  console.log("[CLICK] Notification item clicked directly!");
+                                  handleNotificationClick(n);
+                                }}
                               >
                                 {/* Unread/Read dot indicator */}
                                 <span
@@ -1584,7 +1594,7 @@ const NavigationBar = ({
           <div
             className={`flex items-center ${getSpacing(
               "medium"
-            )} min-w-0 max-w-full`}
+            )} min-w-0 flex-shrink-0`}
             style={{
               height: getHeaderHeight(),
               minHeight: getHeaderHeight(),
@@ -1598,7 +1608,22 @@ const NavigationBar = ({
                   "small"
                 )}`}
                 aria-label="Notifications"
-                onClick={() => setBellOpen(!bellOpen)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  const newState = !bellOpen;
+                  console.log("[Bell] Clicked! Current state:", bellOpen, "-> New state:", newState);
+
+                  if (newState && bellRef.current) {
+                    const rect = bellRef.current.getBoundingClientRect();
+                    setBellPosition({
+                      top: rect.bottom + 4,  // Reduced gap to 4px for tighter spacing
+                      right: window.innerWidth - rect.right
+                    });
+                  }
+
+                  setBellOpen(newState);
+                }}
               >
                 <FaBell
                   className="text-yellow-300 group-hover:text-yellow-200 transition-colors duration-300"
@@ -1616,11 +1641,20 @@ const NavigationBar = ({
                 <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-yellow-400/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               </button>
 
-              {/* Enhanced Responsive Notification Dropdown */}
-              {bellOpen && (
-                <div>
+              {/* Enhanced Responsive Notification Dropdown - Rendered via Portal */}
+              {bellOpen && bellPosition && typeof window !== 'undefined' && createPortal(
+                <div
+                  className="notification-dropdown-portal"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: "fixed",
+                    top: `${bellPosition.top}px`,
+                    right: `${bellPosition.right}px`,
+                    zIndex: 99999,
+                  }}
+                >
                   <div
-                    className={`absolute right-0 mt-3 bg-gradient-to-br from-black/98 via-gray-900/98 to-black/98 backdrop-blur-xl text-yellow-100 rounded-2xl shadow-2xl z-50 border border-yellow-400/20 ${
+                    className={`bg-gradient-to-br from-gray-800 to-gray-900 text-yellow-100 rounded-2xl shadow-2xl border border-yellow-400/20 ${
                       isDesktopDevice()
                         ? "w-96"
                         : isLaptopDevice()
@@ -1632,8 +1666,7 @@ const NavigationBar = ({
                         : "w-72 max-w-[calc(100vw-1rem)]"
                     }`}
                     style={{
-                      boxShadow:
-                        "0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(251, 191, 36, 0.1)",
+                      boxShadow: "0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(251, 191, 36, 0.1)",
                     }}
                   >
                     <div className="p-4 font-bold border-b border-yellow-400/20 flex items-center justify-between bg-gradient-to-r from-yellow-400/5 to-transparent rounded-t-2xl">
@@ -1653,7 +1686,10 @@ const NavigationBar = ({
                         )}
                       </div>
                     </div>
-                    <div className="max-h-64 overflow-y-auto">
+                    <div
+                      className="max-h-64 overflow-y-auto"
+                      onClick={() => console.log("[CONTAINER DESKTOP] Notification container clicked!")}
+                    >
                       {notifications.length === 0 ? (
                         <div className="p-6 text-center">
                           <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-yellow-400/10 to-yellow-300/5 flex items-center justify-center">
@@ -1715,7 +1751,11 @@ const NavigationBar = ({
                             <div
                               key={`notification-${n.id}-${n.created_at}`}
                               className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl ${bgColor} flex items-start gap-3 group`}
-                              onClick={() => handleNotificationClick(n)}
+                              style={{ pointerEvents: 'auto' }}
+                              onClick={() => {
+                                console.log("[CLICK DESKTOP] Notification item clicked directly!");
+                                handleNotificationClick(n);
+                              }}
                             >
                               {/* Unread/Read dot indicator */}
                               <span
@@ -1771,116 +1811,53 @@ const NavigationBar = ({
                       )}
                     </div>
                   </div>
-                </div>
+                </div>,
+                document.body
               )}
             </div>
 
-            {/* Enhanced Responsive User Profile */}
+            {/* Enhanced Responsive User Profile with Avatar */}
             <div
-              className={`flex items-center border border-yellow-400/30 rounded-xl bg-gradient-to-r from-black/60 via-black/40 to-black/60 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-yellow-400/40 transition-all duration-300 min-w-0 group ${getPadding(
-                "small"
-              )} ${getSpacing("small")} ${
-                isDesktopDevice()
-                  ? "max-w-md"
-                  : isLaptopDevice()
-                  ? "max-w-sm"
-                  : "max-w-xs"
-              }`}
+              className={`flex items-center border border-yellow-400/30 rounded-lg bg-gradient-to-r from-black/60 via-black/40 to-black/60 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-yellow-400/50 transition-all duration-300 min-w-0 group flex-shrink-0 px-3 py-2 gap-2.5`}
               style={{
-                height: isDesktopDevice()
-                  ? "60px"
-                  : isLaptopDevice()
-                  ? "54px"
-                  : "48px",
-                minHeight: isDesktopDevice()
-                  ? "60px"
-                  : isLaptopDevice()
-                  ? "54px"
-                  : "48px",
-                maxHeight: isDesktopDevice()
-                  ? "60px"
-                  : isLaptopDevice()
-                  ? "54px"
-                  : "48px",
+                maxWidth: "fit-content",
               }}
             >
+              {/* Avatar */}
               <div
-                className={`flex flex-col min-w-0 ${
-                  isTabletDevice() ? "flex-1 mr-2" : "max-w-full"
-                }`}
+                className="flex-shrink-0 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 text-black font-bold flex items-center justify-center border-2 border-yellow-300 shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all duration-300 w-9 h-9 text-sm"
               >
+                {user?.name
+                  ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                  : user?.email?.charAt(0).toUpperCase() || "U"}
+              </div>
+
+              {/* User Info */}
+              <div className="flex flex-col justify-center min-w-0 gap-0.5">
                 <span
-                  className={`font-bold bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent leading-tight font-poppins truncate drop-shadow-sm ${getTextSize(
-                    "small"
-                  )}`}
-                  style={{ lineHeight: "1.2" }}
+                  className="font-semibold bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent leading-tight truncate drop-shadow-sm group-hover:from-yellow-100 group-hover:via-yellow-200 group-hover:to-yellow-100 transition-all duration-300 text-sm"
+                  style={{
+                    lineHeight: "1.2",
+                    maxWidth: "140px"
+                  }}
                   title={user?.name || "User"}
                 >
                   {user?.name || "User"}
                 </span>
-                <span
-                  className={`text-yellow-100/80 leading-tight font-inter truncate transition-colors duration-300 group-hover:text-yellow-200 ${getTextSize(
-                    "xs"
-                  )}`}
-                  style={{ lineHeight: "1.1" }}
-                  title={role || "Role"}
-                >
-                  {role || "Role"}
-                </span>
-              </div>
-
-              {/* Enhanced Responsive Status Indicators */}
-              <div
-                className={`flex flex-col flex-shrink-0 ${getSpacing("xs")}`}
-              >
-                {/* Network Status */}
-                <span
-                  className={`rounded-full font-medium flex items-center transition-all duration-300 backdrop-blur-sm ${
-                    isTabletDevice() ? "px-2 py-1" : `px-2.5 py-1`
-                  } ${getSpacing("xs")} ${
-                    isActuallyOnline
-                      ? "bg-gradient-to-r from-green-500/20 to-green-600/20 text-green-300 border border-green-400/40 shadow-green-400/20"
-                      : "bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-300 border border-red-400/40 shadow-red-400/20"
-                  }`}
-                  style={{
-                    height: isDesktopDevice()
-                      ? "32px"
-                      : isLaptopDevice()
-                      ? "28px"
-                      : "24px",
-                    minWidth: isDesktopDevice()
-                      ? "120px"
-                      : isLaptopDevice()
-                      ? "100px"
-                      : isTabletDevice()
-                      ? "80px"
-                      : "70px",
-                    fontSize: isDesktopDevice() ? "0.875rem" : "0.75rem",
-                  }}
-                  title={isActuallyOnline ? "Online" : "Offline"}
-                >
-                  {isActuallyOnline ? (
-                    <FaWifi
-                      size={isDesktopDevice() ? 16 : isLaptopDevice() ? 14 : 12}
-                    />
-                  ) : (
-                    <MdSignalWifiOff
-                      size={isDesktopDevice() ? 16 : isLaptopDevice() ? 14 : 12}
-                    />
-                  )}
-                  {!isTabletDevice() &&
-                    (isActuallyOnline ? "Online" : "Offline")}
-                  {/* Show offline queue count when offline */}
-                  {!isActuallyOnline && offlineActionsCount > 0 && (
-                    <span
-                      className={`ml-1 px-1.5 py-0.5 bg-gradient-to-r from-orange-500/30 to-orange-600/30 text-orange-200 rounded-full border border-orange-400/30 ${getTextSize(
-                        "xs"
-                      )}`}
-                    >
-                      {offlineActionsCount}
-                    </span>
-                  )}
-                </span>
+                {/* Role Badge Only */}
+                {role && (
+                  <span
+                    className="px-2 py-0.5 bg-yellow-500/20 border border-yellow-400/30 rounded-full text-yellow-300 font-semibold uppercase tracking-wide truncate w-fit text-[9px]"
+                    style={{
+                      maxWidth: "90px"
+                    }}
+                  >
+                    {role === "Owner" ? "Owner" :
+                     role === "General Manager" ? "GM" :
+                     role === "Store Manager" ? "SM" :
+                     role === "Assistant Store Manager" ? "ASM" : role}
+                  </span>
+                )}
               </div>
             </div>
           </div>

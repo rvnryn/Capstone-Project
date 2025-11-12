@@ -5,8 +5,7 @@ import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { FaUsers, FaEdit, FaTrashAlt, FaPlus } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { routes } from "@/app/routes/routes";
-import { useUsersAPI } from "./hook/use-user";
-import type { User } from "./hook/use-user";
+import { useUserList, useDeleteUser, useChangeUserPassword, User } from "./hooks/use-userQuery";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { FiRefreshCw } from "react-icons/fi";
 import Pagination from "@/app/components/Pagination";
@@ -25,13 +24,9 @@ const columns = [
 export default function UserManagement() {
   const router = useRouter();
   const { isMenuOpen, isMobile } = useNavigation();
-  const { listUsers, deleteUser, changeUserPassword } = useUsersAPI();
 
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [sortConfig, setSortConfig] = useState<{
     key: string;
     direction: "asc" | "desc";
@@ -48,8 +43,16 @@ export default function UserManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
 
+  // React Query hooks with auto-refresh every 3 minutes
+  const { data: users = [], isLoading: loading } = useUserList();
+  const deleteMutation = useDeleteUser();
+  const changePasswordMutation = useChangeUserPassword();
+
   // Offline/online detection
   const [isOffline, setIsOffline] = useState(false);
+  const [offlineUsers, setOfflineUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+
   useEffect(() => {
     const updateOnlineStatus = () => setIsOffline(typeof window !== "undefined" && !window.navigator.onLine);
     updateOnlineStatus();
@@ -60,67 +63,33 @@ export default function UserManagement() {
       window.removeEventListener("offline", updateOnlineStatus);
     };
   }, []);
-  // Only fetch users on mount or when offline status changes
+
+  // Load cached users when offline
   useEffect(() => {
-    setLoading(true);
-    if (isOffline) {
+    if (isOffline && typeof window !== "undefined") {
       const cachedUsers = localStorage.getItem("cached_users");
       if (cachedUsers) {
         try {
-          const parsed = JSON.parse(cachedUsers);
-          setUsers(parsed);
+          setOfflineUsers(JSON.parse(cachedUsers));
         } catch (e) {
-          setUsers([]);
+          setOfflineUsers([]);
         }
-      } else {
-        setUsers([]);
       }
-      setLoading(false);
-      return;
     }
-    // Online: fetch from API only on mount or offline status change
-    (async () => {
-      const data = await listUsers();
-      if (data && Array.isArray(data) && data.length > 0) {
-        const processedUsers = data.map((user) => ({
-          ...user,
-          last_login: user.last_login ?? "",
-        }));
-        setUsers(processedUsers);
-        localStorage.setItem("cached_users", JSON.stringify(processedUsers));
-      } else {
-        setUsers([]);
-      }
-      setLoading(false);
-    })();
   }, [isOffline]);
 
-  // Refresh handler for the refresh button
-  const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      const data = await listUsers();
-      if (data && Array.isArray(data)) {
-        setUsers(
-          data.map((user) => ({
-            ...user,
-            last_login: user.last_login ?? "",
-          }))
-        );
-        // Cache users
-        localStorage.setItem("cached_users", JSON.stringify(data));
-      } else {
-        setUsers([]);
-      }
-    } catch (error) {
-      setUsers([]);
-    } finally {
-      setLoading(false);
-    }
+  // Display users: use online data if available, otherwise use cached
+  const displayUsers = isOffline ? offlineUsers : users;
+
+  // Refresh handler - just reload the page (React Query will refetch automatically)
+  const handleRefresh = () => {
+    window.location.reload();
   };
 
+  // Filter and sort users based on search and display data
   useEffect(() => {
-    const sortedUsers = [...users];
+    const sourceUsers = displayUsers;
+    const sortedUsers = [...sourceUsers];
     if (sortConfig.key !== "actions") {
       sortedUsers.sort((a, b) => {
         const aValue = (a as any)[sortConfig.key];
@@ -130,8 +99,17 @@ export default function UserManagement() {
         return 0;
       });
     }
-    setFilteredUsers(sortedUsers);
-  }, [users, sortConfig]);
+    const filtered = sortedUsers.filter(
+      (user) =>
+        !searchTerm ||
+        Object.values(user)
+          .filter((val) => val != null && typeof val === "string")
+          .join(" ")
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase())
+    );
+    setFilteredUsers(filtered);
+  }, [displayUsers, sortConfig, searchTerm]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
@@ -147,15 +125,15 @@ export default function UserManagement() {
 
   const confirmDelete = async () => {
     if (itemToDelete !== null) {
-      try {
-        await deleteUser(itemToDelete);
-        setUsers(users.filter((user) => user.user_id !== itemToDelete));
-      } catch (error) {
-        console.error("Error deleting user:", error);
-      } finally {
-        setShowDeleteModal(false);
-        setItemToDelete(null);
-      }
+      deleteMutation.mutate(itemToDelete, {
+        onSuccess: () => {
+          setShowDeleteModal(false);
+          setItemToDelete(null);
+        },
+        onError: (error) => {
+          console.error("Error deleting user:", error);
+        },
+      });
     }
   };
 

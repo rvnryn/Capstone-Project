@@ -282,7 +282,7 @@ async def get_session(request: Request, db=Depends(get_db)):
     # Build response: merge Supabase and DB info
     return {
         'user': {
-            'id': user.id,
+            'id': db_user["user_id"],  # Use user_id as id (numeric)
             'user_id': db_user["user_id"],
             'username': db_user["username"],
             'name': db_user["name"],

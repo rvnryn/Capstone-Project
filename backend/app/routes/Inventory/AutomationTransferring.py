@@ -24,6 +24,8 @@ from app.routes.Inventory.master_inventory import (
     logger,
 )
 
+from app.routes.General.notification import create_transfer_notification
+
 class TransferRequest(BaseModel):
     quantity: float
 
@@ -50,16 +52,6 @@ def log_user_activity(db, user, action_type, description):
 
 
 async def fifo_transfer_to_today_with_surplus_first(item_name: str, quantity_needed: float):
-    """
-    Transfer items to today's inventory using FIFO with surplus-first priority.
-
-    Priority:
-    1. Surplus inventory (oldest batch first)
-    2. Master inventory (oldest batch first)
-
-    Returns:
-        dict with transfer details and any errors
-    """
     now = datetime.utcnow().isoformat()
     remaining_quantity = quantity_needed
     transfers = []
@@ -444,6 +436,16 @@ async def auto_transfer_master_to_today_top_selling() -> None:
         # Mark as completed for today
         last_master_to_today_run = today
         logger.info(f"Auto transfer for top selling items completed at {now}. Total transfers: {total_transfers}")
+
+        # Create notification for auto transfer
+        if total_transfers > 0:
+            try:
+                create_transfer_notification(
+                    transfer_type="master",
+                    item_count=total_transfers
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create transfer notification: {e}")
     except Exception as e:
         logger.exception("Error in scheduled auto transfer for top selling items")
 
@@ -474,6 +476,7 @@ async def auto_transfer_surplus_to_today() -> None:
 
         items_response = await _fetch_all()
         items = items_response.data or []
+        transfer_count = 0
         for item in items:
             transfer_quantity = item.get("stock_quantity", 0)
             if transfer_quantity <= 0:
@@ -564,6 +567,7 @@ async def auto_transfer_surplus_to_today() -> None:
                     action_type="auto transfer surplus to today",
                     description=description,
                 )
+                transfer_count += 1
             except Exception as e:
                 logger.warning(f"Failed to record auto transfer activity: {e}")
             finally:
@@ -572,6 +576,16 @@ async def auto_transfer_surplus_to_today() -> None:
         # Mark as completed for today
         last_surplus_to_today_run = today
         logger.info(f"Auto transfer from inventory_surplus to today completed at {now}")
+
+        # Create notification for auto transfer
+        if transfer_count > 0:
+            try:
+                create_transfer_notification(
+                    transfer_type="today",
+                    item_count=transfer_count
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create transfer notification: {e}")
     except Exception as e:
         logger.exception("Error in scheduled auto transfer from surplus to today")
 
@@ -602,6 +616,7 @@ async def auto_transfer_today_to_surplus() -> None:
 
         items_response = await _fetch_all()
         items = items_response.data or []
+        transfer_count = 0
         for item in items:
             transfer_quantity = item.get("stock_quantity", 0)
             if transfer_quantity <= 0:
@@ -692,6 +707,7 @@ async def auto_transfer_today_to_surplus() -> None:
                     action_type="auto transfer today to surplus",
                     description=description,
                 )
+                transfer_count += 1
             except Exception as e:
                 logger.warning(f"Failed to record auto transfer activity: {e}")
             finally:
@@ -700,6 +716,16 @@ async def auto_transfer_today_to_surplus() -> None:
         # Mark as completed for today
         last_today_to_surplus_run = today
         logger.info(f"Auto transfer from inventory_today to surplus completed at {now}")
+
+        # Create notification for auto transfer
+        if transfer_count > 0:
+            try:
+                create_transfer_notification(
+                    transfer_type="surplus",
+                    item_count=transfer_count
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create transfer notification: {e}")
     except Exception as e:
         logger.exception("Error in scheduled auto transfer from today to surplus")
 

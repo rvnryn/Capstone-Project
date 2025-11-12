@@ -7,7 +7,7 @@ import Image from "next/image";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
-import { useInventoryAPI } from "@/app/Features/Inventory/hook/use-inventoryAPI";
+import { useAddInventory } from "@/app/Features/Inventory/hook/use-inventoryQuery";
 import {
   MdInventory,
   MdSave,
@@ -45,7 +45,7 @@ const CATEGORY_OPTIONS = [
 export default function AddInventoryItem() {
   const router = useRouter();
   const { isMenuOpen, isMobile } = useNavigation();
-  const { addItem } = useInventoryAPI();
+  const addMutation = useAddInventory(); // Use React Query mutation!
   const { fetchSettings } = useInventorySettingsAPI();
 
   const [formData, setFormData] = useState({
@@ -88,6 +88,12 @@ export default function AddInventoryItem() {
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const [hasExpiration, setHasExpiration] = useState(false);
 
+  // Autocomplete state
+  const [itemSuggestions, setItemSuggestions] = useState<{item_name: string, category: string, measurement: string}[]>([]);
+  const [filteredSuggestions, setFilteredSuggestions] = useState<{item_name: string, category: string, measurement: string}[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirty) {
@@ -108,6 +114,25 @@ export default function AddInventoryItem() {
         setSettings([]);
       });
   }, [fetchSettings]);
+
+  // Fetch item names for autocomplete suggestions
+  useEffect(() => {
+    const fetchItemNames = async () => {
+      try {
+        const response = await fetch("http://localhost:8000/api/inventory/all-item-names");
+        if (response.ok) {
+          const data = await response.json();
+          console.log("[Autocomplete] Fetched item names:", data.items?.length || 0);
+          setItemSuggestions(data.items || []);
+        } else {
+          console.error("[Autocomplete] Failed to fetch item names:", response.status);
+        }
+      } catch (error) {
+        console.error("[Autocomplete] Error fetching item names:", error);
+      }
+    };
+    fetchItemNames();
+  }, []);
 
   // Validation logic
   const validate = useCallback(
@@ -180,6 +205,20 @@ export default function AddInventoryItem() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value, type } = e.target;
       setIsDirty(true);
+
+      // Filter suggestions when user types in item name field
+      if (name === "name" && value.trim()) {
+        const filtered = itemSuggestions.filter((item) =>
+          item.item_name.toLowerCase().includes(value.toLowerCase())
+        );
+        setFilteredSuggestions(filtered);
+        setShowSuggestions(filtered.length > 0);
+        setSelectedSuggestionIndex(-1);
+      } else if (name === "name" && !value.trim()) {
+        setShowSuggestions(false);
+        setFilteredSuggestions([]);
+      }
+
       setFormData((prev) => ({
         ...prev,
         [name]:
@@ -187,18 +226,69 @@ export default function AddInventoryItem() {
             ? value === ""
               ? 0
               : Number(value)
-            : capitalizeWords(value),
+            : name === "name" ? value : capitalizeWords(value), // Don't capitalize while typing name (for autocomplete)
       }));
     },
-    []
+    [itemSuggestions]
   );
 
   const handleFocus = (fieldName: string) => {
     setFocusedField(fieldName);
+    // Show suggestions again when focusing on name field if there's text
+    if (fieldName === "name" && formData.name.trim() && itemSuggestions.length > 0) {
+      const filtered = itemSuggestions.filter((item) =>
+        item.item_name.toLowerCase().includes(formData.name.toLowerCase())
+      );
+      setFilteredSuggestions(filtered);
+      setShowSuggestions(filtered.length > 0);
+    }
   };
 
   const handleBlur = () => {
     setFocusedField("");
+    // Delay hiding suggestions to allow click events to register
+    setTimeout(() => setShowSuggestions(false), 200);
+  };
+
+  // Handle suggestion selection
+  const handleSuggestionSelect = (suggestion: {item_name: string, category: string, measurement: string}) => {
+    console.log("[Autocomplete] Selected suggestion:", suggestion);
+    setFormData((prev) => ({
+      ...prev,
+      name: capitalizeWords(suggestion.item_name),
+      category: suggestion.category || prev.category, // Auto-fill category if available
+    }));
+    setShowSuggestions(false);
+    setFilteredSuggestions([]);
+    setSelectedSuggestionIndex(-1);
+  };
+
+  // Handle keyboard navigation for suggestions
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showSuggestions || filteredSuggestions.length === 0) return;
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setSelectedSuggestionIndex((prev) =>
+          prev < filteredSuggestions.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        setSelectedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : -1));
+        break;
+      case "Enter":
+        e.preventDefault();
+        if (selectedSuggestionIndex >= 0) {
+          handleSuggestionSelect(filteredSuggestions[selectedSuggestionIndex]);
+        }
+        break;
+      case "Escape":
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+        break;
+    }
   };
 
   // Helper function to capitalize first letter
@@ -210,7 +300,6 @@ export default function AddInventoryItem() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitted(true);
-    setIsSubmitting(true);
 
     const validationErrors = validate(formData) ?? {
       name: "",
@@ -226,77 +315,77 @@ export default function AddInventoryItem() {
       validationErrors.stock ||
       validationErrors.expiration_date
     ) {
-      setIsSubmitting(false);
       return;
     }
 
-    try {
-      // Get threshold for this specific item from settings
-      const itemName = formData.name.trim().toLowerCase();
-      const setting = settings.find(
-        (s) => (s.name || "").toString().trim().toLowerCase() === itemName
-      );
+    // Get threshold for this specific item from settings
+    const itemName = formData.name.trim().toLowerCase();
+    const setting = settings.find(
+      (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+    );
 
-      // Use item-specific threshold or fallback to default
-      const threshold = Number(setting?.low_stock_threshold);
-      const fallbackThreshold = 100; // Default fallback
-      const useThreshold =
-        !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
+    // Use item-specific threshold or fallback to default
+    const threshold = Number(setting?.low_stock_threshold);
+    const fallbackThreshold = 100; // Default fallback
+    const useThreshold =
+      !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
 
-      let stockStatus: "Normal" | "Critical" | "Low" | "Out Of Stock" =
-        "Normal";
+    let stockStatus: "Normal" | "Critical" | "Low" | "Out Of Stock" =
+      "Normal";
 
-      // Determine stock status based on comprehensive business logic
-      if (formData.stock === 0) {
-        stockStatus = "Out Of Stock";
-      } else if (formData.stock <= useThreshold * 0.5) {
-        // Critical: when stock is 50% or less of the threshold
-        stockStatus = "Critical";
-      } else if (formData.stock <= useThreshold) {
-        // Low: when stock is at or below threshold but above critical
-        stockStatus = "Low";
-      } else {
-        // Normal: when stock is above threshold
-        stockStatus = "Normal";
-      }
-
-      const today = new Date();
-      const batchDate = today.toISOString().split("T")[0];
-
-      await addItem({
-        item_name: capitalizeFirstLetter(formData.name.trim()),
-        category: formData.category,
-        stock_quantity: formData.stock,
-        stock_status: stockStatus,
-        unit_cost: Number(formData.unit_cost) || 0,
-        batch_date: batchDate,
-        expiration_date:
-          hasExpiration && formData.expiration_date
-            ? formData.expiration_date
-            : null,
-      });
-
-      setShowSuccessMessage(true);
-      setFormData({
-        name: "",
-        category: "",
-        stock: 0,
-        unit_cost: "",
-        expiration_date: "",
-      });
-      setIsDirty(false);
-      setIsSubmitted(false);
-
-      // Show success message for 2 seconds then redirect
-      setTimeout(() => {
-        setShowSuccessMessage(false);
-        router.push(routes.master_inventory);
-      }, 2000);
-    } catch (error) {
-      console.error("Error adding inventory item:", error);
-      alert("Failed to add inventory item. Please try again.");
-      setIsSubmitting(false);
+    // Determine stock status based on comprehensive business logic
+    if (formData.stock === 0) {
+      stockStatus = "Out Of Stock";
+    } else if (formData.stock <= useThreshold * 0.5) {
+      // Critical: when stock is 50% or less of the threshold
+      stockStatus = "Critical";
+    } else if (formData.stock <= useThreshold) {
+      // Low: when stock is at or below threshold but above critical
+      stockStatus = "Low";
+    } else {
+      // Normal: when stock is above threshold
+      stockStatus = "Normal";
     }
+
+    const today = new Date();
+    const batchDate = today.toISOString().split("T")[0];
+
+    // Use React Query mutation - auto-refreshes inventory list!
+    addMutation.mutate({
+      item_name: capitalizeFirstLetter(formData.name.trim()),
+      category: formData.category,
+      stock_quantity: formData.stock,
+      stock_status: stockStatus,
+      unit_cost: Number(formData.unit_cost) || 0,
+      batch_date: batchDate,
+      expiration_date:
+        hasExpiration && formData.expiration_date
+          ? formData.expiration_date
+          : null,
+    }, {
+      onSuccess: () => {
+        setShowSuccessMessage(true);
+        setFormData({
+          name: "",
+          category: "",
+          stock: 0,
+          unit_cost: "",
+          expiration_date: "",
+        });
+        setIsDirty(false);
+        setIsSubmitted(false);
+
+        // Show success message for 2 seconds then redirect
+        setTimeout(() => {
+          setShowSuccessMessage(false);
+          router.push(routes.master_inventory);
+        }, 2000);
+      },
+      onError: (error: any) => {
+        console.error("Error adding inventory item:", error);
+        alert("Failed to add inventory item. Please try again.");
+      }
+    });
   };
 
   const handleCancel = () => {
@@ -409,8 +498,8 @@ export default function AddInventoryItem() {
                     !isOnline ? { opacity: 0.6, pointerEvents: "none" } : {}
                   }
                 >
-                  {/* Item Name Field */}
-                  <div>
+                  {/* Item Name Field with Autocomplete */}
+                  <div className="relative">
                     <label
                       htmlFor="name"
                       className="block font-semibold text-gray-200 mb-1"
@@ -425,6 +514,7 @@ export default function AddInventoryItem() {
                       onChange={handleChange}
                       onFocus={() => handleFocus("name")}
                       onBlur={handleBlur}
+                      onKeyDown={handleKeyDown}
                       className={`w-full px-4 py-3 rounded-lg border-2 ${
                         errors.name
                           ? "border-red-500"
@@ -432,12 +522,40 @@ export default function AddInventoryItem() {
                           ? "border-yellow-400"
                           : "border-gray-700"
                       } bg-gray-900 text-white placeholder-gray-500 focus:outline-none transition-all duration-300`}
-                      placeholder="Enter item name"
+                      placeholder="Enter item name (start typing for suggestions)"
                       autoComplete="off"
                       required
                       aria-invalid={!!errors.name}
                       aria-describedby={errors.name ? "name-error" : undefined}
                     />
+
+                    {/* Autocomplete Dropdown */}
+                    {showSuggestions && filteredSuggestions.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-gray-800 border-2 border-yellow-400 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredSuggestions.map((suggestion, index) => (
+                          <div
+                            key={`${suggestion.item_name}-${index}`}
+                            onClick={() => handleSuggestionSelect(suggestion)}
+                            className={`px-4 py-3 cursor-pointer transition-colors ${
+                              index === selectedSuggestionIndex
+                                ? "bg-yellow-400 text-gray-900"
+                                : "hover:bg-gray-700 text-white"
+                            } ${index !== filteredSuggestions.length - 1 ? "border-b border-gray-700" : ""}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="font-semibold">{suggestion.item_name}</div>
+                                <div className="text-xs text-gray-400 mt-1">
+                                  Category: {suggestion.category || "Not set"} {suggestion.measurement ? `• ${suggestion.measurement}` : ""}
+                                </div>
+                              </div>
+                              <FiArrowRight className={index === selectedSuggestionIndex ? "text-gray-900" : "text-gray-400"} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {errors.name && (
                       <span
                         id="name-error"
@@ -624,10 +742,10 @@ export default function AddInventoryItem() {
                 <div className="flex flex-col xs:flex-row justify-end gap-2 xs:gap-3 sm:gap-4 md:gap-4 pt-4 xs:pt-5 sm:pt-6 md:pt-8 border-t border-gray-700/50">
                   <button
                     type="submit"
-                    disabled={isSubmitting || !isOnline}
+                    disabled={addMutation.isPending || !isOnline}
                     className="group flex items-center justify-center gap-2 xs:gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black px-4 xs:px-5 sm:px-6 md:px-8 py-3 xs:py-4 sm:py-4 rounded-lg xs:rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm xs:text-base sm:text-base w-full sm:w-auto shadow-lg hover:shadow-yellow-400/25"
                   >
-                    {isSubmitting ? (
+                    {addMutation.isPending ? (
                       <>
                         <div className="w-3 xs:w-4 h-3 xs:h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
                         Adding...

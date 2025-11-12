@@ -12,7 +12,7 @@ import { routes } from "@/app/routes/routes";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
-import { useInventoryAPI } from "@/app/Features/Inventory/hook/use-inventoryAPI";
+import { useInventoryItem } from "@/app/Features/Inventory/hook/use-inventoryQuery";
 import {
   FiEye,
   FiCalendar,
@@ -30,57 +30,63 @@ export default function ViewInventoryItem() {
   const { role } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { getItem } = useInventoryAPI();
-  const [item, setItem] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const itemId = searchParams.get("id");
+
+  // Use React Query hook for auto-refresh!
+  const { data: rawData, isLoading, error } = useInventoryItem(itemId);
+
   const [showEditModal, setShowEditModal] = useState(false);
   const { fetchSettings } = useInventorySettingsAPI();
   const [settings, setSettings] = useState<InventorySetting[]>([]);
   const [unit, setUnit] = useState<string>("");
 
-  const itemId = searchParams.get("id");
-
+  // Fetch settings
   useEffect(() => {
-    const fetchAll = async () => {
-      if (!itemId) {
-        router.push(routes.master_inventory);
-        return;
-      }
-      try {
-        const [data, settingsData] = await Promise.all([
-          getItem(itemId),
-          fetchSettings(),
-        ]);
-        const formatted = {
-          id: data.item_id,
-          name: data.item_name,
-          batch: data.batch_date,
-          category: data.category,
-          status: data.stock_status,
-          unit_price:
-            data.unit_price !== undefined ? Number(data.unit_price) : null,
-          stock: data.stock_quantity,
-          added: data.created_at,
-          updated: data.updated_at,
-          expiration_date: data.expiration_date || null,
-        };
-        setItem(formatted);
-        setSettings(settingsData);
-        // Find unit from settings
-        const itemName = (data.item_name || "").toString().trim().toLowerCase();
-        const setting = settingsData.find(
-          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
-        );
-        setUnit(setting?.default_unit || "");
-      } catch (error) {
-        console.error("Error fetching item or settings:", error);
-        router.push(routes.master_inventory);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchAll();
-  }, [itemId, router, getItem, fetchSettings]);
+    fetchSettings()
+      .then(setSettings)
+      .catch((err) => console.error("Error fetching settings:", err));
+  }, [fetchSettings]);
+
+  // Format item data when it loads
+  const item = rawData ? {
+    id: rawData.item_id,
+    name: rawData.item_name,
+    batch: rawData.batch_date,
+    category: rawData.category,
+    status: rawData.stock_status,
+    unit_price:
+      rawData.unit_price !== undefined ? Number(rawData.unit_price) : null,
+    stock: rawData.stock_quantity,
+    added: rawData.created_at,
+    updated: rawData.updated_at,
+    expiration_date: rawData.expiration_date || null,
+  } : null;
+
+  // Find unit from settings
+  useEffect(() => {
+    if (rawData && settings.length > 0) {
+      const itemName = (rawData.item_name || "").toString().trim().toLowerCase();
+      const setting = settings.find(
+        (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+      );
+      setUnit(setting?.default_unit || "");
+    }
+  }, [rawData, settings]);
+
+  // Redirect if no itemId
+  useEffect(() => {
+    if (!itemId) {
+      router.push(routes.master_inventory);
+    }
+  }, [itemId, router]);
+
+  // Redirect if error (item not found)
+  useEffect(() => {
+    if (error) {
+      console.error("Error fetching item:", error);
+      router.push(routes.master_inventory);
+    }
+  }, [error, router]);
 
   const formatDateOnly = (input: string | null): string => {
     if (!input) return "-";

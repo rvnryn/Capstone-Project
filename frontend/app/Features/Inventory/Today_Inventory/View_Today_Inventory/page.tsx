@@ -7,7 +7,7 @@ import { routes } from "@/app/routes/routes";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
-import { useInventoryAPI } from "@/app/Features/Inventory/hook/use-inventoryAPI";
+import { useTodayInventoryItem } from "@/app/Features/Inventory/hook/use-inventoryQuery";
 import {
   useInventorySettingsAPI,
   InventorySetting,
@@ -30,42 +30,45 @@ export default function ViewTodayInventoryItem() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isMenuOpen, isMobile } = useNavigation();
-  const { getTodayItem } = useInventoryAPI();
-  const [item, setItem] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showEditModal, setShowEditModal] = useState(false);
   const itemId = searchParams.get("id");
+  const batchDate = searchParams.get("batch_date");
+
+  // Use React Query hook for auto-refresh!
+  const {
+    data: rawData,
+    isLoading,
+    error,
+  } = useTodayInventoryItem(itemId, batchDate);
+
+  const [showEditModal, setShowEditModal] = useState(false);
   const { fetchSettings } = useInventorySettingsAPI();
   const [settings, setSettings] = useState<InventorySetting[]>([]);
   const [unit, setUnit] = useState<string>("");
 
+  // Fetch settings
   useEffect(() => {
-    const fetchAll = async () => {
-      if (!itemId) {
-        router.push(routes.todays_inventory);
-        return;
-      }
-      try {
-        // Get batch_date from searchParams if available
-        const batch_date = searchParams.get("batch_date") || "";
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        const [data, settingsData] = await Promise.all([
-          getTodayItem(itemId, batch_date),
-          fetchSettings(),
-        ]);
-        // Find unit and threshold from settings
-        const itemName = (data.item_name || "").toString().trim().toLowerCase();
-        const setting = settingsData.find(
+    fetchSettings()
+      .then(setSettings)
+      .catch((err) => console.error("Error fetching settings:", err));
+  }, [fetchSettings]);
+
+  // Format item data when it loads
+  const item = rawData
+    ? (() => {
+        const itemName = (rawData.item_name || "")
+          .toString()
+          .trim()
+          .toLowerCase();
+        const setting = settings.find(
           (s) => (s.name || "").toString().trim().toLowerCase() === itemName
         );
-        setUnit(setting?.default_unit || "");
+
         // Recompute status using latest settings
         const threshold = Number(setting?.low_stock_threshold);
         const fallbackThreshold = 100;
         const useThreshold =
           !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
-        const stockQty = Number(data.stock_quantity);
+        const stockQty = Number(rawData.stock_quantity);
         let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
         if (stockQty === 0) {
           status = "Out Of Stock";
@@ -76,30 +79,53 @@ export default function ViewTodayInventoryItem() {
         } else {
           status = "Normal";
         }
-        const formatted = {
-          id: data.item_id,
-          name: data.item_name,
-          batch: data.batch_date,
-          category: data.category,
+
+        return {
+          id: rawData.item_id,
+          name: rawData.item_name,
+          batch: rawData.batch_date,
+          category: rawData.category,
           status,
-          stock: data.stock_quantity,
-          added: data.created_at,
-          updated: data.updated_at,
-          expiration_date: data.expiration_date || null,
+          stock: rawData.stock_quantity,
+          added: rawData.created_at,
+          updated: rawData.updated_at,
+          expiration_date: rawData.expiration_date || null,
           unit_price:
-            data.unit_price !== undefined ? Number(data.unit_price) : null,
+            rawData.unit_price !== undefined
+              ? Number(rawData.unit_price)
+              : null,
         };
-        setItem(formatted);
-        setSettings(settingsData);
-      } catch (error) {
-        console.error("Error fetching item or settings:", error);
-        router.push(routes.todays_inventory);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchAll();
-  }, [itemId, router, getTodayItem, fetchSettings]);
+      })()
+    : null;
+
+  // Find unit from settings
+  useEffect(() => {
+    if (rawData && settings.length > 0) {
+      const itemName = (rawData.item_name || "")
+        .toString()
+        .trim()
+        .toLowerCase();
+      const setting = settings.find(
+        (s) => (s.name || "").toString().trim().toLowerCase() === itemName
+      );
+      setUnit(setting?.default_unit || "");
+    }
+  }, [rawData, settings]);
+
+  // Redirect if no itemId
+  useEffect(() => {
+    if (!itemId) {
+      router.push(routes.todays_inventory);
+    }
+  }, [itemId, router]);
+
+  // Redirect if error (item not found)
+  useEffect(() => {
+    if (error) {
+      console.error("Error fetching item:", error);
+      router.push(routes.todays_inventory);
+    }
+  }, [error, router]);
 
   const formatDateOnly = (input: string | null): string => {
     if (!input) return "-";

@@ -282,9 +282,7 @@ const HolidayCalendar: React.FC<Props> = ({
                     </div>
                   )}
                   <div className="text-blue-300">
-                    {isPH
-                      ? "PH Holiday (colorblind safe palette, 🇵🇭 icon, solid border, blue/orange)"
-                      : "Custom Event (colorblind safe palette, ✨ icon, dashed border, purple/teal)"}
+                    {isPH ? "PH Holiday" : "Custom Event"}
                   </div>
                   <div className="text-slate-400 mt-1">
                     {arg.event.start?.toLocaleDateString()}

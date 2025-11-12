@@ -240,7 +240,7 @@ const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
               </div>
               <div>
                 <h3 className="text-yellow-100 font-bold text-lg">Install Cardiac Delights</h3>
-                <p className="text-yellow-200 text-sm">Get the full experience, even offline!</p>
+                <p className="text-yellow-200 text-sm">Get the full experience!</p>
               </div>
             </div>
             <button
@@ -260,13 +260,13 @@ const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
           <div className="mb-4">
             <p className="text-yellow-200 text-sm mb-2 font-semibold">Why install Cardiac Delights?</p>
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center gap-2 text-green-500 font-bold">
-                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                <span className="drop-shadow">Works offline</span>
-              </div>
               <div className="flex items-center gap-2 text-blue-400 font-bold">
                 <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></span>
                 <span className="drop-shadow">Faster loading</span>
+              </div>
+              <div className="flex items-center gap-2 text-green-500 font-bold">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                <span className="drop-shadow">Native app feel</span>
               </div>
               <div className="flex items-center gap-2 text-purple-400 font-bold">
                 <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span>
@@ -393,11 +393,11 @@ const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                   </div>
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 bg-purple-500/20 rounded-full flex items-center justify-center mt-0.5">
-                      <span className="text-purple-400 text-sm" aria-hidden="true">📡</span>
+                      <span className="text-purple-400 text-sm" aria-hidden="true">🚀</span>
                     </div>
                     <div>
-                      <p className="text-white font-medium">Works Offline</p>
-                      <p className="text-gray-400 text-sm">Continue working even without internet - changes sync automatically</p>
+                      <p className="text-white font-medium">Quick Access</p>
+                      <p className="text-gray-400 text-sm">Launch directly from your home screen or desktop with one tap</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">

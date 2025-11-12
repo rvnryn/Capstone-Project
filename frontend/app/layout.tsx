@@ -21,14 +21,11 @@ export const metadata: Metadata = {
     template: "%s | Cardiac Delights",
   },
   description:
-    "A modern, responsive dashboard and management PWA for Cardiac Delights with offline capabilities, inventory management, menu planning, and comprehensive reporting.",
+    "A modern, responsive dashboard and management application for Cardiac Delights with inventory management, menu planning, and comprehensive reporting.",
   keywords: [
-    "PWA",
     "dashboard",
     "management",
     "cardiac delights",
-    "offline",
-    "mobile app",
     "restaurant",
     "inventory",
     "menu",
