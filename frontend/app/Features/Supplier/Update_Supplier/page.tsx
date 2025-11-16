@@ -15,6 +15,11 @@ import {
   FiCheck,
   FiSave,
   FiX,
+  FiUser,
+  FiPhone,
+  FiMail,
+  FiMapPin,
+  FiPackage,
 } from "react-icons/fi";
 
 export default function EditSupplier() {
@@ -582,22 +587,84 @@ export default function EditSupplier() {
           >
             <form
               method="dialog"
-              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-gray-700/50 text-center space-y-4 sm:space-y-6 max-w-sm sm:max-w-md w-full"
+              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-gray-700/50 space-y-4 sm:space-y-6 max-w-sm sm:max-w-lg w-full"
               onSubmit={(e) => e.preventDefault()}
             >
-              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 rounded-full flex items-center justify-center">
-                <FiSave className="w-8 h-8 text-yellow-400" />
+              <div className="flex flex-col items-center">
+                <div className="w-14 h-14 mb-4 bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 rounded-full flex items-center justify-center">
+                  <FiSave className="w-8 h-8 text-yellow-400" />
+                </div>
+                <h3
+                  id="save-dialog-title"
+                  className="text-xl sm:text-2xl font-bold text-white mb-2"
+                >
+                  Confirm Update
+                </h3>
+                <p className="text-gray-400 text-xs sm:text-sm mb-4">
+                  Review the changes before saving
+                </p>
               </div>
-              <h3
-                id="save-dialog-title"
-                className="text-xl sm:text-2xl font-bold text-white mb-2"
-              >
-                Save Changes
-              </h3>
-              <p className="text-gray-300 text-sm sm:text-base mb-6 leading-relaxed">
-                Are you sure you want to save these changes to the inventory
-                item?
-              </p>
+
+              {/* Supplier Being Updated */}
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                <div className="flex items-center gap-2 mb-3">
+                  <MdEdit className="text-yellow-400" />
+                  <span className="text-sm font-semibold text-gray-300">Supplier:</span>
+                  <span className="text-sm font-bold text-white">{formData.supplier_name}</span>
+                </div>
+
+                {/* Changes Summary */}
+                <div className="space-y-2">
+                  {initialSettings && (
+                    <>
+                      {formData.contact_person !== initialSettings.contact_person && (
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <FiUser className="text-blue-400 flex-shrink-0" />
+                          <span className="text-gray-400">Contact:</span>
+                          <span className="text-red-400 line-through">{initialSettings.contact_person || "None"}</span>
+                          <FiArrowRight className="text-gray-500" />
+                          <span className="text-green-400">{formData.contact_person || "None"}</span>
+                        </div>
+                      )}
+                      {formData.supplies !== initialSettings.supplies && (
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <FiPackage className="text-purple-400 flex-shrink-0" />
+                          <span className="text-gray-400">Supplies:</span>
+                          <span className="text-red-400 line-through">{initialSettings.supplies || "None"}</span>
+                          <FiArrowRight className="text-gray-500" />
+                          <span className="text-green-400">{formData.supplies || "None"}</span>
+                        </div>
+                      )}
+                      {formData.phone_number !== initialSettings.phone_number && (
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <FiPhone className="text-green-400 flex-shrink-0" />
+                          <span className="text-gray-400">Phone:</span>
+                          <span className="text-red-400 line-through">{initialSettings.phone_number || "None"}</span>
+                          <FiArrowRight className="text-gray-500" />
+                          <span className="text-green-400">{formData.phone_number || "None"}</span>
+                        </div>
+                      )}
+                      {formData.email !== initialSettings.email && (
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <FiMail className="text-yellow-400 flex-shrink-0" />
+                          <span className="text-gray-400">Email:</span>
+                          <span className="text-red-400 line-through">{initialSettings.email || "None"}</span>
+                          <FiArrowRight className="text-gray-500" />
+                          <span className="text-green-400">{formData.email || "None"}</span>
+                        </div>
+                      )}
+                      {formData.address !== initialSettings.address && (
+                        <div className="flex items-start gap-2 text-xs sm:text-sm">
+                          <FiMapPin className="text-red-400 flex-shrink-0 mt-1" />
+                          <span className="text-gray-400">Address:</span>
+                          <span className="text-green-400 flex-1">Updated</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"

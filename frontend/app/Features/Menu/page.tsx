@@ -54,7 +54,7 @@ const formatTimestamp = (timestamp: string | undefined): string => {
 
   try {
     const date = new Date(timestamp);
-    return date.toLocaleDateString("en-PH", {
+    return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -98,6 +98,7 @@ const Menu: React.FC = () => {
   const queryClient = useQueryClient();
 
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -152,6 +153,7 @@ const Menu: React.FC = () => {
   const handleClear = () => {
     setSearchQuery("");
     setSelectedCategory("");
+    setSelectedStatus("");
     setSortConfig({ key: "", direction: "asc" });
   };
 
@@ -159,6 +161,7 @@ const Menu: React.FC = () => {
     return menuData.filter(
       (item: MenuItemType) =>
         (!selectedCategory || item.category === selectedCategory) &&
+        (!selectedStatus || item.stock_status === selectedStatus) &&
         (!searchQuery ||
           [
             item.dish_name,
@@ -171,7 +174,7 @@ const Menu: React.FC = () => {
             .toLowerCase()
             .includes(searchQuery.toLowerCase()))
     );
-  }, [menuData, selectedCategory, searchQuery]);
+  }, [menuData, selectedCategory, selectedStatus, searchQuery]);
 
   const summaryStats = useMemo(() => {
     const total = menuData.length;
@@ -256,7 +259,7 @@ const Menu: React.FC = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategory, sortConfig]);
+  }, [searchQuery, selectedCategory, selectedStatus, sortConfig]);
 
   const requestSort = (key: string) => {
     setSortConfig((prev) => ({
@@ -447,7 +450,22 @@ const Menu: React.FC = () => {
                     <option>Drinks</option>
                     <option>Extras</option>
                   </select>
-                  {(searchQuery || selectedCategory || sortConfig.key) && (
+                  <label className="sr-only" htmlFor="status-select">
+                    Filter by stock status
+                  </label>
+                  <select
+                    id="status-select"
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                    className="w-full sm:w-auto bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
+                  >
+                    <option value="">All Status</option>
+                    <option value="Available">Available</option>
+                    <option value="Low">Low Stock</option>
+                    <option value="Critical">Critical</option>
+                    <option value="Out of Stock">Out of Stock</option>
+                  </select>
+                  {(searchQuery || selectedCategory || selectedStatus || sortConfig.key) && (
                     <button
                       type="button"
                       onClick={handleClear}

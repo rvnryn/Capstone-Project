@@ -535,7 +535,8 @@ export default function InventorySettings() {
                         <input
                           type="number"
                           id="threshold"
-                          min="0"
+                          min={1}
+                          max={999}
                           step="0.1"
                           placeholder="Alert threshold"
                           value={
@@ -1033,6 +1034,7 @@ export default function InventorySettings() {
                               <input
                                 type="number"
                                 min={1}
+                                max={999}
                                 aria-label={`Threshold for ${ing.name}`}
                                 value={
                                   ing.low_stock_threshold === 0

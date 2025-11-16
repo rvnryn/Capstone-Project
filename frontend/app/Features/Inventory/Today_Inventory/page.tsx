@@ -153,6 +153,7 @@ export default function TodayInventoryPage() {
 
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedBatchDate, setSelectedBatchDate] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [showFilters, setShowFilters] = useState(false);
@@ -337,7 +338,7 @@ export default function TodayInventoryPage() {
     if (!date) return "N/A";
     try {
       const dateObj = typeof date === "string" ? new Date(date) : date;
-      return dateObj.toLocaleDateString();
+      return dateObj.toLocaleDateString("en-US");
     } catch {
       return "Invalid Date";
     }
@@ -361,13 +362,15 @@ export default function TodayInventoryPage() {
         !selectedCategory || item.category === selectedCategory;
       const matchesBatch =
         !selectedBatchDate || formatDateOnly(item.batch) === selectedBatchDate;
+      const matchesStatus =
+        !selectedStatus || item.status === selectedStatus;
       const matchesSearch =
         !searchQuery ||
         item.name.toLowerCase().includes(searchQuery.toLowerCase());
 
-      return matchesCategory && matchesBatch && matchesSearch;
+      return matchesCategory && matchesBatch && matchesStatus && matchesSearch;
     });
-  }, [inventoryData, selectedCategory, selectedBatchDate, searchQuery]);
+  }, [inventoryData, selectedCategory, selectedBatchDate, selectedStatus, searchQuery]);
 
   const sortedData = useMemo(() => {
     console.log("useMemo running with sortConfig:", sortConfig);
@@ -440,7 +443,7 @@ export default function TodayInventoryPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategory, selectedBatchDate, sortConfig]);
+  }, [searchQuery, selectedCategory, selectedBatchDate, selectedStatus, sortConfig]);
 
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => {
@@ -463,6 +466,7 @@ export default function TodayInventoryPage() {
     setSearchQuery("");
     setSelectedCategory("");
     setSelectedBatchDate("");
+    setSelectedStatus("");
     setSortConfig({ key: "", direction: "asc" });
   }, []);
 
@@ -470,7 +474,7 @@ export default function TodayInventoryPage() {
     if (!date) return "-";
     const dt = typeof date === "string" ? new Date(date) : date;
     if (isNaN(dt.getTime())) return "-";
-    return dt.toLocaleString("en-CA", {
+    return dt.toLocaleString("en-US", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -656,7 +660,7 @@ export default function TodayInventoryPage() {
                   >
                     <FiFilter className="text-sm" />
                     Filters
-                    {(selectedCategory || selectedBatchDate) && (
+                    {(selectedCategory || selectedBatchDate || selectedStatus) && (
                       <span
                         className={`w-2 h-2 rounded-full ${
                           showFilters ? "bg-black" : "bg-yellow-400"
@@ -667,6 +671,7 @@ export default function TodayInventoryPage() {
                   {(searchQuery ||
                     selectedCategory ||
                     selectedBatchDate ||
+                    selectedStatus ||
                     sortConfig.key) && (
                     <button
                       type="button"
@@ -727,6 +732,26 @@ export default function TodayInventoryPage() {
                             {date}
                           </option>
                         ))}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label
+                        className="block text-gray-300 text-xs sm:text-sm font-medium mb-2"
+                        htmlFor="status-filter"
+                      >
+                        Stock Status
+                      </label>
+                      <select
+                        id="status-filter"
+                        value={selectedStatus}
+                        onChange={(e) => setSelectedStatus(e.target.value)}
+                        className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
+                      >
+                        <option value="">All Status</option>
+                        <option value="Normal">Normal</option>
+                        <option value="Low">Low</option>
+                        <option value="Critical">Critical</option>
+                        <option value="Out Of Stock">Out Of Stock</option>
                       </select>
                     </div>
                   </fieldset>
@@ -862,7 +887,7 @@ export default function TodayInventoryPage() {
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
                               <span className="text-white font-semibold text-sm xs:text-base sm:text-lg">
-                                {item.stock}
+                                {Number(item.stock) % 1 === 0 ? Number(item.stock).toFixed(0) : Number(item.stock).toFixed(2)}
                                 {item.unit && (
                                   <span className="ml-1 text-gray-400 text-xs xs:text-sm font-normal">
                                     {item.unit}
@@ -1069,14 +1094,14 @@ export default function TodayInventoryPage() {
                 <input
                   id="spoilage-quantity"
                   type="number"
-                  min={1}
+                  min={0.01}
                   max={itemToSpoilage.stock}
+                  step="0.01"
                   value={spoilageQuantity}
                   onChange={(e) => {
-                    const val = e.target.value.replace(/^0+/, "");
-                    setSpoilageQuantity(val === "" ? "" : val);
+                    setSpoilageQuantity(e.target.value);
                   }}
-                  placeholder={`Enter quantity (1-${itemToSpoilage.stock})`}
+                  placeholder={`Enter quantity (Max: ${Number(itemToSpoilage.stock) % 1 === 0 ? Number(itemToSpoilage.stock).toFixed(0) : Number(itemToSpoilage.stock).toFixed(2)})`}
                   className="w-full px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 rounded-lg xs:rounded-xl bg-gray-800/50 backdrop-blur-sm text-white border border-gray-600/50 focus:border-pink-400 focus:ring-2 focus:ring-pink-400/20 transition-all text-xs xs:text-sm sm:text-base placeholder-gray-500"
                   aria-label="Quantity to spoil"
                 />

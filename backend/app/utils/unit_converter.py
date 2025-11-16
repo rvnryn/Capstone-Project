@@ -78,10 +78,13 @@ COMPOUND_UNITS = {
     "tray_eggs": {"base_unit": "pcs", "factor": 30.0, "type": "count"},
     "dozen": {"base_unit": "pcs", "factor": 12.0, "type": "count"},
 
-    # Beverages
-    "case": {"base_unit": "pcs", "factor": 24.0, "type": "count"},
+    # Beverages - Cans and Cases
+    "can": {"base_unit": "pcs", "factor": 1.0, "type": "count"},  # Single can
+    "cans": {"base_unit": "pcs", "factor": 1.0, "type": "count"},  # Cans as pieces
+    "case": {"base_unit": "pcs", "factor": 24.0, "type": "count"},  # Case of 24 cans/bottles
     "crate": {"base_unit": "pcs", "factor": 24.0, "type": "count"},
     "case_24": {"base_unit": "pcs", "factor": 24.0, "type": "count"},
+    "case_12": {"base_unit": "pcs", "factor": 12.0, "type": "count"},  # Case of 12
 
     # Rice & Grains
     "sack": {"base_unit": "kg", "factor": 25.0, "type": "weight"},
@@ -89,13 +92,15 @@ COMPOUND_UNITS = {
     "bag": {"base_unit": "kg", "factor": 25.0, "type": "weight"},
 
     # Generic packs (default conversions - can be customized per item)
-    "pack": {"base_unit": "pcs", "factor": 1.0, "type": "count"},  # Default 1:1 for count
+    "pack": {"base_unit": "pcs", "factor": 1.0, "type": "count"},  # Default 1:1 for count items
+    "packs": {"base_unit": "pcs", "factor": 1.0, "type": "count"},
     "pack_meat": {"base_unit": "g", "factor": 500.0, "type": "weight"},  # 500g packs
     "pack_condiment": {"base_unit": "ml", "factor": 250.0, "type": "volume"},  # 250ml packs
 
     # Bottles
     "bottle": {"base_unit": "ml", "factor": 1000.0, "type": "volume"},  # 1L bottles
     "bottle_750": {"base_unit": "ml", "factor": 750.0, "type": "volume"},
+    "bottles": {"base_unit": "ml", "factor": 1000.0, "type": "volume"},
 }
 
 

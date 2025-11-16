@@ -975,6 +975,8 @@ def get_menu_by_id(menu_id: int):
 
     # Build stock map for all ingredients
     stock_details = {}  # {ing_name_lower: {available, total, expired}}
+    inventory_units = {}  # {ing_name_lower: unit_from_settings}
+    inventory_thresholds = {}  # {ing_name_lower: threshold_from_settings}
 
     if ingredient_names:
         # Query all 3 tables once
@@ -1012,6 +1014,23 @@ def get_menu_by_id(menu_id: int):
             except Exception as e:
                 print(f"Error fetching {table_name}: {e}")
 
+        # Fetch inventory units and thresholds from inventory_settings
+        try:
+            settings_res = (
+                postgrest_client.table("inventory_settings")
+                .select("name,default_unit,low_stock_threshold")
+                .execute()
+            )
+            for setting in settings_res.data or []:
+                setting_name = (setting.get("name") or "").lower()
+                if setting_name in [n.lower() for n in ingredient_names]:
+                    inventory_units[setting_name] = setting.get("default_unit", "")
+                    # Convert threshold to float to avoid type errors
+                    threshold_value = setting.get("low_stock_threshold", 5)
+                    inventory_thresholds[setting_name] = float(threshold_value) if threshold_value else 5.0
+        except Exception as e:
+            print(f"Error fetching inventory_settings: {e}")
+
     # Check availability for each ingredient using pre-fetched data
     ingredients_with_availability = []
     all_in_stock = True
@@ -1025,22 +1044,39 @@ def get_menu_by_id(menu_id: int):
         total_stock = details["total"]
         expired_stock = details["expired"]
 
-        # Determine specific unavailability reason
+        # Get threshold from inventory_settings (default to 5 if not found)
+        threshold = float(inventory_thresholds.get(ing_name_lower, 5))
+        critical_threshold = threshold * 0.5  # Critical is 50% of low stock threshold
+
+        # Determine specific unavailability reason and stock status
         is_unavailable = False
+        stock_status = "Normal"  # Normal, Low Stock, Critical, Out of Stock, Expired
+
         if total_stock <= 0:
             is_unavailable = True
             unavailable_reason = "no_stock"
+            stock_status = "Out of Stock"
         elif available_stock <= 0 and expired_stock > 0:
             is_unavailable = True
             unavailable_reason = "expired"
-        elif available_stock > 0 and available_stock <= 5:
+            stock_status = "Expired"
+        elif available_stock > 0 and available_stock <= critical_threshold:
+            is_unavailable = False  # Still available but critical
+            unavailable_reason = "critical"
+            stock_status = "Critical"
+        elif available_stock > critical_threshold and available_stock <= threshold:
             is_unavailable = False  # Still available but low
             unavailable_reason = "low_stock"
+            stock_status = "Low Stock"
         else:
             unavailable_reason = "available"
+            stock_status = "Normal"
 
         if is_unavailable:
             all_in_stock = False
+
+        # Get inventory unit from settings (fallback to recipe measurements if not found)
+        inventory_unit = inventory_units.get(ing_name_lower, ing.get("measurements", ""))
 
         # Add detailed availability information to ingredient
         ingredient_with_availability = {
@@ -1050,8 +1086,12 @@ def get_menu_by_id(menu_id: int):
             "available_stock": available_stock,
             "expired_stock": expired_stock,
             "unavailable_reason": unavailable_reason,
+            "stock_status": stock_status,  # Add stock status
+            "threshold": threshold,  # Add threshold for reference
             "is_expired": available_stock <= 0 and expired_stock > 0,
-            "is_low_stock": available_stock > 0 and available_stock <= 5,
+            "is_low_stock": available_stock > critical_threshold and available_stock <= threshold,
+            "is_critical": available_stock > 0 and available_stock <= critical_threshold,
+            "inventory_unit": inventory_unit,  # Add inventory unit from settings
         }
         ingredients_with_availability.append(ingredient_with_availability)
 

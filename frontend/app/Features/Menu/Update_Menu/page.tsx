@@ -21,6 +21,7 @@ import {
   FiAlertTriangle,
   FiArrowRight,
   FiImage,
+  FiFileText,
 } from "react-icons/fi";
 import { useInventoryItemNames } from "@/app/hooks/Itemnames";
 import { getUnitsForCategory } from "@/app/constants/unitOptions";
@@ -1021,7 +1022,8 @@ export default function EditMenuPage() {
                                 </label>
                                 <input
                                   type="number"
-                                  min={0}
+                                  min={1}
+                                  max={999}
                                   step={1}
                                   placeholder="0"
                                   value={ing.quantity}
@@ -1186,22 +1188,75 @@ export default function EditMenuPage() {
           >
             <form
               method="dialog"
-              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-gray-700/50 text-center space-y-4 sm:space-y-6 max-w-sm sm:max-w-md w-full"
+              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-gray-700/50 space-y-4 sm:space-y-6 max-w-sm sm:max-w-lg w-full"
               onSubmit={(e) => e.preventDefault()}
             >
-              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 rounded-full flex items-center justify-center">
-                <FiSave className="w-8 h-8 text-yellow-400" />
+              <div className="flex flex-col items-center">
+                <div className="w-14 h-14 mb-4 bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 rounded-full flex items-center justify-center">
+                  <FiSave className="w-8 h-8 text-yellow-400" />
+                </div>
+                <h3
+                  id="save-dialog-title"
+                  className="text-xl sm:text-2xl font-bold text-white mb-2"
+                >
+                  Confirm Update
+                </h3>
+                <p className="text-gray-400 text-xs sm:text-sm mb-4">
+                  Review the changes before saving
+                </p>
               </div>
-              <h3
-                id="save-dialog-title"
-                className="text-xl sm:text-2xl font-bold text-white mb-2"
-              >
-                Save Changes
-              </h3>
-              <p className="text-gray-300 text-sm sm:text-base mb-6 leading-relaxed">
-                Are you sure you want to save these changes to the inventory
-                item?
-              </p>
+
+              {/* Menu Item Being Updated */}
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                <div className="flex items-center gap-2 mb-3">
+                  <MdEdit className="text-yellow-400" />
+                  <span className="text-sm font-semibold text-gray-300">Menu Item:</span>
+                  <span className="text-sm font-bold text-white">{formData.dish_name}</span>
+                </div>
+
+                {/* Changes Summary */}
+                <div className="space-y-2">
+                  {initialSettings && (
+                    <>
+                      {formData.category !== initialSettings.category && (
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <FiPackage className="text-purple-400 flex-shrink-0" />
+                          <span className="text-gray-400">Category:</span>
+                          <span className="text-red-400 line-through">{initialSettings.category}</span>
+                          <FiArrowRight className="text-gray-500" />
+                          <span className="text-green-400">{formData.category}</span>
+                        </div>
+                      )}
+                      {formData.price !== initialSettings.price && (
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <FiTag className="text-green-400 flex-shrink-0" />
+                          <span className="text-gray-400">Price:</span>
+                          <span className="text-red-400 line-through">₱{initialSettings.price}</span>
+                          <FiArrowRight className="text-gray-500" />
+                          <span className="text-green-400">₱{formData.price}</span>
+                        </div>
+                      )}
+                      {formData.stock_status !== initialSettings.stock_status && (
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <FiAlertCircle className="text-blue-400 flex-shrink-0" />
+                          <span className="text-gray-400">Status:</span>
+                          <span className="text-red-400 line-through">{initialSettings.stock_status}</span>
+                          <FiArrowRight className="text-gray-500" />
+                          <span className="text-green-400">{formData.stock_status}</span>
+                        </div>
+                      )}
+                      {formData.description !== initialSettings.description && (
+                        <div className="flex items-start gap-2 text-xs sm:text-sm">
+                          <FiFileText className="text-orange-400 flex-shrink-0 mt-1" />
+                          <span className="text-gray-400">Description:</span>
+                          <span className="text-green-400 flex-1">Updated</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"

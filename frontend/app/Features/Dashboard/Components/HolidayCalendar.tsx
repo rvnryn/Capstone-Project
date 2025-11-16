@@ -285,7 +285,7 @@ const HolidayCalendar: React.FC<Props> = ({
                     {isPH ? "PH Holiday" : "Custom Event"}
                   </div>
                   <div className="text-slate-400 mt-1">
-                    {arg.event.start?.toLocaleDateString()}
+                    {arg.event.start?.toLocaleDateString("en-US")}
                   </div>
                 </div>
               </div>

@@ -29,11 +29,12 @@ type SpoilageItem = {
   unit_cost?: number | null;
 };
 
-// Extend SpoilageItem type to include batch_date, expiration_date, and category
+// Extend SpoilageItem type to include batch_date, expiration_date, category, and status
 type ExtendedSpoilageItem = SpoilageItem & {
   batch_date?: string | null;
   expiration_date?: string | null;
   category?: string | null;
+  status?: "Out Of Stock" | "Critical" | "Low" | "Normal";
 };
 
 export default function SpoilageInventoryPage() {
@@ -71,6 +72,10 @@ export default function SpoilageInventoryPage() {
   };
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedBatchDate, setSelectedBatchDate] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [sortConfig, setSortConfig] = useState({
     key: "",
     direction: "asc",
@@ -118,6 +123,7 @@ export default function SpoilageInventoryPage() {
         expiration_date: item.expiration_date || null,
         unit_price:
           item.unit_price !== undefined ? Number(item.unit_price) : null,
+        status: "Out Of Stock" as const, // Spoiled items are always out of stock
       }));
       if (typeof window !== "undefined") {
         localStorage.setItem("spoilageInventoryCache", JSON.stringify(mapped));
@@ -150,7 +156,7 @@ export default function SpoilageInventoryPage() {
     if (!date) return "N/A";
     try {
       const dateObj = typeof date === "string" ? new Date(date) : date;
-      return dateObj.toLocaleDateString();
+      return dateObj.toLocaleDateString("en-US");
     } catch {
       return "Invalid Date";
     }
@@ -160,7 +166,7 @@ export default function SpoilageInventoryPage() {
     if (!date) return "-";
     const dt = typeof date === "string" ? new Date(date) : date;
     if (isNaN(dt.getTime())) return "-";
-    return dt.toLocaleString("en-CA", {
+    return dt.toLocaleString("en-US", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -168,6 +174,18 @@ export default function SpoilageInventoryPage() {
       minute: "2-digit",
       hour12: true,
     });
+  };
+
+  const getUniqueCategories = (data: ExtendedSpoilageItem[]) => {
+    return Array.from(new Set(data.map((item) => item.category))).filter(
+      Boolean
+    );
+  };
+
+  const getUniqueBatchDates = (data: ExtendedSpoilageItem[]) => {
+    return Array.from(
+      new Set(data.map((item) => formatDateOnly(item.batch_date)))
+    ).filter((date) => date !== "N/A");
   };
 
   const filtered = useMemo(() => {
@@ -187,14 +205,19 @@ export default function SpoilageInventoryPage() {
       return true;
     });
     return validData.filter((item) => {
+      const matchesCategory =
+        !selectedCategory || item.category === selectedCategory;
+      const matchesBatch =
+        !selectedBatchDate || formatDateOnly(item.batch_date) === selectedBatchDate;
+      const matchesStatus = !selectedStatus || item.status === selectedStatus;
       const matchesSearch =
         !searchQuery ||
         item.item_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.spoilage_id.toString().includes(searchQuery.toLowerCase()) ||
         (item.reason || "").toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesSearch;
+      return matchesCategory && matchesBatch && matchesStatus && matchesSearch;
     });
-  }, [spoilageData, searchQuery]);
+  }, [spoilageData, selectedCategory, selectedBatchDate, selectedStatus, searchQuery]);
 
   // Do not group spoilage records; show each record as a separate row
   const groupedData = useMemo(() => filtered, [filtered]);
@@ -245,7 +268,7 @@ export default function SpoilageInventoryPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortConfig]);
+  }, [searchQuery, selectedCategory, selectedBatchDate, selectedStatus, sortConfig]);
 
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => {
@@ -264,6 +287,9 @@ export default function SpoilageInventoryPage() {
 
   const handleClear = useCallback(() => {
     setSearchQuery("");
+    setSelectedCategory("");
+    setSelectedBatchDate("");
+    setSelectedStatus("");
     setSortConfig({ key: "", direction: "asc" });
   }, []);
 
@@ -396,7 +422,32 @@ export default function SpoilageInventoryPage() {
                       </button>
                     )}
                   </div>
-                  {(searchQuery || sortConfig.key) && (
+                  <button
+                    type="button"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition-all text-sm sm:text-base whitespace-nowrap ${
+                      showFilters
+                        ? "bg-yellow-400 text-black border-yellow-400"
+                        : "bg-gray-700/50 text-gray-300 border-gray-600/50 hover:bg-gray-600/50"
+                    }`}
+                    aria-pressed={showFilters}
+                    aria-controls="spoilage-filters"
+                  >
+                    <FiFilter className="text-sm" />
+                    Filters
+                    {(selectedCategory || selectedBatchDate || selectedStatus) && (
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          showFilters ? "bg-black" : "bg-yellow-400"
+                        }`}
+                      ></span>
+                    )}
+                  </button>
+                  {(searchQuery ||
+                    selectedCategory ||
+                    selectedBatchDate ||
+                    selectedStatus ||
+                    sortConfig.key) && (
                     <button
                       type="button"
                       onClick={handleClear}
@@ -407,6 +458,76 @@ export default function SpoilageInventoryPage() {
                     </button>
                   )}
                 </form>
+                {showFilters && (
+                  <section
+                    id="spoilage-filters"
+                    className="bg-gray-800/30 backdrop-blur-sm rounded-xl p-4 border border-gray-700/50 space-y-3 sm:space-y-0 sm:flex sm:gap-4 transition-all duration-300"
+                    aria-label="Filter options"
+                  >
+                    <div className="flex-1">
+                      <label
+                        className="block text-gray-300 text-xs sm:text-sm font-medium mb-2"
+                        htmlFor="category-filter"
+                      >
+                        Category
+                      </label>
+                      <select
+                        id="category-filter"
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value)}
+                        className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
+                      >
+                        <option value="">All Categories</option>
+                        {getUniqueCategories(spoilageData).map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label
+                        className="block text-gray-300 text-xs sm:text-sm font-medium mb-2"
+                        htmlFor="batch-filter"
+                      >
+                        Batch Date
+                      </label>
+                      <select
+                        id="batch-filter"
+                        value={selectedBatchDate}
+                        onChange={(e) => setSelectedBatchDate(e.target.value)}
+                        className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
+                      >
+                        <option value="">All Batches</option>
+                        {getUniqueBatchDates(spoilageData).map((date) => (
+                          <option key={date} value={date}>
+                            {date}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label
+                        className="block text-gray-300 text-xs sm:text-sm font-medium mb-2"
+                        htmlFor="status-filter"
+                      >
+                        Stock Status
+                      </label>
+                      <select
+                        id="status-filter"
+                        value={selectedStatus}
+                        onChange={(e) => setSelectedStatus(e.target.value)}
+                        className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
+                      >
+                        <option value="">All Status</option>
+                        <option value="Normal">Normal</option>
+                        <option value="Low">Low</option>
+                        <option value="Critical">Critical</option>
+                        <option value="Out Of Stock">Out Of Stock</option>
+                      </select>
+                    </div>
+                  </section>
+                )}
               </section>
               <section
                 className="bg-gray-800/30 backdrop-blur-sm rounded-lg xs:rounded-xl sm:rounded-2xl shadow-2xl border border-gray-700/50 overflow-hidden"
@@ -543,7 +664,7 @@ export default function SpoilageInventoryPage() {
                                     )
                                   }
                                 >
-                                  {item.quantity_spoiled}
+                                  {Number(item.quantity_spoiled) % 1 === 0 ? Number(item.quantity_spoiled).toFixed(0) : Number(item.quantity_spoiled).toFixed(2)}
                                 </td>
                                 <td
                                   className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-blue-300 text-xs xs:text-sm"

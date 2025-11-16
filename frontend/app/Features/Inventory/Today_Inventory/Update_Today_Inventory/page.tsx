@@ -67,7 +67,6 @@ export default function EditTodayInventoryItem() {
     name: "",
     category: "",
     stock: "",
-    unit_price: "",
   });
   const [isDirty, setIsDirty] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -100,12 +99,12 @@ export default function EditTodayInventoryItem() {
           name: rawData.item_name,
           batch: rawData.batch_date,
           category: rawData.category,
-          stock: rawData.stock_quantity,
+          stock: Number(Number(rawData.stock_quantity).toFixed(2)),
+          unit_cost: rawData.unit_cost || "",
           status: rawData.stock_status,
           added: new Date(rawData.created_at),
           expiration_date: rawData.expiration_date?.split("T")[0] || "",
         };
-
         setFormData(mappedItem);
         setInitialSettings(mappedItem);
         setSettings(settingsData);
@@ -133,9 +132,7 @@ export default function EditTodayInventoryItem() {
         name: "",
         category: "",
         stock: "",
-        unit_price: "",
       };
-
       if (!data.name || !data.name.trim()) {
         newErrors.name = "Item name is required.";
       } else if (data.name.trim().length < 2) {
@@ -158,19 +155,10 @@ export default function EditTodayInventoryItem() {
       ) {
         newErrors.stock = "Quantity in stock is required.";
       } else if (
-        !Number.isInteger(Number(data.stock)) ||
+        isNaN(Number(data.stock)) ||
         Number(data.stock) < 0
       ) {
-        newErrors.stock = "Quantity must be a non-negative integer.";
-      }
-
-      if (
-        data.unit_price !== undefined &&
-        data.unit_price !== null &&
-        data.unit_price !== "" &&
-        (isNaN(Number(data.unit_price)) || Number(data.unit_price) < 0)
-      ) {
-        newErrors.unit_price = "Unit price must be a non-negative number.";
+        newErrors.stock = "Quantity must be a non-negative number.";
       }
 
       return newErrors;
@@ -235,6 +223,7 @@ export default function EditTodayInventoryItem() {
         category: formData.category,
         batch_date: formData.batch,
         stock_quantity: formData.stock,
+        unit_cost: Number(formData.unit_cost) || 0,
         expiration_date: formData.expiration_date || null,
       },
       {
@@ -553,102 +542,87 @@ export default function EditTodayInventoryItem() {
                     )}
                   </div>
 
-                  {/* Stock Quantity Field */}
-                  <div className="group lg:col-span-2">
-                    <label
-                      htmlFor="stock"
-                      className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                    >
-                      <FiHash className="text-yellow-400" />
-                      Quantity In Stock
-                      <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative max-w-md">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          id="stock"
-                          name="stock"
-                          required
-                          min={0}
-                          value={formData.stock ?? ""}
-                          onChange={handleChange}
-                          onFocus={() => handleFocus("stock")}
-                          onBlur={handleBlur}
-                          placeholder="Enter quantity..."
-                          className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
-                            isSubmitted && errors.stock
-                              ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                              : focusedField === "stock"
-                              ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                              : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                          }`}
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                        />
-                        {unit && (
-                          <span className="text-gray-400 text-sm sm:text-base whitespace-nowrap">
-                            {unit}
-                          </span>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 xs:gap-3 sm:gap-4 md:gap-6 lg:gap-8">
+                    {/* Stock Quantity Field */}
+                    <div className="group">
+                      <label
+                        htmlFor="stock"
+                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
+                      >
+                        <FiHash className="text-yellow-400" />
+                        Quantity In Stock
+                        <span className="text-red-400">*</span>
+                      </label>
+                      <div className="relative max-w-md">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            id="stock"
+                            name="stock"
+                            required
+                            min={0}
+                            max={999}
+                            step="0.01"
+                            value={formData.stock ?? ""}
+                            onChange={handleChange}
+                            onFocus={() => handleFocus("stock")}
+                            onBlur={handleBlur}
+                            placeholder="Enter quantity..."
+                            className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
+                              isSubmitted && errors.stock
+                                ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
+                                : focusedField === "stock"
+                                ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
+                                : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
+                            }`}
+                            inputMode="decimal"
+                          />
+                          {unit && (
+                            <span className="text-gray-400 text-xs xs:text-sm font-normal">
+                              {unit}
+                            </span>
+                          )}
+                        </div>
+                        {focusedField === "stock" && !errors.stock && (
+                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                          </div>
                         )}
                       </div>
-                      {focusedField === "stock" && !errors.stock && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                      {isSubmitted && errors.stock && (
+                        <div className="flex items-center gap-2 mt-2 text-red-400 text-xs sm:text-sm">
+                          <FiAlertCircle className="flex-shrink-0" />
+                          {errors.stock}
                         </div>
                       )}
                     </div>
-                    {isSubmitted && errors.stock && (
-                      <div className="flex items-center gap-2 mt-2 text-red-400 text-xs sm:text-sm">
-                        <FiAlertCircle className="flex-shrink-0" />
-                        {errors.stock}
+
+                    <div className="group">
+                      <label
+                        htmlFor="unit_cost"
+                        className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base"
+                      >
+                        <FiTag className="text-blue-400" />
+                        Unit Cost
+                      </label>
+                      <div className="relative max-w-md">
+                        <input
+                          type="number"
+                          id="unit_cost"
+                          name="unit_cost"
+                          min={0}
+                          step="0.01"
+                          value={formData.unit_cost ?? ""}
+                          onChange={handleChange}
+                          onFocus={() => handleFocus("unit_cost")}
+                          onBlur={handleBlur}
+                          placeholder="0.00"
+                          className="w-full pl-7 bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 border-gray-600/50 hover:border-gray-500 focus:border-blue-400/70"
+                          inputMode="decimal"
+                          pattern="[0-9.]*"
+                        />
                       </div>
-                    )}
-                  </div>
-                  {/* Unit Price Field */}
-                  <div className="group lg:col-span-2">
-                    <label
-                      htmlFor="unit_price"
-                      className="flex items-center gap-2 text-gray-300 mb-3 font-medium text-sm sm:text-base transition-colors group-focus-within:text-yellow-400"
-                    >
-                      <FiTag className="text-green-400" />
-                      Unit Price
-                    </label>
-                    <div className="relative max-w-md">
-                      <input
-                        type="number"
-                        id="unit_price"
-                        name="unit_price"
-                        min={0}
-                        step="0.01"
-                        value={formData.unit_price ?? ""}
-                        onChange={handleChange}
-                        onFocus={() => handleFocus("unit_price")}
-                        onBlur={handleBlur}
-                        placeholder="Enter unit price..."
-                        className={`w-full bg-gray-800/50 backdrop-blur-sm text-white rounded-xl px-4 py-3 sm:px-5 sm:py-4 border-2 text-sm sm:text-base transition-all duration-300 placeholder-gray-500 ${
-                          isSubmitted && errors.unit_price
-                            ? "border-red-500/70 focus:border-red-400 bg-red-500/5"
-                            : focusedField === "unit_price"
-                            ? "border-yellow-400/70 focus:border-yellow-400 bg-yellow-400/5 shadow-lg shadow-yellow-400/10"
-                            : "border-gray-600/50 hover:border-gray-500 focus:border-yellow-400/70"
-                        }`}
-                        inputMode="decimal"
-                        pattern="[0-9]*"
-                        disabled
-                      />
-                      {focusedField === "unit_price" && !errors.unit_price && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                        </div>
-                      )}
                     </div>
-                    {isSubmitted && errors.unit_price && (
-                      <div className="flex items-center gap-2 mt-2 text-red-400 text-xs sm:text-sm">
-                        <FiAlertCircle className="flex-shrink-0" />
-                        {errors.unit_price}
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -707,22 +681,85 @@ export default function EditTodayInventoryItem() {
           >
             <form
               method="dialog"
-              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-gray-700/50 text-center space-y-4 sm:space-y-6 max-w-sm sm:max-w-md w-full"
+              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-gray-700/50 space-y-4 sm:space-y-6 max-w-sm sm:max-w-lg w-full"
               onSubmit={(e) => e.preventDefault()}
             >
-              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 rounded-full flex items-center justify-center">
-                <FiSave className="w-8 h-8 text-yellow-400" />
+              <div className="flex flex-col items-center">
+                <div className="w-14 h-14 mb-4 bg-gradient-to-br from-yellow-400/20 to-yellow-500/20 rounded-full flex items-center justify-center">
+                  <FiSave className="w-8 h-8 text-yellow-400" />
+                </div>
+                <h3
+                  id="save-dialog-title"
+                  className="text-xl sm:text-2xl font-bold text-white mb-2"
+                >
+                  Confirm Update
+                </h3>
+                <p className="text-gray-400 text-xs sm:text-sm mb-4">
+                  Review the changes before saving
+                </p>
               </div>
-              <h3
-                id="save-dialog-title"
-                className="text-xl sm:text-2xl font-bold text-white mb-2"
-              >
-                Save Changes
-              </h3>
-              <p className="text-gray-300 text-sm sm:text-base mb-6 leading-relaxed">
-                Are you sure you want to save these changes to the inventory
-                item?
-              </p>
+
+              {/* Item Being Updated */}
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                <div className="flex items-center gap-2 mb-3">
+                  <MdEdit className="text-yellow-400" />
+                  <span className="text-sm font-semibold text-gray-300">
+                    Item:
+                  </span>
+                  <span className="text-sm font-bold text-white">
+                    {formData.name}
+                  </span>
+                </div>
+
+                {/* Changes Summary */}
+                <div className="space-y-2">
+                  {initialSettings && (
+                    <>
+                      {formData.category !== initialSettings.category && (
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <FiPackage className="text-purple-400 flex-shrink-0" />
+                          <span className="text-gray-400">Category:</span>
+                          <span className="text-red-400 line-through">
+                            {initialSettings.category}
+                          </span>
+                          <FiArrowRight className="text-gray-500" />
+                          <span className="text-green-400">
+                            {formData.category}
+                          </span>
+                        </div>
+                      )}
+                      {formData.stock !== initialSettings.stock && (
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <FiHash className="text-blue-400 flex-shrink-0" />
+                          <span className="text-gray-400">Stock:</span>
+                          <span className="text-red-400 line-through">
+                            {Number(initialSettings.stock) % 1 === 0 ? Number(initialSettings.stock).toFixed(0) : Number(initialSettings.stock).toFixed(2)} {unit}
+                          </span>
+                          <FiArrowRight className="text-gray-500" />
+                          <span className="text-green-400">
+                            {Number(formData.stock) % 1 === 0 ? Number(formData.stock).toFixed(0) : Number(formData.stock).toFixed(2)} {unit}
+                          </span>
+                        </div>
+                      )}
+                      {formData.expiration_date !==
+                        initialSettings.expiration_date && (
+                        <div className="flex items-center gap-2 text-xs sm:text-sm">
+                          <FiCalendar className="text-orange-400 flex-shrink-0" />
+                          <span className="text-gray-400">Expiration:</span>
+                          <span className="text-red-400 line-through">
+                            {initialSettings.expiration_date || "None"}
+                          </span>
+                          <FiArrowRight className="text-gray-500" />
+                          <span className="text-green-400">
+                            {formData.expiration_date || "None"}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   type="button"

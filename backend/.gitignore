@@ -45,3 +45,5 @@ next-env.d.ts
 credentials.json
 __pycache__/ 
 
+# Windows reserved filenames
+nul

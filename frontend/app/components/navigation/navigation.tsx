@@ -17,10 +17,7 @@ import {
   FaAngleLeft,
 } from "react-icons/fa";
 import { GiHamburgerMenu } from "react-icons/gi";
-import {
-  MdFullscreen,
-  MdFullscreenExit,
-} from "react-icons/md";
+import { MdFullscreen, MdFullscreenExit } from "react-icons/md";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { routes } from "@/app/routes/routes";
@@ -173,21 +170,26 @@ const NavigationBar = ({
     closeMenu,
   } = useNavigation();
 
-
   // Component state
   const [showModal, setShowModal] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationModalState, setNotificationModal] =
     useState<Notification | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
-  const [bellPosition, setBellPosition] = useState<{ top: number; right: number } | null>(null);
+  const [bellPosition, setBellPosition] = useState<{
+    top: number;
+    right: number;
+  } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const bellRef = useRef<HTMLDivElement>(null);
 
   // Debug: Track notification modal state changes
   useEffect(() => {
-    console.log("[DEBUG] notificationModalState changed:", notificationModalState);
+    console.log(
+      "[DEBUG] notificationModalState changed:",
+      notificationModalState
+    );
   }, [notificationModalState]);
 
   // Debug: Track bellOpen state changes
@@ -413,14 +415,23 @@ const NavigationBar = ({
         );
         const data = await res.json();
         console.log("[Notifications] API Response:", data);
-        console.log("[Notifications] Received:", data.notifications?.length || 0, "notifications");
+        console.log(
+          "[Notifications] Received:",
+          data.notifications?.length || 0,
+          "notifications"
+        );
         setNotifications(data.notifications || []);
       } catch (error) {
         console.error("[Notifications] Fetch error:", error);
         setNotifications([]);
       }
     } else {
-      console.log("[Notifications] No valid user ID - userId:", userId, "type:", typeof userId);
+      console.log(
+        "[Notifications] No valid user ID - userId:",
+        userId,
+        "type:",
+        typeof userId
+      );
       setNotifications([]);
     }
   }, [user]);
@@ -445,7 +456,9 @@ const NavigationBar = ({
       const isInsideBell = bellRef.current && bellRef.current.contains(target);
 
       // Check if click is inside notification dropdown (which is rendered via portal)
-      const isInsideDropdown = (target as Element).closest('.notification-dropdown-portal');
+      const isInsideDropdown = (target as Element).closest(
+        ".notification-dropdown-portal"
+      );
 
       if (!isInsideBell && !isInsideDropdown) {
         console.log("[Bell] Click outside detected, closing");
@@ -493,6 +506,16 @@ const NavigationBar = ({
     }
     // Always allow navigation, even offline
     router.push(path);
+  };
+
+  const formatQuantity = (value: number | undefined): string => {
+    if (value === undefined || value === null) return "0";
+    // Check if the number is a whole number
+    if (Number.isInteger(value)) {
+      return value.toString();
+    }
+    // If it has decimals, format to 2 decimal places
+    return value.toFixed(2);
   };
 
   const handleLogout = () => setShowModal(true);
@@ -591,6 +614,33 @@ const NavigationBar = ({
     }
   }
 
+  function getNotificationMessageColor(type: string | undefined): string {
+    const notifType = (type || "").toLowerCase();
+
+    // Critical stock alert or expired alert - Red
+    if (notifType === "expired" || notifType.includes("critical")) {
+      return "text-red-400";
+    }
+    // Low stock - Yellow
+    if (notifType === "low_stock") {
+      return "text-yellow-400";
+    }
+    // Expiring soon - Orange
+    if (notifType === "expiring_soon") {
+      return "text-orange-400";
+    }
+    // Transfer to spoilage (auto or manual) - Violet/Purple
+    if (notifType.includes("spoilage")) {
+      return "text-purple-400";
+    }
+    // Any transfer (auto or manual) - Blue
+    if (notifType.includes("transfer")) {
+      return "text-blue-400";
+    }
+    // Default - Gray
+    return "text-gray-300";
+  }
+
   async function handleNotificationClick(n: Notification) {
     console.log("[DEBUG] Notification clicked:", n);
     setNotificationModal(n); // This sets notificationModalState
@@ -598,7 +648,12 @@ const NavigationBar = ({
     setBellOpen(false);
     const userId = user?.user_id || user?.id;
     // Only mark as read if notification has a valid ID
-    if (userId && typeof userId === "number" && n.id !== null && n.id !== undefined) {
+    if (
+      userId &&
+      typeof userId === "number" &&
+      n.id !== null &&
+      n.id !== undefined
+    ) {
       try {
         await fetch(
           `${API_BASE_URL}/api/notifications/mark-read?user_id=${userId}&notification_id=${n.id}`,
@@ -623,7 +678,12 @@ const NavigationBar = ({
     event.stopPropagation(); // Prevent triggering the notification click
     const userId = user?.user_id || user?.id;
     // Only delete if notification has a valid ID
-    if (userId && typeof userId === "number" && n.id !== null && n.id !== undefined) {
+    if (
+      userId &&
+      typeof userId === "number" &&
+      n.id !== null &&
+      n.id !== undefined
+    ) {
       try {
         await fetch(
           `${API_BASE_URL}/api/notifications?user_id=${userId}&notification_id=${n.id}`,
@@ -644,7 +704,9 @@ const NavigationBar = ({
       }
     } else {
       // If notification has no ID, show a warning
-      console.warn("Cannot delete notification without ID. Please run database migration.");
+      console.warn(
+        "Cannot delete notification without ID. Please run database migration."
+      );
     }
   }
 
@@ -686,7 +748,7 @@ const NavigationBar = ({
     showSaveModal ||
     showRemoveIngredientModal ||
     notificationModal ||
-    notificationModalState ||  // Check local notification modal state
+    notificationModalState || // Check local notification modal state
     showPasswordModal ||
     showToggleModal ||
     showRestoreSourceModal ||
@@ -722,12 +784,12 @@ const NavigationBar = ({
             left: isCompactDevice()
               ? "0.75rem"
               : screenSize === "md"
-                ? "calc(35px - 1.5rem)" // 70px / 2 - half button width
-                : screenSize === "lg"
-                  ? "calc(40px - 1.5rem)" // 80px / 2 - half button width
-                  : screenSize === "xl"
-                    ? "calc(45px - 1.5rem)" // 90px / 2 - half button width
-                    : "calc(50px - 1.5rem)", // 100px / 2 - half button width (2xl)
+              ? "calc(35px - 1.5rem)" // 70px / 2 - half button width
+              : screenSize === "lg"
+              ? "calc(40px - 1.5rem)" // 80px / 2 - half button width
+              : screenSize === "xl"
+              ? "calc(45px - 1.5rem)" // 90px / 2 - half button width
+              : "calc(50px - 1.5rem)", // 100px / 2 - half button width (2xl)
             width: isCompactDevice() ? "2.75rem" : "3rem",
             height: isCompactDevice() ? "2.75rem" : "3rem",
           }}
@@ -793,7 +855,7 @@ const NavigationBar = ({
               ? "translateX(-100%)"
               : "translateX(0)",
           transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-          zIndex: isMenuOpen ? 65 : (isCompactDevice() ? 50 : 45),
+          zIndex: isMenuOpen ? 65 : isCompactDevice() ? 50 : 45,
           // Enhanced responsive shadows based on device type
           boxShadow: isMenuOpen
             ? "4px 0 32px rgba(0, 0, 0, 0.5), inset -1px 0 0 rgba(251, 191, 36, 0.1)"
@@ -1311,7 +1373,9 @@ const NavigationBar = ({
           ${
             screenSize === "xs" || screenSize === "sm"
               ? "left-0 right-0 flex-col px-3 py-2"
-              : `flex items-center justify-between right-0 ${getPadding("medium")}`
+              : `flex items-center justify-between right-0 ${getPadding(
+                  "medium"
+                )}`
           }`}
         style={{
           transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
@@ -1350,7 +1414,9 @@ const NavigationBar = ({
         {isCompactDevice() && user && (
           <div className="flex items-center justify-between w-full gap-2">
             {/* User Info Section */}
-            <div className={`flex items-center ${getSpacing("xs")} min-w-0 flex-1`}>
+            <div
+              className={`flex items-center ${getSpacing("xs")} min-w-0 flex-1`}
+            >
               {/* Enhanced Avatar */}
               <div
                 className={`flex-shrink-0 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 text-black font-bold flex items-center justify-center border-2 border-yellow-300 shadow-md ${
@@ -1362,7 +1428,12 @@ const NavigationBar = ({
                 }}
               >
                 {user?.name
-                  ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                  ? user.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .toUpperCase()
+                      .slice(0, 2)
                   : user?.email?.charAt(0).toUpperCase() || "U"}
               </div>
               {/* Name and Role Badge Only */}
@@ -1372,7 +1443,7 @@ const NavigationBar = ({
                     "xs"
                   )}`}
                   style={{
-                    maxWidth: isMobileDevice() ? "100px" : "140px"
+                    maxWidth: isMobileDevice() ? "100px" : "140px",
                   }}
                   title={user?.name || user?.email || "User"}
                 >
@@ -1382,13 +1453,18 @@ const NavigationBar = ({
                   <span
                     className="px-1.5 py-0.5 bg-yellow-500/20 border border-yellow-400/30 rounded-full text-yellow-300 text-[9px] font-semibold uppercase tracking-wide w-fit mt-0.5 truncate"
                     style={{
-                      maxWidth: isMobileDevice() ? "60px" : "80px"
+                      maxWidth: isMobileDevice() ? "60px" : "80px",
                     }}
                   >
-                    {role === "Owner" ? "Own" :
-                     role === "General Manager" ? "GM" :
-                     role === "Store Manager" ? "SM" :
-                     role === "Assistant Store Manager" ? "ASM" : ""}
+                    {role === "Owner"
+                      ? "Own"
+                      : role === "General Manager"
+                      ? "GM"
+                      : role === "Store Manager"
+                      ? "SM"
+                      : role === "Assistant Store Manager"
+                      ? "ASM"
+                      : ""}
                   </span>
                 )}
               </div>
@@ -1405,7 +1481,10 @@ const NavigationBar = ({
                   aria-label="Notifications"
                   onClick={(e) => {
                     e.stopPropagation();
-                    console.log("[Bell Mobile] Clicked! Current state:", bellOpen);
+                    console.log(
+                      "[Bell Mobile] Clicked! Current state:",
+                      bellOpen
+                    );
                     setBellOpen(!bellOpen);
                   }}
                 >
@@ -1426,7 +1505,10 @@ const NavigationBar = ({
 
                 {/* Mobile Notification Dropdown */}
                 {bellOpen && (
-                  <div className="notification-dropdown-portal" onClick={(e) => e.stopPropagation()}>
+                  <div
+                    className="notification-dropdown-portal"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div
                       className={`absolute right-0 mt-3 bg-gradient-to-br from-black/98 via-gray-900/98 to-black/98 backdrop-blur-xl text-yellow-100 rounded-2xl shadow-2xl z-50 border border-yellow-400/20 ${
                         isMobileDevice()
@@ -1457,7 +1539,11 @@ const NavigationBar = ({
                       </div>
                       <div
                         className="max-h-64 overflow-y-auto"
-                        onClick={() => console.log("[CONTAINER] Notification container clicked!")}
+                        onClick={() =>
+                          console.log(
+                            "[CONTAINER] Notification container clicked!"
+                          )
+                        }
                       >
                         {notifications.length === 0 ? (
                           <div className="p-6 text-center">
@@ -1506,6 +1592,18 @@ const NavigationBar = ({
                               bgColor =
                                 "bg-gradient-to-r from-blue-800/18 via-blue-700/15 to-transparent border-l-2 border-l-blue-300";
                             }
+                            // Auto-transfer notifications
+                            else if (
+                              type === "auto_transfer_surplus" ||
+                              type === "auto_transfer_today" ||
+                              type === "auto_transfer_master" ||
+                              type === "auto_transfer_spoilage" ||
+                              msg.includes("auto transfer")
+                            ) {
+                              messageColor = "text-blue-400";
+                              bgColor =
+                                "bg-gradient-to-r from-blue-800/18 via-blue-700/15 to-transparent border-l-2 border-l-blue-300";
+                            }
                             // Default unread
                             else if (n.status === "unread") {
                               messageColor = "text-yellow-200";
@@ -1520,9 +1618,11 @@ const NavigationBar = ({
                               <div
                                 key={`notification-${n.id}-${n.created_at}`}
                                 className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl ${bgColor} flex items-start gap-3 group`}
-                                style={{ pointerEvents: 'auto' }}
+                                style={{ pointerEvents: "auto" }}
                                 onClick={() => {
-                                  console.log("[CLICK] Notification item clicked directly!");
+                                  console.log(
+                                    "[CLICK] Notification item clicked directly!"
+                                  );
                                   handleNotificationClick(n);
                                 }}
                               >
@@ -1612,13 +1712,18 @@ const NavigationBar = ({
                   e.stopPropagation();
                   e.preventDefault();
                   const newState = !bellOpen;
-                  console.log("[Bell] Clicked! Current state:", bellOpen, "-> New state:", newState);
+                  console.log(
+                    "[Bell] Clicked! Current state:",
+                    bellOpen,
+                    "-> New state:",
+                    newState
+                  );
 
                   if (newState && bellRef.current) {
                     const rect = bellRef.current.getBoundingClientRect();
                     setBellPosition({
-                      top: rect.bottom + 4,  // Reduced gap to 4px for tighter spacing
-                      right: window.innerWidth - rect.right
+                      top: rect.bottom + 4, // Reduced gap to 4px for tighter spacing
+                      right: window.innerWidth - rect.right,
                     });
                   }
 
@@ -1642,178 +1747,202 @@ const NavigationBar = ({
               </button>
 
               {/* Enhanced Responsive Notification Dropdown - Rendered via Portal */}
-              {bellOpen && bellPosition && typeof window !== 'undefined' && createPortal(
-                <div
-                  className="notification-dropdown-portal"
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    position: "fixed",
-                    top: `${bellPosition.top}px`,
-                    right: `${bellPosition.right}px`,
-                    zIndex: 99999,
-                  }}
-                >
+              {bellOpen &&
+                bellPosition &&
+                typeof window !== "undefined" &&
+                createPortal(
                   <div
-                    className={`bg-gradient-to-br from-gray-800 to-gray-900 text-yellow-100 rounded-2xl shadow-2xl border border-yellow-400/20 ${
-                      isDesktopDevice()
-                        ? "w-96"
-                        : isLaptopDevice()
-                        ? "w-80"
-                        : isTabletDevice()
-                        ? "w-72 max-w-[calc(100vw-2rem)]"
-                        : isSmallTablet()
-                        ? "w-80 max-w-[calc(100vw-2rem)]"
-                        : "w-72 max-w-[calc(100vw-1rem)]"
-                    }`}
+                    className="notification-dropdown-portal"
+                    onClick={(e) => e.stopPropagation()}
                     style={{
-                      boxShadow: "0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(251, 191, 36, 0.1)",
+                      position: "fixed",
+                      top: `${bellPosition.top}px`,
+                      right: `${bellPosition.right}px`,
+                      zIndex: 99999,
                     }}
                   >
-                    <div className="p-4 font-bold border-b border-yellow-400/20 flex items-center justify-between bg-gradient-to-r from-yellow-400/5 to-transparent rounded-t-2xl">
-                      <span className="text-yellow-200">Notifications</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-yellow-400 px-2 py-1 bg-yellow-400/10 rounded-full border border-yellow-400/20">
-                          {unreadCount} unread
-                        </span>
-                        {notifications.length > 0 && (
-                          <button
-                            onClick={handleClearAllNotifications}
-                            className="text-xs text-red-400 hover:text-red-300 px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded-full border border-red-400/20 hover:border-red-400/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400/50"
-                            title="Clear all notifications"
-                          >
-                            Clear All
-                          </button>
+                    <div
+                      className={`bg-gradient-to-br from-gray-800 to-gray-900 text-yellow-100 rounded-2xl shadow-2xl border border-yellow-400/20 ${
+                        isDesktopDevice()
+                          ? "w-96"
+                          : isLaptopDevice()
+                          ? "w-80"
+                          : isTabletDevice()
+                          ? "w-72 max-w-[calc(100vw-2rem)]"
+                          : isSmallTablet()
+                          ? "w-80 max-w-[calc(100vw-2rem)]"
+                          : "w-72 max-w-[calc(100vw-1rem)]"
+                      }`}
+                      style={{
+                        boxShadow:
+                          "0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(251, 191, 36, 0.1)",
+                      }}
+                    >
+                      <div className="p-4 font-bold border-b border-yellow-400/20 flex items-center justify-between bg-gradient-to-r from-yellow-400/5 to-transparent rounded-t-2xl">
+                        <span className="text-yellow-200">Notifications</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-yellow-400 px-2 py-1 bg-yellow-400/10 rounded-full border border-yellow-400/20">
+                            {unreadCount} unread
+                          </span>
+                          {notifications.length > 0 && (
+                            <button
+                              onClick={handleClearAllNotifications}
+                              className="text-xs text-red-400 hover:text-red-300 px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded-full border border-red-400/20 hover:border-red-400/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                              title="Clear all notifications"
+                            >
+                              Clear All
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div
+                        className="max-h-64 overflow-y-auto"
+                        onClick={() =>
+                          console.log(
+                            "[CONTAINER DESKTOP] Notification container clicked!"
+                          )
+                        }
+                      >
+                        {notifications.length === 0 ? (
+                          <div className="p-6 text-center">
+                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-yellow-400/10 to-yellow-300/5 flex items-center justify-center">
+                              <FaBell className="text-yellow-400/50 text-xl" />
+                            </div>
+                            <p className="text-gray-400 text-sm">
+                              No notifications
+                            </p>
+                          </div>
+                        ) : (
+                          notifications.map((n) => {
+                            // Decide color based on notification type or message
+                            let messageColor = "text-yellow-100";
+                            let bgColor = "";
+                            const msg = n.message?.toLowerCase() || "";
+                            const type = (n.type || "").toLowerCase();
+
+                            // Expired/expiring soon
+                            if (
+                              type === "expired" ||
+                              type === "expiring" ||
+                              msg.includes("expired") ||
+                              msg.includes("expiring soon")
+                            ) {
+                              messageColor = "text-red-500";
+                              bgColor =
+                                "bg-gradient-to-r from-red-800/18 via-red-700/15 to-transparent border-l-2 border-l-white";
+                            }
+                            // Low stock
+                            else if (
+                              type === "low_stock" ||
+                              msg.includes("low stock")
+                            ) {
+                              messageColor = "text-orange-400";
+                              bgColor =
+                                "bg-gradient-to-r from-orange-800/18 via-orange-700/15 to-transparent border-l-2 border-l-orange-300";
+                            }
+                            // Missing threshold
+                            else if (
+                              type === "missing_threshold" ||
+                              msg.includes("missing threshold") ||
+                              msg.includes("threshold not set")
+                            ) {
+                              messageColor = "text-blue-400";
+                              bgColor =
+                                "bg-gradient-to-r from-blue-800/18 via-blue-700/15 to-transparent border-l-2 border-l-blue-300";
+                            }
+                            // Auto-transfer notifications
+                            else if (
+                              type === "auto_transfer_surplus" ||
+                              type === "auto_transfer_today" ||
+                              type === "auto_transfer_master" ||
+                              type === "auto_transfer_spoilage" ||
+                              msg.includes("auto transfer")
+                            ) {
+                              messageColor = "text-blue-400";
+                              bgColor =
+                                "bg-gradient-to-r from-blue-800/18 via-blue-700/15 to-transparent border-l-2 border-l-blue-300";
+                            }
+                            // Default unread
+                            else if (n.status === "unread") {
+                              messageColor = "text-yellow-200";
+                              bgColor =
+                                "bg-gradient-to-r from-yellow-800/18 via-yellow-700/15 to-transparent border-l-2 border-l-yellow-300";
+                            }
+
+                            // Add visual indicator for unread/read
+                            const isUnread = n.status === "unread";
+
+                            return (
+                              <div
+                                key={`notification-${n.id}-${n.created_at}`}
+                                className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl ${bgColor} flex items-start gap-3 group`}
+                                style={{ pointerEvents: "auto" }}
+                                onClick={() => {
+                                  console.log(
+                                    "[CLICK DESKTOP] Notification item clicked directly!"
+                                  );
+                                  handleNotificationClick(n);
+                                }}
+                              >
+                                {/* Unread/Read dot indicator */}
+                                <span
+                                  className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                                    isUnread
+                                      ? "bg-yellow-400 animate-pulse shadow-yellow-400/40 shadow"
+                                      : "bg-gray-600"
+                                  }`}
+                                  title={isUnread ? "Unread" : "Read"}
+                                ></span>
+                                <div className="flex-1 min-w-0">
+                                  <div
+                                    className={`text-sm leading-relaxed font-medium ${messageColor}`}
+                                  >
+                                    {n.message}
+                                  </div>
+                                  <div className="text-xs text-yellow-400/70 mt-2 flex items-center gap-1">
+                                    <div className="w-1 h-1 bg-yellow-400 rounded-full"></div>
+                                    {new Date(n.created_at).toLocaleString(
+                                      "en-GB",
+                                      {
+                                        year: "numeric",
+                                        month: "short",
+                                        day: "2-digit",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        hour12: true,
+                                      }
+                                    )}
+                                    <span
+                                      className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                        isUnread
+                                          ? "bg-yellow-400/20 text-yellow-300 border border-yellow-400/40"
+                                          : "bg-gray-700/40 text-gray-300 border border-gray-500/40"
+                                      }`}
+                                    >
+                                      {isUnread ? "Unread" : "Read"}
+                                    </span>
+                                  </div>
+                                </div>
+                                {/* Remove notification button */}
+                                <button
+                                  onClick={(e) =>
+                                    handleRemoveNotification(n, e)
+                                  }
+                                  className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                                  title="Remove notification"
+                                  aria-label="Remove notification"
+                                >
+                                  <FaTimes size={12} />
+                                </button>
+                              </div>
+                            );
+                          })
                         )}
                       </div>
                     </div>
-                    <div
-                      className="max-h-64 overflow-y-auto"
-                      onClick={() => console.log("[CONTAINER DESKTOP] Notification container clicked!")}
-                    >
-                      {notifications.length === 0 ? (
-                        <div className="p-6 text-center">
-                          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-yellow-400/10 to-yellow-300/5 flex items-center justify-center">
-                            <FaBell className="text-yellow-400/50 text-xl" />
-                          </div>
-                          <p className="text-gray-400 text-sm">
-                            No notifications
-                          </p>
-                        </div>
-                      ) : (
-                        notifications.map((n) => {
-                          // Decide color based on notification type or message
-                          let messageColor = "text-yellow-100";
-                          let bgColor = "";
-                          const msg = n.message?.toLowerCase() || "";
-                          const type = (n.type || "").toLowerCase();
-
-                          // Expired/expiring soon
-                          if (
-                            type === "expired" ||
-                            type === "expiring" ||
-                            msg.includes("expired") ||
-                            msg.includes("expiring soon")
-                          ) {
-                            messageColor = "text-red-500";
-                            bgColor =
-                              "bg-gradient-to-r from-red-800/18 via-red-700/15 to-transparent border-l-2 border-l-white";
-                          }
-                          // Low stock
-                          else if (
-                            type === "low_stock" ||
-                            msg.includes("low stock")
-                          ) {
-                            messageColor = "text-orange-400";
-                            bgColor =
-                              "bg-gradient-to-r from-orange-800/18 via-orange-700/15 to-transparent border-l-2 border-l-orange-300";
-                          }
-                          // Missing threshold
-                          else if (
-                            type === "missing_threshold" ||
-                            msg.includes("missing threshold") ||
-                            msg.includes("threshold not set")
-                          ) {
-                            messageColor = "text-blue-400";
-                            bgColor =
-                              "bg-gradient-to-r from-blue-800/18 via-blue-700/15 to-transparent border-l-2 border-l-blue-300";
-                          }
-                          // Default unread
-                          else if (n.status === "unread") {
-                            messageColor = "text-yellow-200";
-                            bgColor =
-                              "bg-gradient-to-r from-yellow-800/18 via-yellow-700/15 to-transparent border-l-2 border-l-yellow-300";
-                          }
-
-                          // Add visual indicator for unread/read
-                          const isUnread = n.status === "unread";
-
-                          return (
-                            <div
-                              key={`notification-${n.id}-${n.created_at}`}
-                              className={`p-4 border-b border-yellow-400/10 cursor-pointer hover:bg-gradient-to-r hover:from-yellow-400/5 hover:to-transparent transition-all duration-300 last:border-b-0 last:rounded-b-2xl ${bgColor} flex items-start gap-3 group`}
-                              style={{ pointerEvents: 'auto' }}
-                              onClick={() => {
-                                console.log("[CLICK DESKTOP] Notification item clicked directly!");
-                                handleNotificationClick(n);
-                              }}
-                            >
-                              {/* Unread/Read dot indicator */}
-                              <span
-                                className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
-                                  isUnread
-                                    ? "bg-yellow-400 animate-pulse shadow-yellow-400/40 shadow"
-                                    : "bg-gray-600"
-                                }`}
-                                title={isUnread ? "Unread" : "Read"}
-                              ></span>
-                              <div className="flex-1 min-w-0">
-                                <div
-                                  className={`text-sm leading-relaxed font-medium ${messageColor}`}
-                                >
-                                  {n.message}
-                                </div>
-                                <div className="text-xs text-yellow-400/70 mt-2 flex items-center gap-1">
-                                  <div className="w-1 h-1 bg-yellow-400 rounded-full"></div>
-                                  {new Date(n.created_at).toLocaleString(
-                                    "en-GB",
-                                    {
-                                      year: "numeric",
-                                      month: "short",
-                                      day: "2-digit",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                      hour12: true,
-                                    }
-                                  )}
-                                  <span
-                                    className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                      isUnread
-                                        ? "bg-yellow-400/20 text-yellow-300 border border-yellow-400/40"
-                                        : "bg-gray-700/40 text-gray-300 border border-gray-500/40"
-                                    }`}
-                                  >
-                                    {isUnread ? "Unread" : "Read"}
-                                  </span>
-                                </div>
-                              </div>
-                              {/* Remove notification button */}
-                              <button
-                                onClick={(e) => handleRemoveNotification(n, e)}
-                                className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-400/50"
-                                title="Remove notification"
-                                aria-label="Remove notification"
-                              >
-                                <FaTimes size={12} />
-                              </button>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                </div>,
-                document.body
-              )}
+                  </div>,
+                  document.body
+                )}
             </div>
 
             {/* Enhanced Responsive User Profile with Avatar */}
@@ -1824,11 +1953,14 @@ const NavigationBar = ({
               }}
             >
               {/* Avatar */}
-              <div
-                className="flex-shrink-0 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 text-black font-bold flex items-center justify-center border-2 border-yellow-300 shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all duration-300 w-9 h-9 text-sm"
-              >
+              <div className="flex-shrink-0 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 text-black font-bold flex items-center justify-center border-2 border-yellow-300 shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all duration-300 w-9 h-9 text-sm">
                 {user?.name
-                  ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                  ? user.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .toUpperCase()
+                      .slice(0, 2)
                   : user?.email?.charAt(0).toUpperCase() || "U"}
               </div>
 
@@ -1838,7 +1970,7 @@ const NavigationBar = ({
                   className="font-semibold bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-200 bg-clip-text text-transparent leading-tight truncate drop-shadow-sm group-hover:from-yellow-100 group-hover:via-yellow-200 group-hover:to-yellow-100 transition-all duration-300 text-sm"
                   style={{
                     lineHeight: "1.2",
-                    maxWidth: "140px"
+                    maxWidth: "140px",
                   }}
                   title={user?.name || "User"}
                 >
@@ -1849,13 +1981,18 @@ const NavigationBar = ({
                   <span
                     className="px-2 py-0.5 bg-yellow-500/20 border border-yellow-400/30 rounded-full text-yellow-300 font-semibold uppercase tracking-wide truncate w-fit text-[9px]"
                     style={{
-                      maxWidth: "90px"
+                      maxWidth: "90px",
                     }}
                   >
-                    {role === "Owner" ? "Owner" :
-                     role === "General Manager" ? "GM" :
-                     role === "Store Manager" ? "SM" :
-                     role === "Assistant Store Manager" ? "ASM" : role}
+                    {role === "Owner"
+                      ? "Owner"
+                      : role === "General Manager"
+                      ? "General Manager"
+                      : role === "Store Manager"
+                      ? "Store Manager"
+                      : role === "Assistant Store Manager"
+                      ? "Assistant Store Manage"
+                      : role}
                   </span>
                 )}
               </div>
@@ -1868,7 +2005,7 @@ const NavigationBar = ({
         <div className="fixed inset-0 flex justify-center items-center bg-black/80 backdrop-blur-sm z-[101] px-4">
           <section
             className={`bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm rounded-2xl w-full p-6 text-left shadow-2xl border border-gray-700/50
-        ${isMobile ? "max-w-sm" : "max-w-md"}`}
+        ${isMobile ? "max-w-lg" : "max-w-4xl"}`}
             onClick={(e) => e.stopPropagation()}
             style={{
               animation: reducedMotion ? "none" : "fadeIn 0.3s ease-out",
@@ -1896,55 +2033,266 @@ const NavigationBar = ({
             <div className="space-y-2">
               <div>
                 <span className="font-semibold text-gray-300">Message:</span>{" "}
-                <span className="text-red-600">
+                <span
+                  className={getNotificationMessageColor(
+                    (notificationModalState as any).type
+                  )}
+                >
                   {notificationModalState.message}
                 </span>
               </div>
               {/* Show details for affected items */}
               {parseDetails((notificationModalState as any).details).length >
                 0 && (
-                <div>
-                  <span className="font-semibold text-gray-300">
-                    Affected Items:
-                  </span>
-                  <ul className="mt-2 space-y-2">
+                <div className="mt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`w-1 h-5 rounded-full ${
+                      ((notificationModalState as any).type || '').includes('auto_transfer') || ((notificationModalState as any).type || '').includes('transfer')
+                        ? 'bg-gradient-to-b from-blue-400 to-blue-600'
+                        : 'bg-gradient-to-b from-yellow-400 to-yellow-600'
+                    }`}></div>
+                    <span className="font-bold text-gray-200 text-lg">
+                      {((notificationModalState as any).type || '').includes('auto_transfer') || ((notificationModalState as any).type || '').includes('transfer')
+                        ? 'Transferred Items'
+                        : 'Affected Items'}
+                    </span>
+                    <span className={`ml-auto px-3 py-1 text-sm font-semibold rounded-full border ${
+                      ((notificationModalState as any).type || '').includes('auto_transfer') || ((notificationModalState as any).type || '').includes('transfer')
+                        ? 'bg-blue-900/40 text-blue-300 border-blue-400/20'
+                        : 'bg-yellow-900/40 text-yellow-300 border-yellow-400/20'
+                    }`}>
+                      {parseDetails((notificationModalState as any).details).length} {parseDetails((notificationModalState as any).details).length === 1 ? 'Item' : 'Items'}
+                    </span>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
                     {parseDetails((notificationModalState as any).details).map(
                       (item: any, idx: number) => (
-                        <li
+                        <div
                           key={`${item.item_id || idx}-${item.name || ""}-${
                             item.batch_date || ""
                           }`}
-                          className="bg-gradient-to-r from-yellow-400/10 via-yellow-300/8 to-yellow-200/5 rounded-lg px-4 py-2 flex flex-col shadow-sm border border-yellow-400/10 hover:border-yellow-400/30 transition-all"
+                          className={`bg-gradient-to-br from-gray-800/60 via-gray-800/40 to-gray-900/60 rounded-xl p-4 border border-gray-700/50 transition-all duration-300 shadow-lg ${
+                            ((notificationModalState as any).type || '').includes('auto_transfer') || ((notificationModalState as any).type || '').includes('transfer')
+                              ? 'hover:border-blue-400/40 hover:shadow-blue-400/10'
+                              : 'hover:border-yellow-400/40 hover:shadow-yellow-400/10'
+                          }`}
                         >
-                          <div className="flex items-center gap-2 font-semibold text-yellow-200">
-                            {item.name}:
-                            {item.item_id && (
-                              <span className="ml-2 px-2 py-0.5 bg-yellow-900/40 text-yellow-300 text-xs rounded-full border border-yellow-400/20">
-                                ID: {item.item_id}
-                              </span>
-                            )}
-                            {item.batch_date && (
-                              <span className="ml-2 px-2 py-0.5 bg-yellow-900/30 text-yellow-200 text-xs rounded-full border border-yellow-400/15">
-                                Batch {item.batch_date}
-                              </span>
+                          {/* Item Header */}
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div className="flex-1">
+                              <h4 className="text-yellow-100 font-bold text-base mb-1">
+                                {item.name}
+                              </h4>
+                              {item.category && (
+                                <span className="inline-block px-2.5 py-0.5 bg-blue-900/30 text-blue-300 text-xs font-medium rounded-md border border-blue-400/20">
+                                  {item.category}
+                                </span>
+                              )}
+                            </div>
+                            {/* Status Badge */}
+                            {(item.days_expired !== undefined || item.days_until_expiry !== undefined || (notificationModalState as any).type === 'low_stock') && (
+                              <div className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
+                                item.days_expired !== undefined
+                                  ? 'bg-red-900/30 text-red-300 border-red-400/30'
+                                  : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
+                                  ? 'bg-orange-900/30 text-orange-300 border-orange-400/30'
+                                  : item.days_until_expiry !== undefined
+                                  ? 'bg-yellow-900/30 text-yellow-300 border-yellow-400/30'
+                                  : 'bg-red-900/30 text-red-300 border-red-400/30'
+                              }`}>
+                                {item.days_expired !== undefined
+                                  ? 'EXPIRED'
+                                  : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
+                                  ? 'URGENT'
+                                  : item.days_until_expiry !== undefined
+                                  ? 'EXPIRING'
+                                  : 'LOW STOCK'}
+                              </div>
                             )}
                           </div>
-                          <div className="flex flex-wrap gap-2 mt-1 text-xs text-yellow-100">
+
+                          {/* Item Details Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {/* Quantity */}
                             {typeof item.quantity !== "undefined" && (
-                              <span className="px-2 py-0.5 bg-yellow-800/30 rounded-full border border-yellow-400/10">
-                                Qty: {item.quantity}
-                              </span>
+                              <div className="flex items-center gap-2 bg-gray-900/40 rounded-lg px-3 py-2 border border-gray-700/30">
+                                <div className="w-8 h-8 rounded-full bg-yellow-900/30 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-yellow-400 font-bold text-sm">📦</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-gray-400 text-xs font-medium">Quantity</p>
+                                  <p className="text-yellow-100 text-sm font-bold truncate">
+                                    {formatQuantity(item.quantity)} {item.unit || ""}
+                                  </p>
+                                </div>
+                              </div>
                             )}
+
+                            {/* Batch Date */}
+                            {item.batch_date && (
+                              <div className="flex items-center gap-2 bg-gray-900/40 rounded-lg px-3 py-2 border border-gray-700/30">
+                                <div className="w-8 h-8 rounded-full bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-blue-400 font-bold text-sm">📅</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-gray-400 text-xs font-medium">Batch Date</p>
+                                  <p className="text-blue-100 text-sm font-bold truncate">
+                                    {item.batch_date}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Expiration Date */}
                             {item.expiration_date && (
-                              <span className="px-2 py-0.5 bg-yellow-800/30 rounded-full border border-yellow-400/10">
-                                Exp: {item.expiration_date}
-                              </span>
+                              <div className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${
+                                item.days_expired !== undefined
+                                  ? 'bg-red-900/20 border-red-700/30'
+                                  : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
+                                  ? 'bg-orange-900/20 border-orange-700/30'
+                                  : 'bg-yellow-900/20 border-yellow-700/30'
+                              }`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                  item.days_expired !== undefined
+                                    ? 'bg-red-900/40'
+                                    : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
+                                    ? 'bg-orange-900/40'
+                                    : 'bg-yellow-900/40'
+                                }`}>
+                                  <span className={`font-bold text-sm ${
+                                    item.days_expired !== undefined
+                                      ? 'text-red-400'
+                                      : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
+                                      ? 'text-orange-400'
+                                      : 'text-yellow-400'
+                                  }`}>⏰</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-gray-400 text-xs font-medium">Expiration</p>
+                                  <p className={`text-sm font-bold truncate ${
+                                    item.days_expired !== undefined
+                                      ? 'text-red-300'
+                                      : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
+                                      ? 'text-orange-300'
+                                      : 'text-yellow-300'
+                                  }`}>
+                                    {item.expiration_date}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Days Info */}
+                            {(item.days_expired !== undefined || item.days_until_expiry !== undefined) && (
+                              <div className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${
+                                item.days_expired !== undefined
+                                  ? 'bg-red-900/20 border-red-700/30'
+                                  : 'bg-orange-900/20 border-orange-700/30'
+                              }`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                  item.days_expired !== undefined
+                                    ? 'bg-red-900/40'
+                                    : 'bg-orange-900/40'
+                                }`}>
+                                  <span className={`font-bold text-sm ${
+                                    item.days_expired !== undefined
+                                      ? 'text-red-400'
+                                      : 'text-orange-400'
+                                  }`}>⚠️</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-gray-400 text-xs font-medium">
+                                    {item.days_expired !== undefined ? 'Expired' : 'Expires In'}
+                                  </p>
+                                  <p className={`text-sm font-bold ${
+                                    item.days_expired !== undefined
+                                      ? 'text-red-300'
+                                      : 'text-orange-300'
+                                  }`}>
+                                    {item.days_expired !== undefined
+                                      ? `${item.days_expired} ${item.days_expired === 1 ? 'day' : 'days'} ago`
+                                      : `${item.days_until_expiry} ${item.days_until_expiry === 1 ? 'day' : 'days'}`
+                                    }
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Source Table */}
+                            {item.source_table && (
+                              <div className="flex items-center gap-2 bg-gray-900/40 rounded-lg px-3 py-2 border border-gray-700/30 sm:col-span-2">
+                                <div className="w-8 h-8 rounded-full bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-purple-400 font-bold text-sm">🗄️</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-gray-400 text-xs font-medium">Source</p>
+                                  <p className="text-purple-100 text-sm font-bold">
+                                    {item.source_table === 'inventory'
+                                      ? 'Master Inventory'
+                                      : item.source_table === 'inventory_today'
+                                      ? "Today's Inventory"
+                                      : item.source_table === 'inventory_surplus'
+                                      ? 'Surplus Inventory'
+                                      : item.source_table}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Auto-transfer specific fields */}
+                            {item.menu_item && (
+                              <div className="flex items-center gap-2 bg-gray-900/40 rounded-lg px-3 py-2 border border-gray-700/30 sm:col-span-2">
+                                <div className="w-8 h-8 rounded-full bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-green-400 font-bold text-sm">🍽️</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-gray-400 text-xs font-medium">For Menu Item</p>
+                                  <p className="text-green-100 text-sm font-bold truncate">
+                                    {item.menu_item}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Transfer breakdown for auto-transfer notifications */}
+                            {(item.from_surplus !== undefined || item.from_master !== undefined) && (
+                              <div className="sm:col-span-2 bg-gray-900/40 rounded-lg px-3 py-2.5 border border-gray-700/30">
+                                <p className="text-gray-400 text-xs font-medium mb-2">Transfer Breakdown</p>
+                                <div className="flex gap-3">
+                                  {item.from_surplus > 0 && (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-cyan-400 font-bold text-xs">📦</span>
+                                      <span className="text-cyan-300 text-sm font-semibold">
+                                        {formatQuantity(item.from_surplus)} {item.unit || ""} from Surplus
+                                      </span>
+                                    </div>
+                                  )}
+                                  {item.from_master > 0 && (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-indigo-400 font-bold text-xs">🏪</span>
+                                      <span className="text-indigo-300 text-sm font-semibold">
+                                        {formatQuantity(item.from_master)} {item.unit || ""} from Master
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             )}
                           </div>
-                        </li>
+
+                          {/* Reason/Additional Info */}
+                          {item.reason && (
+                            <div className="mt-3 pt-3 border-t border-gray-700/30">
+                              <p className="text-gray-400 text-xs mb-1 font-medium">Reason</p>
+                              <p className="text-red-300 text-sm font-semibold">
+                                {item.reason}
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       )
                     )}
-                  </ul>
+                  </div>
                 </div>
               )}
               <div>

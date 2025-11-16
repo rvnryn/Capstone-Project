@@ -522,7 +522,7 @@ export default function ViewMenu() {
                           ing.unavailable_reason
                         );
                         const isProblematic =
-                          ing.is_unavailable || ing.is_low_stock;
+                          ing.is_unavailable || ing.is_low_stock || ing.is_critical;
 
                         return (
                           <div
@@ -572,44 +572,88 @@ export default function ViewMenu() {
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
                                   <span className="flex items-center gap-1">
                                     <span className="font-medium">Total:</span>{" "}
-                                    {ing.stock_quantity || 0}
+                                    {(() => {
+                                      const val = ing.stock_quantity || 0;
+                                      return Number.isInteger(val) ? val : Number(val).toFixed(2);
+                                    })()} {ing.inventory_unit || ing.measurements || ""}
                                   </span>
                                   <span className="flex items-center gap-1">
                                     <span className="font-medium">
                                       Available:
                                     </span>{" "}
-                                    {ing.available_stock || 0}
+                                    {(() => {
+                                      const val = ing.available_stock || 0;
+                                      return Number.isInteger(val) ? val : Number(val).toFixed(2);
+                                    })()} {ing.inventory_unit || ing.measurements || ""}
                                   </span>
                                   {ing.expired_stock > 0 && (
                                     <span className="flex items-center gap-1 text-red-400">
                                       <span className="font-medium">
                                         Expired:
                                       </span>{" "}
-                                      {ing.expired_stock}
+                                      {(() => {
+                                        const val = ing.expired_stock;
+                                        return Number.isInteger(val) ? val : Number(val).toFixed(2);
+                                      })()} {ing.inventory_unit || ing.measurements || ""}
                                     </span>
                                   )}
                                 </div>
                               </div>
                             </div>
-                            {isProblematic && (
-                              <div className="flex flex-col gap-1 sm:items-end">
+                            {/* Stock Status Badge */}
+                            {(() => {
+                              const status = ing.stock_status || "Normal";
+                              let statusConfig = {
+                                bg: "bg-green-500/20",
+                                text: "text-green-300",
+                                border: "border-green-400/30",
+                                label: "Normal",
+                                icon: <FaCheckCircle size={12} />,
+                              };
+
+                              if (status === "Out of Stock") {
+                                statusConfig = {
+                                  bg: "bg-gray-500/20",
+                                  text: "text-gray-300",
+                                  border: "border-gray-400/30",
+                                  label: "Out of Stock",
+                                  icon: <FaTimesCircle size={12} />,
+                                };
+                              } else if (status === "Expired") {
+                                statusConfig = {
+                                  bg: "bg-gray-500/20",
+                                  text: "text-gray-300",
+                                  border: "border-gray-400/30",
+                                  label: "Expired",
+                                  icon: <FaTimesCircle size={12} />,
+                                };
+                              } else if (status === "Critical") {
+                                statusConfig = {
+                                  bg: "bg-red-500/20",
+                                  text: "text-red-300",
+                                  border: "border-red-400/30",
+                                  label: "Critical",
+                                  icon: <FaExclamationTriangle size={12} />,
+                                };
+                              } else if (status === "Low Stock") {
+                                statusConfig = {
+                                  bg: "bg-yellow-500/20",
+                                  text: "text-yellow-300",
+                                  border: "border-yellow-400/30",
+                                  label: "Low Stock",
+                                  icon: <FaExclamationTriangle size={12} />,
+                                };
+                              }
+
+                              return (
                                 <span
-                                  className={`text-xs px-3 py-1.5 rounded-full border ${reasonProps.color} inline-flex items-center gap-1 font-medium`}
+                                  className={`text-xs ${statusConfig.bg} ${statusConfig.text} px-3 py-1.5 rounded-full border ${statusConfig.border} inline-flex items-center gap-1 font-medium`}
                                 >
-                                  {reasonProps.icon}
-                                  {reasonProps.label}
+                                  {statusConfig.icon}
+                                  {statusConfig.label}
                                 </span>
-                                <span className="text-xs text-gray-400">
-                                  {reasonProps.description}
-                                </span>
-                              </div>
-                            )}
-                            {!isProblematic && (
-                              <span className="text-xs bg-green-500/20 text-green-300 px-3 py-1.5 rounded-full border border-green-400/30 inline-flex items-center gap-1 font-medium">
-                                <FaCheckCircle size={12} />
-                                Available
-                              </span>
-                            )}
+                              );
+                            })()}
                           </div>
                         );
                       })}

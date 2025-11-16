@@ -220,7 +220,7 @@ export default function InventoryPage() {
     if (!date) return "-";
     const dt = typeof date === "string" ? new Date(date) : date;
     if (isNaN(dt.getTime())) return "-";
-    return dt.toLocaleString("en-CA", {
+    return dt.toLocaleString("en-US", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -234,11 +234,7 @@ export default function InventoryPage() {
     if (!date) return "-";
     const dt = typeof date === "string" ? new Date(date) : date;
     if (isNaN(dt.getTime())) return "-";
-    return dt.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
+    return dt.toLocaleDateString("en-US");
   };
 
   const batchDateOptions = useMemo(() => {
@@ -258,6 +254,7 @@ export default function InventoryPage() {
     setSearchQuery("");
     setSelectedCategory("");
     setSelectedBatchDate("");
+    setSelectedStatus("");
     setSortConfig({ key: "", direction: "asc" });
   };
 
@@ -271,31 +268,37 @@ export default function InventoryPage() {
     const total = inventoryData.length;
 
     // Group items by name for aggregate status counting
-    const itemsByName = inventoryData.reduce((acc: Record<string, InventoryItem[]>, item: InventoryItem) => {
-      const name = String(item.item_name || item.name || '');
-      if (!(name in acc)) acc[name] = [];
-      acc[name].push(item);
-      return acc;
-    }, {} as Record<string, InventoryItem[]>);
+    const itemsByName = inventoryData.reduce(
+      (acc: Record<string, InventoryItem[]>, item: InventoryItem) => {
+        const name = String(item.item_name || item.name || "");
+        if (!(name in acc)) acc[name] = [];
+        acc[name].push(item);
+        return acc;
+      },
+      {} as Record<string, InventoryItem[]>
+    );
 
     // Count unique items by their aggregate status
     // An item is "Out Of Stock" only if ALL its batches are out of stock
-    const outOfStock = Object.values(itemsByName).filter(batches => {
-      const totalStock = (batches as InventoryItem[]).reduce((sum, batch) => sum + (batch.stock || 0), 0);
+    const outOfStock = Object.values(itemsByName).filter((batches) => {
+      const totalStock = (batches as InventoryItem[]).reduce(
+        (sum, batch) => sum + (batch.stock || 0),
+        0
+      );
       return totalStock === 0;
     }).length;
 
     // For other statuses, count unique items (not individual batches)
-    const criticalStock: number = Object.values(itemsByName).filter(batches =>
-      (batches as InventoryItem[]).some(item => item.status === "Critical")
+    const criticalStock: number = Object.values(itemsByName).filter((batches) =>
+      (batches as InventoryItem[]).some((item) => item.status === "Critical")
     ).length;
 
-    const lowStock = Object.values(itemsByName).filter(batches =>
-      (batches as InventoryItem[]).some(item => item.status === "Low")
+    const lowStock = Object.values(itemsByName).filter((batches) =>
+      (batches as InventoryItem[]).some((item) => item.status === "Low")
     ).length;
 
-    const normalStock = Object.values(itemsByName).filter(batches =>
-      (batches as InventoryItem[]).every(item => item.status === "Normal")
+    const normalStock = Object.values(itemsByName).filter((batches) =>
+      (batches as InventoryItem[]).every((item) => item.status === "Normal")
     ).length;
 
     const totalValue = inventoryData.reduce(
@@ -407,7 +410,13 @@ export default function InventoryPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategory, selectedBatchDate, sortConfig]);
+  }, [
+    searchQuery,
+    selectedCategory,
+    selectedBatchDate,
+    selectedStatus,
+    sortConfig,
+  ]);
 
   const requestSort = (key: string) => {
     setSortConfig((prev) => ({
@@ -697,7 +706,9 @@ export default function InventoryPage() {
                   >
                     <FiFilter className="text-sm" />
                     Filters
-                    {(selectedCategory || selectedBatchDate) && (
+                    {(selectedCategory ||
+                      selectedBatchDate ||
+                      selectedStatus) && (
                       <span
                         className={`w-2 h-2 rounded-full ${
                           showFilters ? "bg-black" : "bg-yellow-400"
@@ -907,7 +918,9 @@ export default function InventoryPage() {
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap">
                               <span className="text-white font-semibold text-sm xs:text-base sm:text-lg">
-                                {item.stock}
+                                {Number(item.stock) % 1 === 0
+                                  ? Number(item.stock).toFixed(0)
+                                  : Number(item.stock).toFixed(2)}
                                 {item.unit && (
                                   <span className="ml-1 text-gray-400 text-xs xs:text-sm font-normal">
                                     {item.unit}
@@ -1118,7 +1131,10 @@ export default function InventoryPage() {
                     {itemToTransfer.name}
                   </p>
                   <p className="text-gray-400 text-xs xs:text-sm">
-                    Available: {itemToTransfer.stock}
+                    Available:{" "}
+                    {Number(itemToTransfer.stock) % 1 === 0
+                      ? Number(itemToTransfer.stock).toFixed(0)
+                      : Number(itemToTransfer.stock).toFixed(2)}
                     {typeof itemToTransfer.unit === "string" &&
                       itemToTransfer.unit.trim() !== "" && (
                         <span className="ml-1 text-gray-400 text-xs xs:text-sm font-normal">

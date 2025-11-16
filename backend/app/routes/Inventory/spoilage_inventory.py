@@ -99,6 +99,7 @@ async def list_spoilage(
 			return (
 				postgrest_client.table("inventory_spoilage")
 				.select("*")
+				.order("batch_date", desc=False)
 				.range(skip, skip + limit - 1)
 				.execute()
 			)

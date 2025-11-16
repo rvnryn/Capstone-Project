@@ -257,11 +257,12 @@ def check_inventory_alerts():
             category = item.get("category")
             source_table = item.get("source_table")
 
-            # Get threshold from inventory_settings (match by item_name or category)
+            # Get threshold and unit from inventory_settings (match by item_name or category)
             threshold = None
+            unit = ""
             threshold_resp = (
                     postgrest_client.table("inventory_settings")
-                .select("low_stock_threshold")
+                .select("low_stock_threshold,default_unit")
                 .eq("name", item_name)
                 .execute()
             )
@@ -271,11 +272,12 @@ def check_inventory_alerts():
                 and threshold_resp.data[0].get("low_stock_threshold") is not None
             ):
                 threshold = float(threshold_resp.data[0]["low_stock_threshold"])
+                unit = threshold_resp.data[0].get("default_unit", "")
             # If not found by name, try by category
             if threshold is None and category:
                 threshold_resp = (
                         postgrest_client.table("inventory_settings")
-                    .select("low_stock_threshold")
+                    .select("low_stock_threshold,default_unit")
                     .eq("category", category)
                     .execute()
                 )
@@ -285,6 +287,8 @@ def check_inventory_alerts():
                     and threshold_resp.data[0].get("low_stock_threshold") is not None
                 ):
                     threshold = float(threshold_resp.data[0]["low_stock_threshold"])
+                    if not unit:  # Only set unit if not already set
+                        unit = threshold_resp.data[0].get("default_unit", "")
 
             print(
                 f"Item: {item_name} ({source_table}), Stock: {stock}, Threshold: {threshold}"
@@ -298,6 +302,7 @@ def check_inventory_alerts():
                         "name": item_name,
                         "batch_date": item_batch_date,
                         "quantity": stock,
+                        "unit": unit,
                         "expiration_date": exp_date,
                         "category": category,
                         "source_table": source_table,
@@ -322,6 +327,7 @@ def check_inventory_alerts():
                             "name": item_name,
                             "batch_date": item_batch_date,
                             "quantity": stock,
+                            "unit": unit,
                             "expiration_date": exp_date,
                             "category": category,
                             "source_table": source_table,
@@ -336,6 +342,7 @@ def check_inventory_alerts():
                             "name": item_name,
                             "batch_date": item_batch_date,
                             "quantity": stock,
+                            "unit": unit,
                             "expiration_date": exp_date,
                             "category": category,
                             "source_table": source_table,
@@ -356,6 +363,7 @@ def check_inventory_alerts():
                         "name": item_name,
                         "batch_date": item_batch_date,
                         "quantity": stock,
+                        "unit": unit,
                         "expiration_date": exp_date,
                         "category": category,
                         "source_table": source_table,

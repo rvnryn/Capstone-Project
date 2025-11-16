@@ -89,8 +89,12 @@ export default function AddInventoryItem() {
   const [hasExpiration, setHasExpiration] = useState(false);
 
   // Autocomplete state
-  const [itemSuggestions, setItemSuggestions] = useState<{item_name: string, category: string, measurement: string}[]>([]);
-  const [filteredSuggestions, setFilteredSuggestions] = useState<{item_name: string, category: string, measurement: string}[]>([]);
+  const [itemSuggestions, setItemSuggestions] = useState<
+    { item_name: string; category: string; measurement: string }[]
+  >([]);
+  const [filteredSuggestions, setFilteredSuggestions] = useState<
+    { item_name: string; category: string; measurement: string }[]
+  >([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
 
@@ -119,13 +123,21 @@ export default function AddInventoryItem() {
   useEffect(() => {
     const fetchItemNames = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/inventory/all-item-names");
+        const response = await fetch(
+          "http://localhost:8000/api/inventory/all-item-names"
+        );
         if (response.ok) {
           const data = await response.json();
-          console.log("[Autocomplete] Fetched item names:", data.items?.length || 0);
+          console.log(
+            "[Autocomplete] Fetched item names:",
+            data.items?.length || 0
+          );
           setItemSuggestions(data.items || []);
         } else {
-          console.error("[Autocomplete] Failed to fetch item names:", response.status);
+          console.error(
+            "[Autocomplete] Failed to fetch item names:",
+            response.status
+          );
         }
       } catch (error) {
         console.error("[Autocomplete] Error fetching item names:", error);
@@ -226,7 +238,9 @@ export default function AddInventoryItem() {
             ? value === ""
               ? 0
               : Number(value)
-            : name === "name" ? value : capitalizeWords(value), // Don't capitalize while typing name (for autocomplete)
+            : name === "name"
+            ? value
+            : capitalizeWords(value), // Don't capitalize while typing name (for autocomplete)
       }));
     },
     [itemSuggestions]
@@ -235,7 +249,11 @@ export default function AddInventoryItem() {
   const handleFocus = (fieldName: string) => {
     setFocusedField(fieldName);
     // Show suggestions again when focusing on name field if there's text
-    if (fieldName === "name" && formData.name.trim() && itemSuggestions.length > 0) {
+    if (
+      fieldName === "name" &&
+      formData.name.trim() &&
+      itemSuggestions.length > 0
+    ) {
       const filtered = itemSuggestions.filter((item) =>
         item.item_name.toLowerCase().includes(formData.name.toLowerCase())
       );
@@ -251,7 +269,11 @@ export default function AddInventoryItem() {
   };
 
   // Handle suggestion selection
-  const handleSuggestionSelect = (suggestion: {item_name: string, category: string, measurement: string}) => {
+  const handleSuggestionSelect = (suggestion: {
+    item_name: string;
+    category: string;
+    measurement: string;
+  }) => {
     console.log("[Autocomplete] Selected suggestion:", suggestion);
     setFormData((prev) => ({
       ...prev,
@@ -330,8 +352,7 @@ export default function AddInventoryItem() {
     const useThreshold =
       !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
 
-    let stockStatus: "Normal" | "Critical" | "Low" | "Out Of Stock" =
-      "Normal";
+    let stockStatus: "Normal" | "Critical" | "Low" | "Out Of Stock" = "Normal";
 
     // Determine stock status based on comprehensive business logic
     if (formData.stock === 0) {
@@ -351,41 +372,44 @@ export default function AddInventoryItem() {
     const batchDate = today.toISOString().split("T")[0];
 
     // Use React Query mutation - auto-refreshes inventory list!
-    addMutation.mutate({
-      item_name: capitalizeFirstLetter(formData.name.trim()),
-      category: formData.category,
-      stock_quantity: formData.stock,
-      stock_status: stockStatus,
-      unit_cost: Number(formData.unit_cost) || 0,
-      batch_date: batchDate,
-      expiration_date:
-        hasExpiration && formData.expiration_date
-          ? formData.expiration_date
-          : null,
-    }, {
-      onSuccess: () => {
-        setShowSuccessMessage(true);
-        setFormData({
-          name: "",
-          category: "",
-          stock: 0,
-          unit_cost: "",
-          expiration_date: "",
-        });
-        setIsDirty(false);
-        setIsSubmitted(false);
-
-        // Show success message for 2 seconds then redirect
-        setTimeout(() => {
-          setShowSuccessMessage(false);
-          router.push(routes.master_inventory);
-        }, 2000);
+    addMutation.mutate(
+      {
+        item_name: capitalizeFirstLetter(formData.name.trim()),
+        category: formData.category,
+        stock_quantity: formData.stock,
+        stock_status: stockStatus,
+        unit_cost: Number(formData.unit_cost) || 0,
+        batch_date: batchDate,
+        expiration_date:
+          hasExpiration && formData.expiration_date
+            ? formData.expiration_date
+            : null,
       },
-      onError: (error: any) => {
-        console.error("Error adding inventory item:", error);
-        alert("Failed to add inventory item. Please try again.");
+      {
+        onSuccess: () => {
+          setShowSuccessMessage(true);
+          setFormData({
+            name: "",
+            category: "",
+            stock: 0,
+            unit_cost: "",
+            expiration_date: "",
+          });
+          setIsDirty(false);
+          setIsSubmitted(false);
+
+          // Show success message for 2 seconds then redirect
+          setTimeout(() => {
+            setShowSuccessMessage(false);
+            router.push(routes.master_inventory);
+          }, 2000);
+        },
+        onError: (error: any) => {
+          console.error("Error adding inventory item:", error);
+          alert("Failed to add inventory item. Please try again.");
+        },
       }
-    });
+    );
   };
 
   const handleCancel = () => {
@@ -540,16 +564,31 @@ export default function AddInventoryItem() {
                               index === selectedSuggestionIndex
                                 ? "bg-yellow-400 text-gray-900"
                                 : "hover:bg-gray-700 text-white"
-                            } ${index !== filteredSuggestions.length - 1 ? "border-b border-gray-700" : ""}`}
+                            } ${
+                              index !== filteredSuggestions.length - 1
+                                ? "border-b border-gray-700"
+                                : ""
+                            }`}
                           >
                             <div className="flex items-center justify-between">
                               <div>
-                                <div className="font-semibold">{suggestion.item_name}</div>
+                                <div className="font-semibold">
+                                  {suggestion.item_name}
+                                </div>
                                 <div className="text-xs text-gray-400 mt-1">
-                                  Category: {suggestion.category || "Not set"} {suggestion.measurement ? `• ${suggestion.measurement}` : ""}
+                                  Category: {suggestion.category || "Not set"}{" "}
+                                  {suggestion.measurement
+                                    ? `• ${suggestion.measurement}`
+                                    : ""}
                                 </div>
                               </div>
-                              <FiArrowRight className={index === selectedSuggestionIndex ? "text-gray-900" : "text-gray-400"} />
+                              <FiArrowRight
+                                className={
+                                  index === selectedSuggestionIndex
+                                    ? "text-gray-900"
+                                    : "text-gray-400"
+                                }
+                              />
                             </div>
                           </div>
                         ))}
@@ -624,6 +663,8 @@ export default function AddInventoryItem() {
                       name="stock"
                       type="number"
                       min={1}
+                      max={999}
+                      step="0.01"
                       value={formData.stock === 0 ? "" : formData.stock}
                       onChange={handleChange}
                       onFocus={() => handleFocus("stock")}

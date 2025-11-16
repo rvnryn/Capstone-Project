@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   useInventorySettingsAPI,
   InventorySetting,
@@ -38,7 +38,6 @@ export default function ViewInventoryItem() {
   const [showEditModal, setShowEditModal] = useState(false);
   const { fetchSettings } = useInventorySettingsAPI();
   const [settings, setSettings] = useState<InventorySetting[]>([]);
-  const [unit, setUnit] = useState<string>("");
 
   // Fetch settings
   useEffect(() => {
@@ -47,30 +46,38 @@ export default function ViewInventoryItem() {
       .catch((err) => console.error("Error fetching settings:", err));
   }, [fetchSettings]);
 
-  // Format item data when it loads
-  const item = rawData ? {
-    id: rawData.item_id,
-    name: rawData.item_name,
-    batch: rawData.batch_date,
-    category: rawData.category,
-    status: rawData.stock_status,
-    unit_price:
-      rawData.unit_price !== undefined ? Number(rawData.unit_price) : null,
-    stock: rawData.stock_quantity,
-    added: rawData.created_at,
-    updated: rawData.updated_at,
-    expiration_date: rawData.expiration_date || null,
-  } : null;
+  // Format item data when it loads - match Master Inventory logic
+  const item = useMemo(() => {
+    if (!rawData) return null;
 
-  // Find unit from settings
-  useEffect(() => {
-    if (rawData && settings.length > 0) {
-      const itemName = (rawData.item_name || "").toString().trim().toLowerCase();
-      const setting = settings.find(
-        (s) => (s.name || "").toString().trim().toLowerCase() === itemName
-      );
-      setUnit(setting?.default_unit || "");
-    }
+    // Find matching setting for this item
+    const itemNameLower = (rawData.item_name || "")
+      .toString()
+      .trim()
+      .toLowerCase();
+    const setting = settings.find(
+      (s) => (s.name || "").toString().trim().toLowerCase() === itemNameLower
+    );
+
+    // Get unit of measurement from settings
+    const unit = setting?.default_unit || "";
+
+    return {
+      id: rawData.item_id,
+      name: setting?.name || rawData.item_name, // Use settings name if available
+      batch: rawData.batch_date,
+      category: rawData.category,
+      status: rawData.stock_status,
+      unit_cost:
+        rawData.unit_cost !== undefined && rawData.unit_cost !== null
+          ? Number(rawData.unit_cost)
+          : null,
+      stock: rawData.stock_quantity,
+      added: rawData.created_at,
+      updated: rawData.updated_at,
+      expiration_date: rawData.expiration_date || null,
+      unit, // Add unit to item
+    };
   }, [rawData, settings]);
 
   // Redirect if no itemId
@@ -92,18 +99,14 @@ export default function ViewInventoryItem() {
     if (!input) return "-";
     const date = new Date(input);
     if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
+    return date.toLocaleDateString("en-US");
   };
 
   const formatDateTime = (date: string | Date | null): string => {
     if (!date) return "-";
     const dt = typeof date === "string" ? new Date(date) : date;
     if (isNaN(dt.getTime())) return "-";
-    return dt.toLocaleString("en-CA", {
+    return dt.toLocaleString("en-US", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -249,15 +252,30 @@ export default function ViewInventoryItem() {
                     icon={<FiHash className="text-green-400" />}
                     label="Quantity In Stock"
                     value={
-                      unit ? `${item.stock} ${unit}` : item.stock.toString()
+                      item.unit
+                        ? `${Number(item.stock) % 1 === 0 ? Number(item.stock).toFixed(0) : Number(item.stock).toFixed(2)} ${item.unit}`
+                        : Number(item.stock) % 1 === 0 ? Number(item.stock).toFixed(0) : Number(item.stock).toFixed(2)
                     }
                   />
                   <ItemRow
                     icon={<FiTag className="text-green-400" />}
-                    label="Unit Price"
+                    label="Unit Cost"
                     value={
-                      item.unit_price !== undefined && item.unit_price !== null
-                        ? `₱${Number(item.unit_price).toFixed(2)}`
+                      item.unit_cost !== undefined && item.unit_cost !== null
+                        ? `₱${Number(item.unit_cost).toFixed(2)}`
+                        : "-"
+                    }
+                  />
+                  <ItemRow
+                    icon={<FiTag className="text-purple-400" />}
+                    label="Total Value"
+                    value={
+                      item.unit_cost !== undefined &&
+                      item.unit_cost !== null &&
+                      item.stock !== undefined
+                        ? `₱${(
+                            Number(item.unit_cost) * Number(item.stock)
+                          ).toFixed(2)}`
                         : "-"
                     }
                   />
@@ -280,9 +298,11 @@ export default function ViewInventoryItem() {
                     label="Stock Status"
                     value={item.status}
                     valueClassName={
-                      item.status === "Low"
+                      item.status === "Out Of Stock"
+                        ? "text-gray-400 font-semibold"
+                        : item.status === "Critical"
                         ? "text-red-400 font-semibold"
-                        : item.status === "Normal"
+                        : item.status === "Low"
                         ? "text-yellow-400 font-semibold"
                         : "text-green-400 font-semibold"
                     }

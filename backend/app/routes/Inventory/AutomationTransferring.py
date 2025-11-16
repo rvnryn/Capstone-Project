@@ -50,6 +50,21 @@ def log_user_activity(db, user, action_type, description):
     except Exception as e:
         logger.warning(f"Failed to record user activity ({action_type}): {e}")
 
+async def wait_until_6am():
+    now = datetime.now()
+    today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=20, minutes=29)
+    if now >= today_6am:
+        today_6am += timedelta(days=1)
+    seconds_until_6am = (today_6am - now).total_seconds()
+    await asyncio.sleep(seconds_until_6am)
+
+async def wait_until_10pm():
+    now = datetime.now()
+    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=2, minutes=49)
+    if now >= today_10pm:
+        today_10pm += timedelta(days=1)
+    seconds_until_10pm = (today_10pm - now).total_seconds()
+    await asyncio.sleep(seconds_until_10pm)
 
 async def fifo_transfer_to_today_with_surplus_first(item_name: str, quantity_needed: float):
     now = datetime.utcnow().isoformat()
@@ -275,22 +290,6 @@ async def fifo_transfer_to_today_with_surplus_first(item_name: str, quantity_nee
             "errors": [str(e)]
         }
 
-async def wait_until_6am():
-    now = datetime.now()
-    today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=2, minutes=48)
-    if now >= today_6am:
-        today_6am += timedelta(days=1)
-    seconds_until_6am = (today_6am - now).total_seconds()
-    await asyncio.sleep(seconds_until_6am)
-
-async def wait_until_10pm():
-    now = datetime.now()
-    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=2, minutes=49)
-    if now >= today_10pm:
-        today_10pm += timedelta(days=1)
-    seconds_until_10pm = (today_10pm - now).total_seconds()
-    await asyncio.sleep(seconds_until_10pm)
-
 @router.on_event("startup")
 @repeat_every(seconds=86400)  # Run every 24 hours
 async def auto_transfer_master_to_today_top_selling() -> None:
@@ -345,6 +344,7 @@ async def auto_transfer_master_to_today_top_selling() -> None:
 
         # 2. For each top item, get required ingredients
         total_transfers = 0
+        transfer_details = []  # Collect detailed transfer information for notification
         for item_name in top_items:
             # Get menu_id from menu table
             @run_blocking
@@ -406,6 +406,17 @@ async def auto_transfer_master_to_today_top_selling() -> None:
                 # Log the transfer
                 if transfer_result["transferred_quantity"] > 0:
                     total_transfers += 1
+
+                    # Collect detailed transfer information for notification
+                    transfer_details.append({
+                        "name": ingredient_name,
+                        "quantity": round(transfer_result['transferred_quantity'], 2),
+                        "unit": recipe_unit,
+                        "menu_item": item_name,
+                        "from_surplus": round(transfer_result['summary']['from_surplus'], 2),
+                        "from_master": round(transfer_result['summary']['from_master'], 2)
+                    })
+
                     db = SyncSessionLocal()
                     try:
                         description = (
@@ -437,12 +448,13 @@ async def auto_transfer_master_to_today_top_selling() -> None:
         last_master_to_today_run = today
         logger.info(f"Auto transfer for top selling items completed at {now}. Total transfers: {total_transfers}")
 
-        # Create notification for auto transfer
+        # Create notification for auto transfer with detailed information
         if total_transfers > 0:
             try:
                 create_transfer_notification(
                     transfer_type="master",
-                    item_count=total_transfers
+                    item_count=total_transfers,
+                    details_list=transfer_details
                 )
             except Exception as e:
                 logger.warning(f"Failed to create transfer notification: {e}")
@@ -477,6 +489,7 @@ async def auto_transfer_surplus_to_today() -> None:
         items_response = await _fetch_all()
         items = items_response.data or []
         transfer_count = 0
+        transfer_details = []  # Collect detailed transfer information for notification
         for item in items:
             transfer_quantity = item.get("stock_quantity", 0)
             if transfer_quantity <= 0:
@@ -558,9 +571,35 @@ async def auto_transfer_surplus_to_today() -> None:
 
             await _delete_surplus()
 
+            # Get unit of measurement from inventory settings
+            unit = ""
+            try:
+                @run_blocking
+                def _fetch_unit():
+                    return (
+                        postgrest_client.table("inventory_settings")
+                        .select("default_unit")
+                        .ilike("name", item["item_name"])
+                        .limit(1)
+                        .execute()
+                    )
+                unit_response = await _fetch_unit()
+                if unit_response.data and len(unit_response.data) > 0:
+                    unit = unit_response.data[0].get("default_unit", "")
+            except Exception:
+                pass
+
+            # Collect detailed transfer information for notification
+            transfer_details.append({
+                "name": item["item_name"],
+                "quantity": round(float(transfer_quantity), 2),
+                "unit": unit,
+                "batch_date": batch_date_str
+            })
+
             db = SyncSessionLocal()
             try:
-                description = f"Auto-transferred {transfer_quantity} of Id {item['item_id']} | item {item['item_name']} from surplus to today at 6am."
+                description = f"Auto-transferred {transfer_quantity} {unit} of Id {item['item_id']} | item {item['item_name']} from surplus to today at 6am."
                 log_user_activity(
                     db=db,
                     user={"user_id": 0, "name": "System", "user_role": "System"},
@@ -577,12 +616,13 @@ async def auto_transfer_surplus_to_today() -> None:
         last_surplus_to_today_run = today
         logger.info(f"Auto transfer from inventory_surplus to today completed at {now}")
 
-        # Create notification for auto transfer
+        # Create notification for auto transfer with detailed information
         if transfer_count > 0:
             try:
                 create_transfer_notification(
                     transfer_type="today",
-                    item_count=transfer_count
+                    item_count=transfer_count,
+                    details_list=transfer_details
                 )
             except Exception as e:
                 logger.warning(f"Failed to create transfer notification: {e}")
@@ -617,6 +657,7 @@ async def auto_transfer_today_to_surplus() -> None:
         items_response = await _fetch_all()
         items = items_response.data or []
         transfer_count = 0
+        transfer_details = []  # Collect detailed transfer information for notification
         for item in items:
             transfer_quantity = item.get("stock_quantity", 0)
             if transfer_quantity <= 0:
@@ -698,9 +739,35 @@ async def auto_transfer_today_to_surplus() -> None:
 
             await _delete_today()
 
+            # Get unit of measurement from inventory settings
+            unit = ""
+            try:
+                @run_blocking
+                def _fetch_unit():
+                    return (
+                        postgrest_client.table("inventory_settings")
+                        .select("default_unit")
+                        .ilike("name", item["item_name"])
+                        .limit(1)
+                        .execute()
+                    )
+                unit_response = await _fetch_unit()
+                if unit_response.data and len(unit_response.data) > 0:
+                    unit = unit_response.data[0].get("default_unit", "")
+            except Exception:
+                pass
+
+            # Collect detailed transfer information for notification
+            transfer_details.append({
+                "name": item["item_name"],
+                "quantity": round(float(transfer_quantity), 2),
+                "unit": unit,
+                "batch_date": batch_date_str
+            })
+
             db = SyncSessionLocal()
             try:
-                description = f"Auto-transferred {transfer_quantity} of Id {item['item_id']} | item {item['item_name']} from today to surplus at 10pm."
+                description = f"Auto-transferred {transfer_quantity} {unit} of Id {item['item_id']} | item {item['item_name']} from today to surplus at 10pm."
                 log_user_activity(
                     db=db,
                     user={"user_id": 0, "name": "System", "user_role": "System"},
@@ -717,12 +784,13 @@ async def auto_transfer_today_to_surplus() -> None:
         last_today_to_surplus_run = today
         logger.info(f"Auto transfer from inventory_today to surplus completed at {now}")
 
-        # Create notification for auto transfer
+        # Create notification for auto transfer with detailed information
         if transfer_count > 0:
             try:
                 create_transfer_notification(
                     transfer_type="surplus",
-                    item_count=transfer_count
+                    item_count=transfer_count,
+                    details_list=transfer_details
                 )
             except Exception as e:
                 logger.warning(f"Failed to create transfer notification: {e}")
@@ -743,6 +811,7 @@ async def auto_transfer_expired_to_spoilage() -> None:
             ("inventory_surplus", "stock_quantity"),
         ]
         expired_items_all = []
+        total_spoiled_count = 0
         for table, qty_field in sources:
             @run_blocking
             def _fetch_expired():
@@ -830,7 +899,94 @@ async def auto_transfer_expired_to_spoilage() -> None:
                     action_type="auto transfer expired to spoilage",
                     description=description,
                 )
+                total_spoiled_count += 1
             finally:
                 db.close()
+
+        # Create notification for auto transfer to spoilage
+        if total_spoiled_count > 0:
+            try:
+                users_response = postgrest_client.table("users").select("user_id").execute()
+                users = [u["user_id"] for u in users_response.data] if users_response.data else []
+
+                for user_id in users:
+                    from app.routes.General.notification import create_notification
+                    create_notification(
+                        user_id=user_id,
+                        type="auto_transfer_spoilage",
+                        message=f"Auto transfer to Spoilage completed: {total_spoiled_count} expired items transferred",
+                        details=None
+                    )
+                    logger.info(f"Spoilage notification created for user {user_id}")
+            except Exception as e:
+                logger.warning(f"Failed to create spoilage notification: {e}")
+
     except Exception as e:
         logger.exception("Error during auto_transfer_expired_to_spoilage")
+
+
+# Manual trigger endpoints for testing auto transfer notifications
+@router.post("/test-notification-auto-transfer")
+async def test_notification_auto_transfer():
+    """Create test notifications for all auto transfer types"""
+    try:
+        # Sample transfer details for testing
+        sample_details_master = [
+            {"name": "Chicken Breast", "quantity": 5.0, "unit": "kg", "menu_item": "Chicken Adobo", "from_surplus": 2.0, "from_master": 3.0},
+            {"name": "Rice", "quantity": 10.0, "unit": "kg", "menu_item": "Fried Rice", "from_surplus": 0.0, "from_master": 10.0},
+            {"name": "Tomatoes", "quantity": 3.5, "unit": "kg", "menu_item": "Tomato Soup", "from_surplus": 1.5, "from_master": 2.0}
+        ]
+
+        sample_details_today = [
+            {"name": "Ground Beef", "quantity": 4.2, "unit": "kg", "batch_date": "2025-11-15"},
+            {"name": "Onions", "quantity": 2.0, "unit": "kg", "batch_date": "2025-11-16"},
+            {"name": "Garlic", "quantity": 0.5, "unit": "kg", "batch_date": "2025-11-16"}
+        ]
+
+        sample_details_surplus = [
+            {"name": "Pork Belly", "quantity": 3.0, "unit": "kg", "batch_date": "2025-11-10"},
+            {"name": "Carrots", "quantity": 1.5, "unit": "kg", "batch_date": "2025-11-12"},
+            {"name": "Potatoes", "quantity": 2.0, "unit": "kg", "batch_date": "2025-11-11"}
+        ]
+
+        # Test notification for master to today transfer
+        create_transfer_notification(
+            transfer_type="master",
+            item_count=len(sample_details_master),
+            details_list=sample_details_master
+        )
+
+        # Test notification for surplus to today transfer
+        create_transfer_notification(
+            transfer_type="today",
+            item_count=len(sample_details_today),
+            details_list=sample_details_today
+        )
+
+        # Test notification for today to surplus transfer
+        create_transfer_notification(
+            transfer_type="surplus",
+            item_count=len(sample_details_surplus),
+            details_list=sample_details_surplus
+        )
+
+        # Test notification for expired to spoilage transfer
+        users_response = postgrest_client.table("users").select("user_id").execute()
+        users = [u["user_id"] for u in users_response.data] if users_response.data else []
+
+        for user_id in users:
+            from app.routes.General.notification import create_notification
+            create_notification(
+                user_id=user_id,
+                type="auto_transfer_spoilage",
+                message=f"Auto transfer to Spoilage completed: 2 expired items transferred (TEST)",
+                details=None
+            )
+
+        return {
+            "status": "success",
+            "message": "Test notifications created for all auto transfer types with detailed information. Check your notifications!"
+        }
+    except Exception as e:
+        logger.exception("Error creating test notifications")
+        return {"status": "error", "message": str(e)}

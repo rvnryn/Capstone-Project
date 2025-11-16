@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
 import { routes } from "@/app/routes/routes";
@@ -43,7 +43,6 @@ export default function ViewTodayInventoryItem() {
   const [showEditModal, setShowEditModal] = useState(false);
   const { fetchSettings } = useInventorySettingsAPI();
   const [settings, setSettings] = useState<InventorySetting[]>([]);
-  const [unit, setUnit] = useState<string>("");
 
   // Fetch settings
   useEffect(() => {
@@ -52,64 +51,55 @@ export default function ViewTodayInventoryItem() {
       .catch((err) => console.error("Error fetching settings:", err));
   }, [fetchSettings]);
 
-  // Format item data when it loads
-  const item = rawData
-    ? (() => {
-        const itemName = (rawData.item_name || "")
-          .toString()
-          .trim()
-          .toLowerCase();
-        const setting = settings.find(
-          (s) => (s.name || "").toString().trim().toLowerCase() === itemName
-        );
+  // Format item data when it loads - match Master Inventory logic
+  const item = useMemo(() => {
+    if (!rawData) return null;
 
-        // Recompute status using latest settings
-        const threshold = Number(setting?.low_stock_threshold);
-        const fallbackThreshold = 100;
-        const useThreshold =
-          !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
-        const stockQty = Number(rawData.stock_quantity);
-        let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
-        if (stockQty === 0) {
-          status = "Out Of Stock";
-        } else if (stockQty <= useThreshold * 0.5) {
-          status = "Critical";
-        } else if (stockQty <= useThreshold) {
-          status = "Low";
-        } else {
-          status = "Normal";
-        }
+    // Find matching setting for this item
+    const itemNameLower = (rawData.item_name || "")
+      .toString()
+      .trim()
+      .toLowerCase();
+    const setting = settings.find(
+      (s) => (s.name || "").toString().trim().toLowerCase() === itemNameLower
+    );
 
-        return {
-          id: rawData.item_id,
-          name: rawData.item_name,
-          batch: rawData.batch_date,
-          category: rawData.category,
-          status,
-          stock: rawData.stock_quantity,
-          added: rawData.created_at,
-          updated: rawData.updated_at,
-          expiration_date: rawData.expiration_date || null,
-          unit_price:
-            rawData.unit_price !== undefined
-              ? Number(rawData.unit_price)
-              : null,
-        };
-      })()
-    : null;
+    // Get unit of measurement from settings
+    const unit = setting?.default_unit || "";
 
-  // Find unit from settings
-  useEffect(() => {
-    if (rawData && settings.length > 0) {
-      const itemName = (rawData.item_name || "")
-        .toString()
-        .trim()
-        .toLowerCase();
-      const setting = settings.find(
-        (s) => (s.name || "").toString().trim().toLowerCase() === itemName
-      );
-      setUnit(setting?.default_unit || "");
+    // Recompute status using latest settings
+    const threshold = Number(setting?.low_stock_threshold);
+    const fallbackThreshold = 100;
+    const useThreshold =
+      !isNaN(threshold) && threshold > 0 ? threshold : fallbackThreshold;
+    const stockQty = Number(rawData.stock_quantity);
+    let status: "Out Of Stock" | "Critical" | "Low" | "Normal" = "Normal";
+    if (stockQty === 0) {
+      status = "Out Of Stock";
+    } else if (stockQty <= useThreshold * 0.5) {
+      status = "Critical";
+    } else if (stockQty <= useThreshold) {
+      status = "Low";
+    } else {
+      status = "Normal";
     }
+
+    return {
+      id: rawData.item_id,
+      name: setting?.name || rawData.item_name, // Use settings name if available
+      batch: rawData.batch_date,
+      category: rawData.category,
+      status,
+      unit_cost:
+        rawData.unit_cost !== undefined && rawData.unit_cost !== null
+          ? Number(rawData.unit_cost)
+          : null,
+      stock: rawData.stock_quantity,
+      added: rawData.created_at,
+      updated: rawData.updated_at,
+      expiration_date: rawData.expiration_date || null,
+      unit, // Add unit to item
+    };
   }, [rawData, settings]);
 
   // Redirect if no itemId
@@ -131,18 +121,14 @@ export default function ViewTodayInventoryItem() {
     if (!input) return "-";
     const date = new Date(input);
     if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
+    return date.toLocaleDateString("en-US");
   };
 
   const formatDateTime = (date: string | Date | null): string => {
     if (!date) return "-";
     const dt = typeof date === "string" ? new Date(date) : date;
     if (isNaN(dt.getTime())) return "-";
-    return dt.toLocaleString("en-CA", {
+    return dt.toLocaleString("en-US", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -276,6 +262,47 @@ export default function ViewTodayInventoryItem() {
               <div className="space-y-4 xs:space-y-5 sm:space-y-6 md:space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-3 xs:gap-4 sm:gap-5 md:gap-6 lg:gap-8">
                   <ItemRow
+                    icon={<FiTag className="text-blue-400" />}
+                    label="Item Name"
+                    value={item.name}
+                  />
+                  <ItemRow
+                    icon={<FiPackage className="text-purple-400" />}
+                    label="Category"
+                    value={item.category}
+                  />
+                  <ItemRow
+                    icon={<FiHash className="text-green-400" />}
+                    label="Quantity In Stock"
+                    value={
+                      item.unit
+                        ? `${Number(item.stock) % 1 === 0 ? Number(item.stock).toFixed(0) : Number(item.stock).toFixed(2)} ${item.unit}`
+                        : Number(item.stock) % 1 === 0 ? Number(item.stock).toFixed(0) : Number(item.stock).toFixed(2)
+                    }
+                  />
+                  <ItemRow
+                    icon={<FiTag className="text-green-400" />}
+                    label="Unit Cost"
+                    value={
+                      item.unit_cost !== undefined && item.unit_cost !== null
+                        ? `₱${Number(item.unit_cost).toFixed(2)}`
+                        : "-"
+                    }
+                  />
+                  <ItemRow
+                    icon={<FiTag className="text-purple-400" />}
+                    label="Total Value"
+                    value={
+                      item.unit_cost !== undefined &&
+                      item.unit_cost !== null &&
+                      item.stock !== undefined
+                        ? `₱${(
+                            Number(item.unit_cost) * Number(item.stock)
+                          ).toFixed(2)}`
+                        : "-"
+                    }
+                  />
+                  <ItemRow
                     icon={<FiCalendar className="text-orange-400" />}
                     label="Batch Date"
                     value={formatDateOnly(item.batch)}
@@ -290,43 +317,17 @@ export default function ViewTodayInventoryItem() {
                     }
                   />
                   <ItemRow
-                    icon={<FiTag className="text-blue-400" />}
-                    label="Item Name"
-                    value={item.name}
-                  />
-                  <ItemRow
-                    icon={<FiPackage className="text-purple-400" />}
-                    label="Category"
-                    value={item.category}
-                  />
-                  <ItemRow
-                    icon={<FiHash className="text-green-400" />}
-                    label="Quantity In Stock"
-                    value={
-                      unit ? `${item.stock} ${unit}` : item.stock.toString()
-                    }
-                  />
-                  <ItemRow
-                    icon={<FiTag className="text-green-400" />}
-                    label="Unit Price"
-                    value={
-                      item.unit_price !== undefined && item.unit_price !== null
-                        ? `₱${Number(item.unit_price).toFixed(2)}`
-                        : "-"
-                    }
-                  />
-                  <ItemRow
                     icon={<FiTrendingUp className="text-cyan-400" />}
                     label="Stock Status"
                     value={item.status}
                     valueClassName={
-                      item.status === "Critical"
+                      item.status === "Out Of Stock"
+                        ? "text-gray-400 font-semibold"
+                        : item.status === "Critical"
                         ? "text-red-400 font-semibold"
                         : item.status === "Low"
                         ? "text-yellow-400 font-semibold"
-                        : item.status === "Normal"
-                        ? "text-green-400 font-semibold"
-                        : "text-white font-semibold"
+                        : "text-green-400 font-semibold"
                     }
                   />
                 </div>
@@ -335,7 +336,7 @@ export default function ViewTodayInventoryItem() {
                 <div className="pt-4 border-t border-gray-700/50 space-y-2 xs:space-y-3 sm:space-y-4 md:space-y-6">
                   <ItemRow
                     icon={<FiClock className="text-indigo-400" />}
-                    label="Procurement date"
+                    label="Date Added"
                     value={formatDateTime(item.added)}
                   />
                   <ItemRow

@@ -872,6 +872,7 @@ export default function Dashboard() {
                               quantity_spoiled?: number;
                               reason?: string;
                               spoilage_date?: string;
+                              batch_date?: string;
                             },
                             idx: number
                           ) => (
@@ -883,6 +884,11 @@ export default function Dashboard() {
                                 <div className="min-w-0 flex-1">
                                   <div className="font-semibold text-pink-200 truncate">
                                     {item.item_name}
+                                    {item.batch_date && (
+                                      <span className="text-pink-400 text-xs ml-2 font-normal">
+                                        (Batch: {item.batch_date})
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-xs text-pink-300">
                                     Qty: {item.quantity_spoiled}
@@ -925,7 +931,7 @@ export default function Dashboard() {
                         </div>
                         <div>
                           <h2 className="text-base sm:text-lg font-bold text-orange-200">
-                            Out of Stock (Today&apos;s Inventory)
+                            Out of Stock
                           </h2>
                           <p className="text-orange-400 text-xs">
                             Items where ALL batches are completely depleted.
@@ -1032,6 +1038,7 @@ export default function Dashboard() {
                                 item_name?: string;
                                 stock_quantity?: number;
                                 expiration_date?: string;
+                                batch_date?: string;
                               },
                               idx: number
                             ) => (
@@ -1042,16 +1049,14 @@ export default function Dashboard() {
                                 <div className="flex justify-between items-center">
                                   <div className="min-w-0 flex-1">
                                     <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                      <span className="text-yellow-300 font-semibold">
-                                        ID:
-                                      </span>{" "}
-                                      {item.item_id}
-                                      <span className="mx-1 text-gray-400">
-                                        |
-                                      </span>
                                       <span className="font-semibold">
                                         {item.item_name}
                                       </span>
+                                      {item.batch_date && (
+                                        <span className="text-gray-400 text-xs ml-2">
+                                          (Batch: {item.batch_date})
+                                        </span>
+                                      )}
                                     </p>
                                     <p className="text-yellow-300 text-xs">
                                       Stock: {item.stock_quantity}
@@ -1115,6 +1120,7 @@ export default function Dashboard() {
                               item_name?: string;
                               stock_quantity?: number;
                               expiration_date?: string;
+                              batch_date?: string;
                             },
                             idx: number
                           ) => (
@@ -1125,16 +1131,14 @@ export default function Dashboard() {
                               <div className="flex justify-between items-center">
                                 <div className="min-w-0 flex-1">
                                   <p className="font-medium text-white text-xs sm:text-sm truncate">
-                                    <span className="text-green-300 font-semibold">
-                                      ID:
-                                    </span>{" "}
-                                    {item.item_id}
-                                    <span className="mx-1 text-gray-400">
-                                      |
-                                    </span>
                                     <span className="font-semibold">
                                       {item.item_name}
                                     </span>
+                                    {item.batch_date && (
+                                      <span className="text-green-400 text-xs ml-2 font-normal">
+                                        (Batch: {item.batch_date})
+                                      </span>
+                                    )}
                                   </p>
                                   <p className="text-green-300 text-xs">
                                     Stock: {item.stock_quantity}
@@ -1190,9 +1194,6 @@ export default function Dashboard() {
                         <thead>
                           <tr className="bg-red-900/40 border-b border-red-500/40">
                             <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300">
-                              Id
-                            </th>
-                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-red-300">
                               Name
                             </th>
                             <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-red-300 hidden md:table-cell">
@@ -1218,7 +1219,7 @@ export default function Dashboard() {
                           expired.data.length === 0 ? (
                             <tr>
                               <td
-                                colSpan={6}
+                                colSpan={5}
                                 className="py-6 sm:py-8 px-4 text-center text-red-200"
                               >
                                 <div className="flex flex-col items-center justify-center gap-2 w-full">
@@ -1251,11 +1252,6 @@ export default function Dashboard() {
                                   }
                                   className="border-b border-red-900/40 hover:bg-red-900/10 transition-colors duration-200"
                                 >
-                                  <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
-                                    <div className="truncate max-w-[120px] sm:max-w-none">
-                                      {item.item_id}
-                                    </div>
-                                  </td>
                                   <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
                                     <div className="truncate max-w-[120px] sm:max-w-none">
                                       {item.item_name}
@@ -1327,19 +1323,16 @@ export default function Dashboard() {
                         <thead>
                           <tr className="bg-amber-900/40 border-b border-amber-500/40">
                             <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300">
-                              Id
-                            </th>
-                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300">
                               Name
+                            </th>
+                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300 hidden md:table-cell">
+                              Batch Date
                             </th>
                             <th className="py-2 sm:py-3 px-2 sm:px-4 text-left font-semibold text-amber-300 hidden sm:table-cell">
                               Category
                             </th>
                             <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300">
                               Stock
-                            </th>
-                            <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300 hidden md:table-cell">
-                              Batch Date
                             </th>
                             <th className="py-2 sm:py-3 px-2 sm:px-4 text-center font-semibold text-amber-300">
                               Expires
@@ -1350,7 +1343,7 @@ export default function Dashboard() {
                           {!expiring.data || expiring.data.length === 0 ? (
                             <tr>
                               <td
-                                colSpan={6}
+                                colSpan={5}
                                 className="py-6 sm:py-8 px-4 text-center text-amber-200"
                               >
                                 <div className="flex flex-col items-center justify-center gap-2 w-full">
@@ -1384,21 +1377,8 @@ export default function Dashboard() {
                                 >
                                   <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
                                     <div className="truncate max-w-[120px] sm:max-w-none">
-                                      {item.item_id}
-                                    </div>
-                                  </td>
-                                  <td className="py-2 sm:py-3 px-2 sm:px-4 font-medium text-white">
-                                    <div className="truncate max-w-[120px] sm:max-w-none">
                                       {item.item_name}
                                     </div>
-                                  </td>
-                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-amber-200 hidden sm:table-cell">
-                                    {item.category || "N/A"}
-                                  </td>
-                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
-                                    <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-amber-700/30 text-amber-200 rounded-full text-xs font-medium">
-                                      {item.stock_quantity}
-                                    </span>
                                   </td>
                                   <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-amber-200 hidden md:table-cell">
                                     {item.batch_date
@@ -1410,6 +1390,14 @@ export default function Dashboard() {
                                           year: "numeric",
                                         })
                                       : "N/A"}
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-amber-200 hidden sm:table-cell">
+                                    {item.category || "N/A"}
+                                  </td>
+                                  <td className="py-2 sm:py-3 px-2 sm:px-4 text-center">
+                                    <span className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-amber-700/30 text-amber-200 rounded-full text-xs font-medium">
+                                      {item.stock_quantity}
+                                    </span>
                                   </td>
                                   <td className="py-2 sm:py-3 px-2 sm:px-4 text-center text-amber-200">
                                     <div className="text-xs">

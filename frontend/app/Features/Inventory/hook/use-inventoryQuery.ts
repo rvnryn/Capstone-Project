@@ -74,10 +74,13 @@ export function useAddInventory() {
     onSuccess: () => {
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["masterInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["dashboard", "low-stock"] });
       queryClient.invalidateQueries({
         queryKey: ["dashboard", "out-of-stock"],
       });
+      // Invalidate menu queries (menu stock status depends on inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Inventory item added successfully!");
     },
     onError: (error: any) => {
@@ -108,8 +111,11 @@ export function useUpdateInventory(id: string | number) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["masterInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["inventory", id] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Invalidate menu queries (menu stock status depends on inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Inventory item updated successfully!");
     },
     onError: (error: any) => {
@@ -136,6 +142,8 @@ export function useDeleteInventory() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Invalidate menu queries (menu stock status depends on inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Inventory item deleted successfully!");
     },
     onError: (error: any) => {
@@ -213,7 +221,10 @@ export function useAddTodayInventory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
+      queryClient.invalidateQueries({ queryKey: ["todayInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["dashboard", "expiring"] });
+      // Invalidate menu queries (menu stock status depends on today's inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Today inventory added successfully!");
     },
     onError: (error: any) => {
@@ -246,10 +257,13 @@ export function useUpdateTodayInventory(
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
+      queryClient.invalidateQueries({ queryKey: ["todayInventory"] }); // Page uses this key
       queryClient.invalidateQueries({
         queryKey: ["inventory-today", id, batch_date],
       });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Invalidate menu queries (menu stock status depends on today's inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Today inventory updated successfully!");
     },
     onError: (error: any) => {
@@ -284,7 +298,10 @@ export function useDeleteTodayInventory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
+      queryClient.invalidateQueries({ queryKey: ["todayInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Invalidate menu queries (menu stock status depends on today's inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Today inventory deleted successfully!");
     },
     onError: (error: any) => {
@@ -316,7 +333,10 @@ export function useTransferToToday() {
       // Invalidate both master and today inventory
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
       queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
+      queryClient.invalidateQueries({ queryKey: ["todayInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Invalidate menu queries (menu stock status depends on inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Item transferred to today's inventory!");
     },
     onError: (error: any) => {
@@ -350,13 +370,16 @@ export function useSurplusInventoryList() {
   });
 }
 
-export function useSurplusInventoryItem(id: string | number | null) {
+export function useSurplusInventoryItem(
+  itemId: string | number | null,
+  batchDate: string | null
+) {
   return useQuery({
-    queryKey: ["inventory-surplus", id],
+    queryKey: ["inventory-surplus", itemId, batchDate],
     queryFn: async () => {
       const token = getToken();
       const response = await fetch(
-        `${API_BASE_URL}/api/inventory-surplus/${id}`,
+        `${API_BASE_URL}/api/inventory-surplus/${itemId}/${batchDate}`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -367,7 +390,7 @@ export function useSurplusInventoryItem(id: string | number | null) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
     },
-    enabled: !!id,
+    enabled: !!itemId && !!batchDate,
     staleTime: 2 * 60 * 1000,
   });
 }
@@ -390,7 +413,10 @@ export function useAddSurplusInventory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory-surplus"] });
+      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["dashboard", "surplus"] });
+      // Invalidate menu queries (menu stock status depends on surplus inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Surplus inventory added successfully!");
     },
     onError: (error: any) => {
@@ -420,8 +446,11 @@ export function useUpdateSurplusInventory(id: string | number) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory-surplus"] });
+      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["inventory-surplus", id] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Invalidate menu queries (menu stock status depends on surplus inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Surplus inventory updated successfully!");
     },
     onError: (error: any) => {
@@ -450,7 +479,10 @@ export function useDeleteSurplusInventory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory-surplus"] });
+      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Invalidate menu queries (menu stock status depends on surplus inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Surplus inventory deleted successfully!");
     },
     onError: (error: any) => {
@@ -484,8 +516,12 @@ export function useTransferToSurplus() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
+      queryClient.invalidateQueries({ queryKey: ["todayInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["inventory-surplus"] });
+      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Invalidate menu queries (menu stock status depends on inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Item transferred to surplus inventory!");
     },
     onError: (error: any) => {
@@ -566,9 +602,13 @@ export function useTransferToSpoilage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
+      queryClient.invalidateQueries({ queryKey: ["todayInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["inventory-spoilage"] });
+      queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] }); // Page uses this key
       queryClient.invalidateQueries({ queryKey: ["dashboard", "spoilage"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", "expired"] });
+      // Invalidate menu queries (menu stock status depends on inventory)
+      queryClient.invalidateQueries({ queryKey: ["menu"] });
       toast.success("Item transferred to spoilage!");
     },
     onError: (error: any) => {

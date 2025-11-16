@@ -892,7 +892,8 @@ export default function AddMenuPage() {
                               </label>
                               <input
                                 type="number"
-                                min={0}
+                                min={1}
+                                max={999}
                                 step={1}
                                 placeholder="0"
                                 value={ing.quantity}

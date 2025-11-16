@@ -423,6 +423,7 @@ async def list_inventory(request: Request):
             return (
                 postgrest_client.table("inventory")
                 .select("*")
+                .order("batch_date", desc=False)
                 .execute()
             )
         items = await _fetch()
@@ -466,26 +467,81 @@ async def add_inventory_item(
     try:
         now = datetime.utcnow().isoformat()
         item_dict = item.dict()
+        batch_date_str = None
         for key in ["batch_date", "expiration_date"]:
             if item_dict[key]:
                 item_dict[key] = item_dict[key].isoformat()
-        payload = {
-            **item_dict,
-            "created_at": now,
-            "updated_at": now,
-            "unit_cost": item.unit_cost if item.unit_cost is not None else 0.00,
-        }
+                if key == "batch_date":
+                    batch_date_str = item_dict[key]
 
+        # Check if item with same name and batch_date already exists
         @run_blocking
-        def _insert():
-            return postgrest_client.table("inventory").insert(payload).execute()
+        def _check_existing():
+            query = (
+                postgrest_client.table("inventory")
+                .select("*")
+                .eq("item_name", item.item_name)
+            )
+            if batch_date_str:
+                query = query.eq("batch_date", batch_date_str)
+            else:
+                query = query.is_("batch_date", "null")
+            return query.execute()
 
-        response = await _insert()
-        await log_user_activity(
-            db, user, "add master inventory", f"Added inventory item: {item.item_name}"
-        )
-        result = recalculate_stock_status()
-        return {"message": "Item added successfully", "data": response.data}
+        existing_response = await _check_existing()
+        existing_items = existing_response.data if existing_response else []
+
+        if existing_items and len(existing_items) > 0:
+            # Item exists, update the stock quantity
+            existing_item = existing_items[0]
+            new_stock = float(existing_item["stock_quantity"]) + float(item.stock_quantity)
+            threshold = await get_threshold_for_item(item.item_name)
+            new_status = calculate_stock_status(new_stock, threshold)
+
+            update_data = {
+                "stock_quantity": new_stock,
+                "stock_status": new_status,
+                "updated_at": now,
+                # Update unit_cost if provided
+                "unit_cost": item.unit_cost if item.unit_cost is not None else existing_item.get("unit_cost", 0.00),
+                # Update expiration_date if provided
+                "expiration_date": item_dict.get("expiration_date") or existing_item.get("expiration_date"),
+            }
+
+            @run_blocking
+            def _update():
+                return (
+                    postgrest_client.table("inventory")
+                    .update(update_data)
+                    .eq("item_id", existing_item["item_id"])
+                    .execute()
+                )
+
+            response = await _update()
+            await log_user_activity(
+                db, user, "add master inventory", f"Added {item.stock_quantity} to existing inventory item: {item.item_name} (batch: {batch_date_str or 'N/A'}). New total: {new_stock}"
+            )
+            result = recalculate_stock_status()
+            return {"message": "Item quantity updated successfully", "data": response.data}
+        else:
+            # Item doesn't exist, insert new record
+            payload = {
+                **item_dict,
+                "created_at": now,
+                "updated_at": now,
+                "unit_cost": item.unit_cost if item.unit_cost is not None else 0.00,
+            }
+
+            @run_blocking
+            def _insert():
+                return postgrest_client.table("inventory").insert(payload).execute()
+
+            response = await _insert()
+            await log_user_activity(
+                db, user, "add master inventory", f"Added inventory item: {item.item_name}"
+            )
+            result = recalculate_stock_status()
+            return {"message": "Item added successfully", "data": response.data}
     except Exception as e:
         logger.exception("Error during add_master_inventory_item")
         raise HTTPException(status_code=500, detail="Internal server error")

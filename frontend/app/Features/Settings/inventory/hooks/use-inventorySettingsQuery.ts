@@ -110,6 +110,18 @@ export function useCreateInventorySetting() {
     onSuccess: () => {
       // Invalidate and refetch inventory settings list
       queryClient.invalidateQueries({ queryKey: ["inventory-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["inventorySettings"] });
+
+      // Invalidate all inventory queries to refresh units across all inventory pages
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
+      queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-surplus"] });
+      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-spoilage"] });
+      queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] });
+
       toast.success("Inventory setting created successfully!");
     },
     onError: (error: any) => {
@@ -148,6 +160,18 @@ export function useUpdateInventorySetting(id: number) {
     onSuccess: () => {
       // Invalidate inventory settings list
       queryClient.invalidateQueries({ queryKey: ["inventory-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["inventorySettings"] });
+
+      // Invalidate all inventory queries to refresh units across all inventory pages
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
+      queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-surplus"] });
+      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-spoilage"] });
+      queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] });
+
       toast.success("Inventory setting updated successfully!");
     },
     onError: (error: any) => {
@@ -182,6 +206,18 @@ export function useDeleteInventorySetting() {
     onSuccess: () => {
       // Invalidate inventory settings list
       queryClient.invalidateQueries({ queryKey: ["inventory-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["inventorySettings"] });
+
+      // Invalidate all inventory queries to refresh units across all inventory pages
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
+      queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-surplus"] });
+      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-spoilage"] });
+      queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] });
+
       toast.success("Inventory setting deleted successfully!");
     },
     onError: (error: any) => {
@@ -301,6 +337,18 @@ export function useBatchUpdateInventorySettings() {
     onSuccess: () => {
       // Invalidate inventory settings list
       queryClient.invalidateQueries({ queryKey: ["inventory-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["inventorySettings"] });
+
+      // Invalidate all inventory queries to refresh units across all inventory pages
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["masterInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
+      queryClient.invalidateQueries({ queryKey: ["todayInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-surplus"] });
+      queryClient.invalidateQueries({ queryKey: ["surplusInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-spoilage"] });
+      queryClient.invalidateQueries({ queryKey: ["spoilageInventory"] });
+
       toast.success("Settings saved successfully!");
     },
     onError: (error: any) => {

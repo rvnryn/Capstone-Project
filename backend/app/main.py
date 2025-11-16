@@ -1,5 +1,3 @@
-
-# --- TOP-LEVEL EXCEPTION LOGGING WRAPPER ---
 try:
     from slowapi import Limiter
     from slowapi.util import get_remote_address
@@ -95,7 +93,7 @@ try:
 
     app.add_middleware(SlowAPIMiddleware)
     scheduler = BackgroundScheduler()
-    scheduler.add_job(check_inventory_alerts, "interval", minutes=60)
+    scheduler.add_job(check_inventory_alerts, "interval", minutes=1)
     scheduler.start()
     print("Scheduler started and job added")
 
@@ -167,7 +165,6 @@ try:
             import traceback
             print(f"[Startup Error] {e}")
             traceback.print_exc()
-            # Optionally, re-raise to crash the app if desired
             raise
 
     @app.get("/health")

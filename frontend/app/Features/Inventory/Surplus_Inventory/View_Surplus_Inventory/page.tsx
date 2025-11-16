@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   useInventorySettingsAPI,
   InventorySetting,
@@ -32,13 +32,17 @@ export default function ViewSurplusInventoryItem() {
   const searchParams = useSearchParams();
   const { isMenuOpen, isMobile } = useNavigation();
   const itemId = searchParams.get("id");
+  const batchDate = searchParams.get("batch_date");
 
   // Use React Query hook for auto-refresh!
-  const { data: rawData, isLoading, error } = useSurplusInventoryItem(itemId);
+  const {
+    data: rawData,
+    isLoading,
+    error,
+  } = useSurplusInventoryItem(itemId, batchDate);
 
   const { fetchSettings } = useInventorySettingsAPI();
   const [settings, setSettings] = useState<InventorySetting[]>([]);
-  const [unit, setUnit] = useState<string>("");
 
   // Fetch settings
   useEffect(() => {
@@ -47,63 +51,59 @@ export default function ViewSurplusInventoryItem() {
       .catch((err) => console.error("Error fetching settings:", err));
   }, [fetchSettings]);
 
-  // Format item data when it loads
-  const item = rawData ? {
-    id: rawData.item_id,
-    name: rawData.item_name,
-    batch: rawData.batch_date,
-    category: rawData.category,
-    status: rawData.stock_status,
-    stock: rawData.stock_quantity,
-    added: rawData.created_at,
-    updated: rawData.updated_at,
-    expiration_date: rawData.expiration_date || null,
-    unit_price:
-      rawData.unit_price !== undefined ? Number(rawData.unit_price) : null,
-  } : null;
+  // Format item data when it loads - match Master Inventory logic
+  const item = useMemo(() => {
+    if (!rawData) return null;
 
-  // Find unit from settings
-  useEffect(() => {
-    if (rawData && settings.length > 0) {
-      const itemName = (rawData.item_name || "").toString().trim().toLowerCase();
-      const setting = settings.find(
-        (s) => (s.name || "").toString().trim().toLowerCase() === itemName
-      );
-      setUnit(setting?.default_unit || "");
-    }
+    // Find matching setting for this item
+    const itemNameLower = (rawData.item_name || "")
+      .toString()
+      .trim()
+      .toLowerCase();
+    const setting = settings.find(
+      (s) => (s.name || "").toString().trim().toLowerCase() === itemNameLower
+    );
+
+    // Get unit of measurement from settings
+    const unit = setting?.default_unit || "";
+
+    return {
+      id: rawData.item_id,
+      name: setting?.name || rawData.item_name, // Use settings name if available
+      batch: rawData.batch_date,
+      category: rawData.category,
+      status: rawData.stock_status,
+      unit_cost:
+        rawData.unit_cost !== undefined && rawData.unit_cost !== null
+          ? Number(rawData.unit_cost)
+          : null,
+      stock: rawData.stock_quantity,
+      added: rawData.created_at,
+      updated: rawData.updated_at,
+      expiration_date: rawData.expiration_date || null,
+      unit, // Add unit to item
+    };
   }, [rawData, settings]);
 
-  // Redirect if no itemId
+  // Redirect if no itemId or batchDate
   useEffect(() => {
-    if (!itemId) {
+    if (!itemId || !batchDate) {
       router.push(routes.surplus_inventory);
     }
-  }, [itemId, router]);
-
-  // Redirect if error (item not found)
-  useEffect(() => {
-    if (error) {
-      console.error("Error fetching item:", error);
-      router.push(routes.surplus_inventory);
-    }
-  }, [error, router]);
+  }, [itemId, batchDate, router]);
 
   const formatDateOnly = (input: string | null): string => {
     if (!input) return "-";
     const date = new Date(input);
     if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
+    return date.toLocaleDateString("en-US");
   };
 
   const formatDateTime = (date: string | Date | null): string => {
     if (!date) return "-";
     const dt = typeof date === "string" ? new Date(date) : date;
     if (isNaN(dt.getTime())) return "-";
-    return dt.toLocaleString("en-CA", {
+    return dt.toLocaleString("en-US", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -150,14 +150,14 @@ export default function ViewSurplusInventoryItem() {
     );
   }
 
-  if (!item) {
+  if (!isLoading && (error || !item)) {
     return (
       <section className="text-white font-poppins">
         <NavigationBar />
         <ResponsiveMain>
           <main
             className="transition-all duration-300 pb-4 xs:pb-6 sm:pb-8 md:pb-12 pt-20 xs:pt-24 sm:pt-28 px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 2xl:px-12 animate-fadein"
-            aria-label="View Today's Inventory main content"
+            aria-label="View Surplus Inventory main content"
             tabIndex={-1}
           >
             <div className="max-w-full xs:max-w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-full mx-auto w-full">
@@ -190,6 +190,10 @@ export default function ViewSurplusInventoryItem() {
         </ResponsiveMain>
       </section>
     );
+  }
+
+  if (!item) {
+    return null; // Still loading
   }
 
   return (
@@ -237,20 +241,6 @@ export default function ViewSurplusInventoryItem() {
               <div className="space-y-4 xs:space-y-5 sm:space-y-6 md:space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-3 xs:gap-4 sm:gap-5 md:gap-6 lg:gap-8">
                   <ItemRow
-                    icon={<FiCalendar className="text-orange-400" />}
-                    label="Batch Date"
-                    value={formatDateOnly(item.batch)}
-                  />
-                  <ItemRow
-                    icon={<FiCalendar className="text-red-400" />}
-                    label="Expiration Date"
-                    value={
-                      item.expiration_date
-                        ? formatDateOnly(item.expiration_date)
-                        : "No Expiration Date"
-                    }
-                  />
-                  <ItemRow
                     icon={<FiTag className="text-blue-400" />}
                     label="Item Name"
                     value={item.name}
@@ -264,16 +254,45 @@ export default function ViewSurplusInventoryItem() {
                     icon={<FiHash className="text-green-400" />}
                     label="Quantity In Stock"
                     value={
-                      unit ? `${item.stock} ${unit}` : item.stock.toString()
+                      item.unit
+                        ? `${Number(item.stock) % 1 === 0 ? Number(item.stock).toFixed(0) : Number(item.stock).toFixed(2)} ${item.unit}`
+                        : Number(item.stock) % 1 === 0 ? Number(item.stock).toFixed(0) : Number(item.stock).toFixed(2)
                     }
                   />
                   <ItemRow
                     icon={<FiTag className="text-green-400" />}
-                    label="Unit Price"
+                    label="Unit Cost"
                     value={
-                      item.unit_price !== undefined && item.unit_price !== null
-                        ? `₱${Number(item.unit_price).toFixed(2)}`
+                      item.unit_cost !== undefined && item.unit_cost !== null
+                        ? `₱${Number(item.unit_cost).toFixed(2)}`
                         : "-"
+                    }
+                  />
+                  <ItemRow
+                    icon={<FiTag className="text-purple-400" />}
+                    label="Total Value"
+                    value={
+                      item.unit_cost !== undefined &&
+                      item.unit_cost !== null &&
+                      item.stock !== undefined
+                        ? `₱${(
+                            Number(item.unit_cost) * Number(item.stock)
+                          ).toFixed(2)}`
+                        : "-"
+                    }
+                  />
+                  <ItemRow
+                    icon={<FiCalendar className="text-orange-400" />}
+                    label="Batch Date"
+                    value={formatDateOnly(item.batch)}
+                  />
+                  <ItemRow
+                    icon={<FiCalendar className="text-red-400" />}
+                    label="Expiration Date"
+                    value={
+                      item.expiration_date
+                        ? formatDateOnly(item.expiration_date)
+                        : "No Expiration Date"
                     }
                   />
                   <ItemRow
@@ -296,7 +315,7 @@ export default function ViewSurplusInventoryItem() {
                 <div className="pt-4 border-t border-gray-700/50 space-y-2 xs:space-y-3 sm:space-y-4 md:space-y-6">
                   <ItemRow
                     icon={<FiClock className="text-indigo-400" />}
-                    label="Procurement date"
+                    label="Date Added"
                     value={formatDateTime(item.added)}
                   />
                   <ItemRow

@@ -121,11 +121,11 @@ def log_user_activity(db, user, action_type, description):
 
 @router.get("/inventory-surplus")
 async def list_surplus(request: Request):
-    try: 
+    try:
 
         @run_blocking
         def _fetch():
-            return postgrest_client.table("inventory_surplus").select("*").execute()
+            return postgrest_client.table("inventory_surplus").select("*").order("batch_date", desc=False).execute()
 
         items = await _fetch()
         return items.data

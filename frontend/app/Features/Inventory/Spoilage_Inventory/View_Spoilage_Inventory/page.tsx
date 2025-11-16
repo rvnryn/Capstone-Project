@@ -1,6 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import {
+  useInventorySettingsAPI,
+  InventorySetting,
+} from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 import { useRouter, useSearchParams } from "next/navigation";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import NavigationBar from "@/app/components/navigation/navigation";
@@ -31,6 +35,9 @@ export default function ViewSpoilageInventoryItem() {
   // Use React Query hook for auto-refresh!
   const { data: rawData, isLoading, error } = useSpoilageItem(spoilageId);
 
+  const { fetchSettings } = useInventorySettingsAPI();
+  const [settings, setSettings] = useState<InventorySetting[]>([]);
+
   const [isOnline, setIsOnline] = useState(true);
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -44,21 +51,47 @@ export default function ViewSpoilageInventoryItem() {
     };
   }, []);
 
-  // Format item data when it loads
-  const item = rawData ? {
-    spoilage_id: rawData.spoilage_id,
-    item_id: rawData.item_id,
-    item_name: rawData.item_name,
-    quantity_spoiled: rawData.quantity_spoiled,
-    expiration_date: rawData.expiration_date,
-    spoilage_date: rawData.spoilage_date,
-    reason: rawData.reason,
-    user_id: rawData.user_id,
-    created_at: rawData.created_at,
-    updated_at: rawData.updated_at,
-    unit_price:
-      rawData.unit_price !== undefined ? Number(rawData.unit_price) : null,
-  } : null;
+  // Fetch settings
+  useEffect(() => {
+    fetchSettings()
+      .then(setSettings)
+      .catch((err) => console.error("Error fetching settings:", err));
+  }, [fetchSettings]);
+
+  // Format item data when it loads - match Master Inventory logic
+  const item = useMemo(() => {
+    if (!rawData) return null;
+
+    // Find matching setting for this item
+    const itemNameLower = (rawData.item_name || "")
+      .toString()
+      .trim()
+      .toLowerCase();
+    const setting = settings.find(
+      (s) => (s.name || "").toString().trim().toLowerCase() === itemNameLower
+    );
+
+    // Get unit of measurement from settings
+    const unit = setting?.default_unit || "";
+
+    return {
+      spoilage_id: rawData.spoilage_id,
+      item_id: rawData.item_id,
+      item_name: setting?.name || rawData.item_name, // Use settings name if available
+      quantity_spoiled: rawData.quantity_spoiled,
+      expiration_date: rawData.expiration_date,
+      spoilage_date: rawData.spoilage_date,
+      reason: rawData.reason,
+      user_id: rawData.user_id,
+      created_at: rawData.created_at,
+      updated_at: rawData.updated_at,
+      unit_cost:
+        rawData.unit_cost !== undefined && rawData.unit_cost !== null
+          ? Number(rawData.unit_cost)
+          : null,
+      unit, // Add unit to item
+    };
+  }, [rawData, settings]);
 
   // Redirect if no spoilageId
   useEffect(() => {
@@ -79,18 +112,14 @@ export default function ViewSpoilageInventoryItem() {
     if (!input) return "-";
     const date = new Date(input);
     if (isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-CA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
+    return date.toLocaleDateString("en-US");
   };
 
   const formatDateTime = (date: string | Date | null): string => {
     if (!date) return "-";
     const dt = typeof date === "string" ? new Date(date) : date;
     if (isNaN(dt.getTime())) return "-";
-    return dt.toLocaleString("en-CA", {
+    return dt.toLocaleString("en-US", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -224,28 +253,51 @@ export default function ViewSpoilageInventoryItem() {
               <div className="space-y-4 xs:space-y-5 sm:space-y-6 md:space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-3 xs:gap-4 sm:gap-5 md:gap-6 lg:gap-8">
                   <ItemRow
+                    icon={<FiTag className="text-blue-400" />}
+                    label="Item Name"
+                    value={item.item_name}
+                  />
+                  <ItemRow
                     icon={<FiHash className="text-yellow-400" />}
                     label="Spoilage ID"
                     value={item.spoilage_id}
                   />
                   <ItemRow
-                    icon={<FiTag className="text-green-400" />}
-                    label="Item Name"
-                    value={item.item_name}
-                  />
-                  <ItemRow
                     icon={<FiPackage className="text-purple-400" />}
                     label="Quantity Spoiled"
-                    value={item.quantity_spoiled}
+                    value={
+                      item.unit
+                        ? `${Number(item.quantity_spoiled) % 1 === 0 ? Number(item.quantity_spoiled).toFixed(0) : Number(item.quantity_spoiled).toFixed(2)} ${item.unit}`
+                        : Number(item.quantity_spoiled) % 1 === 0 ? Number(item.quantity_spoiled).toFixed(0) : Number(item.quantity_spoiled).toFixed(2)
+                    }
                   />
                   <ItemRow
                     icon={<FiTag className="text-green-400" />}
-                    label="Unit Price"
+                    label="Unit Cost"
                     value={
-                      item.unit_price !== undefined && item.unit_price !== null
-                        ? `₱${item.unit_price.toFixed(2)}`
+                      item.unit_cost !== undefined && item.unit_cost !== null
+                        ? `₱${item.unit_cost.toFixed(2)}`
                         : "-"
                     }
+                  />
+                  <ItemRow
+                    icon={<FiTag className="text-purple-400" />}
+                    label="Total Value"
+                    value={
+                      item.unit_cost !== undefined &&
+                      item.unit_cost !== null &&
+                      item.quantity_spoiled !== undefined
+                        ? `₱${(
+                            Number(item.unit_cost) *
+                            Number(item.quantity_spoiled)
+                          ).toFixed(2)}`
+                        : "-"
+                    }
+                  />
+                  <ItemRow
+                    icon={<FiCalendar className="text-orange-400" />}
+                    label="Spoilage Date"
+                    value={formatDateOnly(item.spoilage_date)}
                   />
                   <ItemRow
                     icon={<FiCalendar className="text-red-400" />}
@@ -257,18 +309,13 @@ export default function ViewSpoilageInventoryItem() {
                     }
                   />
                   <ItemRow
-                    icon={<FiCalendar className="text-orange-400" />}
-                    label="Spoilage Date"
-                    value={formatDateOnly(item.spoilage_date)}
-                  />
-                  <ItemRow
                     icon={<FiTag className="text-red-400" />}
                     label="Reason"
                     value={item.reason || "-"}
                   />
                   <ItemRow
                     icon={<FiClock className="text-indigo-400" />}
-                    label="Created At"
+                    label="Date Added"
                     value={formatDateTime(item.created_at)}
                   />
                 </div>

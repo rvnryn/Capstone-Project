@@ -133,7 +133,7 @@ async def list_inventory_today(request: Request):
 
         @run_blocking
         def _fetch():
-            return postgrest_client.table("inventory_today").select("*").execute()
+            return postgrest_client.table("inventory_today").select("*").order("batch_date", desc=False).execute()
 
         items = await _fetch()
         return items.data
