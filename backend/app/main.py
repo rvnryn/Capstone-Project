@@ -151,17 +151,24 @@ try:
 
     @app.on_event("startup")
     async def schedule_backup_jobs():
-        print("Starting backup job scheduling...")
-        try:
-            async with SessionLocal() as session:
-                print("Session started for backup scheduling")
-                await load_and_schedule(session)
-            print("Backup job scheduling complete")
-        except Exception as e:
-            import traceback
-            print(f"[Startup Error] {e}")
-            traceback.print_exc()
-            raise
+        """Schedule backup jobs in background to avoid blocking startup"""
+        import asyncio
+        
+        async def run_backup_scheduling():
+            print("Starting backup job scheduling in background...")
+            try:
+                async with SessionLocal() as session:
+                    print("Session started for backup scheduling")
+                    await load_and_schedule(session)
+                print("Backup job scheduling complete")
+            except Exception as e:
+                import traceback
+                print(f"[Backup Scheduling Error] {e}")
+                traceback.print_exc()
+        
+        # Run in background to not block startup
+        asyncio.create_task(run_backup_scheduling())
+        print("Backup scheduling started in background")
 
     @app.get("/health")
     async def health_check():
