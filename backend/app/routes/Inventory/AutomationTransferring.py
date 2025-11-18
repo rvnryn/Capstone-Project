@@ -30,7 +30,7 @@ from app.routes.General.notification import create_transfer_notification
 
 async def wait_until_6am():
     now = datetime.now()
-    today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=15, minutes=55)
+    today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=6, minutes=00)
     if now >= today_6am:
         today_6am += timedelta(days=1)
     seconds_until_6am = (today_6am - now).total_seconds()
@@ -38,7 +38,7 @@ async def wait_until_6am():
 
 async def wait_until_10pm():
     now = datetime.now()
-    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=15, minutes=49)
+    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=22, minutes=00)
     if now >= today_10pm:
         today_10pm += timedelta(days=1)
     seconds_until_10pm = (today_10pm - now).total_seconds()
