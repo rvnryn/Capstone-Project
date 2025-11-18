@@ -178,3 +178,15 @@ except Exception as e:
     import traceback
     print(f"[Top-level Import/Init Error] {e}")
     traceback.print_exc()
+    
+    # Create minimal fallback app for error reporting
+    from fastapi import FastAPI
+    app = FastAPI()
+    
+    @app.get("/health")
+    async def health_check_error():
+        return {"status": "error", "message": str(e)}
+    
+    @app.get("/")
+    async def root_error():
+        return {"error": "Application failed to initialize", "details": str(e)}
