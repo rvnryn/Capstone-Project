@@ -15,6 +15,7 @@ from app.routes.Inventory.master_inventory import (
 	require_role,
 	limiter,
 	logger,
+	log_user_activity,
 )
 from app.routes.Inventory.master_inventory import repeat_every
 from app.routes.General.notification import create_notification  # Import notification function
@@ -68,24 +69,7 @@ class SpoilageRequest(BaseModel):
 				raise ValueError('Unit cost exceeds maximum allowed (₱1,000,000)')
 		return v
 
-async def log_user_activity(db, user, action_type, description):
-    try:
-        user_row = getattr(user, "user_row", user)
-        new_activity = UserActivityLog(
-            user_id=user_row.get("user_id"),
-            action_type=action_type,
-            description=description,
-            activity_date=datetime.utcnow(),
-            report_date=datetime.utcnow(),
-            user_name=user_row.get("name"),
-            role=user_row.get("user_role"),
-        )
-        db.add(new_activity)
-        await db.flush()
-        await db.commit()
-    except Exception as e:
-        logger.warning(f"Failed to record user activity ({action_type}): {e}")
-		
+
 @limiter.limit("10/minute")
 @router.get("/inventory-spoilage")
 async def list_spoilage(
@@ -95,7 +79,7 @@ async def list_spoilage(
 ):
 	try:
 		@run_blocking
-		def _fetch():
+		def _fetch_spoilage():
 			return (
 				postgrest_client.table("inventory_spoilage")
 				.select("*")
@@ -103,11 +87,126 @@ async def list_spoilage(
 				.range(skip, skip + limit - 1)
 				.execute()
 			)
-		items = await _fetch()
-		return items.data
+		
+		@run_blocking
+		def _fetch_settings():
+			return (
+				postgrest_client.table("inventory_settings")
+				.select("name, default_unit")
+				.execute()
+			)
+		
+		spoilage_items = await _fetch_spoilage()
+		
+		# Create a lookup dictionary for settings by item_name (case-insensitive, trimmed)
+		settings_map = {}
+		try:
+			settings_response = await _fetch_settings()
+			if settings_response and hasattr(settings_response, 'data') and settings_response.data:
+				logger.info(f"[SPOILAGE DEBUG] Fetched {len(settings_response.data)} inventory settings")
+				for setting in settings_response.data:
+					if setting and "name" in setting:
+						item_name = setting["name"]
+						default_unit = setting.get("default_unit", "")
+						# Store with both original and normalized keys for flexible matching
+						settings_map[item_name] = default_unit
+						# Also store lowercase trimmed version for case-insensitive lookup
+						normalized_key = item_name.strip().lower()
+						settings_map[normalized_key] = default_unit
+						logger.info(f"[SPOILAGE DEBUG] Mapped '{item_name}' (normalized: '{normalized_key}') -> '{default_unit}'")
+		except Exception as settings_error:
+			logger.warning(f"Could not fetch inventory_settings: {settings_error}")
+			# Continue without settings, items will have empty units
+		
+		# Enrich spoilage items with unit from settings
+		enriched_items = []
+		if spoilage_items and hasattr(spoilage_items, 'data') and spoilage_items.data:
+			for item in spoilage_items.data:
+				enriched = {**item}
+				item_name = item.get("item_name", "")
+				
+				# Try exact match first
+				matched_unit = settings_map.get(item_name, "")
+				
+				# If no match, try normalized (case-insensitive, trimmed) match
+				if not matched_unit and item_name:
+					normalized_name = item_name.strip().lower()
+					matched_unit = settings_map.get(normalized_name, "")
+				
+				enriched["unit"] = matched_unit
+				enriched["default_unit"] = matched_unit
+				logger.info(f"[SPOILAGE DEBUG] Item '{item_name}' matched unit: '{matched_unit}' (empty={not bool(matched_unit)})")
+				enriched_items.append(enriched)
+		
+		return enriched_items
 	except Exception as e:
 		logger.exception("Error listing inventory_spoilage")
-		raise HTTPException(status_code=500, detail="Internal server error")
+		raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@limiter.limit("10/minute")
+@router.get("/inventory-spoilage/{spoilage_id}")
+async def get_spoilage_item(
+	request: Request,
+	spoilage_id: int,
+):
+	try:
+		@run_blocking
+		def _fetch():
+			return (
+				postgrest_client.table("inventory_spoilage")
+				.select("*")
+				.eq("spoilage_id", spoilage_id)
+				.single()
+				.execute()
+			)
+		
+		@run_blocking
+		def _fetch_settings():
+			return (
+				postgrest_client.table("inventory_settings")
+				.select("name, default_unit")
+				.execute()
+			)
+		
+		try:
+			spoilage_item = await _fetch()
+			if not spoilage_item.data:
+				raise HTTPException(status_code=404, detail="Spoilage item not found")
+		except APIError as e:
+			if getattr(e, "code", None) == "PGRST116":
+				raise HTTPException(status_code=404, detail="Spoilage item not found")
+			raise
+		
+		# Get unit from settings
+		item = spoilage_item.data
+		matched_unit = ""
+		
+		try:
+			settings_response = await _fetch_settings()
+			if settings_response and hasattr(settings_response, 'data') and settings_response.data:
+				item_name = item.get("item_name", "")
+				for setting in settings_response.data:
+					if setting and "name" in setting:
+						setting_name = setting["name"]
+						# Try exact match or case-insensitive match
+						if setting_name == item_name or setting_name.strip().lower() == item_name.strip().lower():
+							matched_unit = setting.get("default_unit", "")
+							break
+		except Exception as settings_error:
+			logger.warning(f"Could not fetch inventory_settings: {settings_error}")
+		
+		# Enrich item with unit
+		enriched = {**item}
+		enriched["unit"] = matched_unit
+		enriched["default_unit"] = matched_unit
+		
+		return enriched
+	except HTTPException:
+		raise
+	except Exception as e:
+		logger.exception("Error fetching spoilage item")
+		raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @limiter.limit("10/minute")

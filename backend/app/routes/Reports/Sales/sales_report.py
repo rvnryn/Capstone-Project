@@ -136,39 +136,46 @@ async def get_weekly_sales_forecast(
         )
 
         # --- Fetch custom holidays from DB ---
-        custom_holiday_rows = await session.execute(select(CustomHoliday.date))
-        custom_holiday_dates = set([row[0] for row in custom_holiday_rows.fetchall()])
+        custom_holiday_rows = await session.execute(select(CustomHoliday.date, CustomHoliday.name))
+        custom_holiday_dict = {row[0]: row[1] for row in custom_holiday_rows.fetchall()}
+        custom_holiday_dates = set(custom_holiday_dict.keys())
 
         # Add seasonality features (month, week of year, etc.)
         df["month"] = df["week"].dt.month
         df["weekofyear"] = df["week"].dt.isocalendar().week.astype(int)
 
         # Add holiday feature: 1 if week contains a holiday (official or custom), else 0
-        # Also return holiday_type: 'official', 'custom', or None
+        # Also return holiday_type and holiday_names
         def get_holiday_info(week_start):
             week_end = week_start + timedelta(days=6)
             # Check official holidays
             official_holidays = [
                 h for h in ph_holidays if week_start <= pd.to_datetime(h) <= week_end
             ]
+            official_holiday_names = [ph_holidays[h] for h in official_holidays]
+
             custom_holidays = [
                 h
                 for h in custom_holiday_dates
                 if week_start <= pd.to_datetime(h) <= week_end
             ]
+            custom_holiday_names = [custom_holiday_dict[h] for h in custom_holidays]
+
             if official_holidays and custom_holidays:
-                # If both, prefer 'official' (or could return 'both')
-                return 1, "official"  # or 'both' if you want to distinguish
+                # If both, combine the names
+                all_names = official_holiday_names + custom_holiday_names
+                return 1, "official", ", ".join(all_names)
             elif official_holidays:
-                return 1, "official"
+                return 1, "official", ", ".join(official_holiday_names)
             elif custom_holidays:
-                return 1, "custom"
+                return 1, "custom", ", ".join(custom_holiday_names)
             else:
-                return 0, None
+                return 0, None, None
 
         holiday_info = df["week"].apply(get_holiday_info)
         df["is_holiday_week"] = holiday_info.apply(lambda x: x[0])
         df["holiday_type"] = holiday_info.apply(lambda x: x[1])
+        df["holiday_names"] = holiday_info.apply(lambda x: x[2])
 
         # Features: week_num, month, weekofyear, is_holiday_week
         X = df[["week_num", "month", "weekofyear", "is_holiday_week"]].values
@@ -188,13 +195,15 @@ async def get_weekly_sales_forecast(
                 "actual_sales": float(actual),
                 "is_holiday_week": int(holiday),
                 "holiday_type": htype,
+                "holiday_names": hnames,
             }
-            for w, pred, actual, holiday, htype in zip(
+            for w, pred, actual, holiday, htype, hnames in zip(
                 df["week"],
                 hist_pred,
                 df["total_sales"],
                 df["is_holiday_week"],
                 df["holiday_type"],
+                df["holiday_names"],
             )
         ]
 
@@ -207,6 +216,7 @@ async def get_weekly_sales_forecast(
 
         forecast_X = []
         forecast_holiday_types = []
+        forecast_holiday_names = []
         for i, week_start in enumerate(forecast_dates, 1):
             week_num = last_week_num + i
             month = week_start.month
@@ -216,25 +226,34 @@ async def get_weekly_sales_forecast(
             official_holidays = [
                 h for h in ph_holidays if week_start <= pd.to_datetime(h) <= week_end
             ]
+            official_holiday_names = [ph_holidays[h] for h in official_holidays]
+
             custom_holidays = [
                 h
                 for h in custom_holiday_dates
                 if week_start <= pd.to_datetime(h) <= week_end
             ]
+            custom_holiday_names = [custom_holiday_dict[h] for h in custom_holidays]
+
             if official_holidays and custom_holidays:
                 is_holiday_week = 1
-                holiday_type = "official"  # or 'both' if you want to distinguish
+                holiday_type = "official"
+                holiday_names = ", ".join(official_holiday_names + custom_holiday_names)
             elif official_holidays:
                 is_holiday_week = 1
                 holiday_type = "official"
+                holiday_names = ", ".join(official_holiday_names)
             elif custom_holidays:
                 is_holiday_week = 1
                 holiday_type = "custom"
+                holiday_names = ", ".join(custom_holiday_names)
             else:
                 is_holiday_week = 0
                 holiday_type = None
+                holiday_names = None
             forecast_X.append([week_num, month, weekofyear, is_holiday_week])
             forecast_holiday_types.append(holiday_type)
+            forecast_holiday_names.append(holiday_names)
         forecast_X = np.array(forecast_X)
         forecast = model.predict(forecast_X)
 
@@ -244,9 +263,10 @@ async def get_weekly_sales_forecast(
                 "predicted_sales": float(max(0, pred)),
                 "is_holiday_week": int(x[3]),
                 "holiday_type": htype,
+                "holiday_names": hnames,
             }
-            for d, pred, x, htype in zip(
-                forecast_dates, forecast, forecast_X, forecast_holiday_types
+            for d, pred, x, htype, hnames in zip(
+                forecast_dates, forecast, forecast_X, forecast_holiday_types, forecast_holiday_names
             )
         ]
 
@@ -1157,14 +1177,15 @@ async def get_comprehensive_sales_analytics(
         top_items_query = text(
             """
             SELECT
-                LOWER(TRIM(REGEXP_REPLACE(item_name, '[^a-zA-Z0-9 ]', '', 'g'))) AS item_name,
-                MAX(category) as category,
-                SUM(quantity) as total_quantity_sold,
-                SUM(total_price) as total_revenue,
-                AVG(unit_price) as avg_price
-            FROM sales_report
-            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
-            GROUP BY LOWER(TRIM(REGEXP_REPLACE(item_name, '[^a-zA-Z0-9 ]', '', 'g')))
+                sr.item_name,
+                COALESCE(NULLIF(sr.category, ''), m.category, 'Uncategorized') as category,
+                SUM(sr.quantity) as total_quantity_sold,
+                SUM(sr.total_price) as total_revenue,
+                AVG(sr.unit_price) as avg_price
+            FROM sales_report sr
+            LEFT JOIN menu m ON LOWER(REPLACE(TRIM(sr.item_name), ' ', '')) = LOWER(REPLACE(TRIM(m.dish_name), ' ', ''))
+            WHERE DATE(sr.sale_date) BETWEEN :start_date AND :end_date
+            GROUP BY sr.item_name, COALESCE(NULLIF(sr.category, ''), m.category, 'Uncategorized')
             ORDER BY total_revenue DESC
             LIMIT 10
         """
@@ -1191,14 +1212,15 @@ async def get_comprehensive_sales_analytics(
         category_query = text(
             """
             SELECT
-                category,
-                SUM(quantity) as total_quantity,
-                SUM(total_price) as total_revenue,
-                COUNT(DISTINCT item_name) as unique_items,
-                AVG(unit_price) as avg_price
-            FROM sales_report
-            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
-            GROUP BY category
+                COALESCE(NULLIF(sr.category, ''), m.category, 'Uncategorized') as category,
+                SUM(sr.quantity) as total_quantity,
+                SUM(sr.total_price) as total_revenue,
+                COUNT(DISTINCT sr.item_name) as unique_items,
+                AVG(sr.unit_price) as avg_price
+            FROM sales_report sr
+            LEFT JOIN menu m ON LOWER(REPLACE(TRIM(sr.item_name), ' ', '')) = LOWER(REPLACE(TRIM(m.dish_name), ' ', ''))
+            WHERE DATE(sr.sale_date) BETWEEN :start_date AND :end_date
+            GROUP BY COALESCE(NULLIF(sr.category, ''), m.category, 'Uncategorized')
             ORDER BY total_revenue DESC
         """
         )
@@ -1261,6 +1283,10 @@ async def get_comprehensive_sales_analytics(
             )
 
         # 8. Daily Trend (last 7 days within the period)
+        # Calculate the actual last 7 days from end_date
+        from datetime import timedelta
+        last_7_days_start = end_datetime.date() - timedelta(days=6)  # 6 days back + today = 7 days
+
         daily_trend_query = text(
             """
             SELECT
@@ -1268,16 +1294,15 @@ async def get_comprehensive_sales_analytics(
                 SUM(quantity) as daily_items,
                 SUM(total_price) as daily_revenue
             FROM sales_report
-            WHERE DATE(sale_date) BETWEEN :start_date AND :end_date
+            WHERE DATE(sale_date) BETWEEN :last_7_start AND :end_date
             GROUP BY DATE(sale_date)
             ORDER BY sale_day DESC
-            LIMIT 7
         """
         )
 
         daily_trend_result = await session.execute(
             daily_trend_query,
-            {"start_date": start_datetime.date(), "end_date": end_datetime.date()},
+            {"last_7_start": last_7_days_start, "end_date": end_datetime.date()},
         )
 
         daily_trend = []

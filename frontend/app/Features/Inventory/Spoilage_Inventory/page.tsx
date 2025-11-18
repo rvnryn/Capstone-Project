@@ -14,6 +14,10 @@ import { useDeleteSpoilage } from "../hook/use-inventoryQuery";
 import { GiBiohazard } from "react-icons/gi";
 import Pagination from "@/app/components/Pagination";
 import { TableLoading, EmptyState } from "@/app/components/LoadingStates";
+import {
+  useInventorySettingsAPI,
+  InventorySetting,
+} from "@/app/Features/Settings/inventory/hook/use-InventorySettingsAPI";
 
 type SpoilageItem = {
   spoilage_id: number;
@@ -35,6 +39,7 @@ type ExtendedSpoilageItem = SpoilageItem & {
   expiration_date?: string | null;
   category?: string | null;
   status?: "Out Of Stock" | "Critical" | "Low" | "Normal";
+  unit?: string | null;
 };
 
 export default function SpoilageInventoryPage() {
@@ -51,6 +56,16 @@ export default function SpoilageInventoryPage() {
 
   // React Query mutation
   const deleteSpoilageMutation = useDeleteSpoilage();
+
+  // Fetch settings for unit measurements
+  const { fetchSettings } = useInventorySettingsAPI();
+  const [settings, setSettings] = useState<InventorySetting[]>([]);
+
+  useEffect(() => {
+    fetchSettings()
+      .then(setSettings)
+      .catch((err) => console.error("Error fetching settings:", err));
+  }, [fetchSettings]);
 
   // Keep listSpoilage for the query function
   const listSpoilage = async () => {
@@ -89,7 +104,7 @@ export default function SpoilageInventoryPage() {
   >(null);
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const spoilageQuery = useQuery<ExtendedSpoilageItem[]>({
-    queryKey: ["spoilageInventory"],
+    queryKey: ["spoilageInventory", settings.length],
     queryFn: async () => {
       if (typeof window !== "undefined" && !navigator.onLine) {
         try {
@@ -114,17 +129,37 @@ export default function SpoilageInventoryPage() {
       }
       // Online: fetch and cache
       const data = await listSpoilage();
-      const mapped = data.map((item: any) => ({
-        ...item,
-        spoilage_id: Number(item.spoilage_id),
-        item_id: Number(item.item_id),
-        quantity_spoiled: Number(item.quantity_spoiled),
-        batch_date: item.batch_date || item.batch || null,
-        expiration_date: item.expiration_date || null,
-        unit_price:
-          item.unit_price !== undefined ? Number(item.unit_price) : null,
-        status: "Out Of Stock" as const, // Spoiled items are always out of stock
-      }));
+      console.log("[SPOILAGE] Raw data from API:", data[0]);
+      console.log("[SPOILAGE] Settings loaded:", settings.length, settings);
+      const mapped = data.map((item: any) => {
+        // Find matching setting for unit
+        const itemNameLower = (item.item_name || "")
+          .toString()
+          .trim()
+          .toLowerCase();
+        const setting = settings.find(
+          (s) =>
+            (s.name || "").toString().trim().toLowerCase() === itemNameLower
+        );
+        const unit =
+          item.unit || item.default_unit || setting?.default_unit || "";
+        console.log(
+          `[SPOILAGE] Item: ${item.item_name}, Backend unit: ${item.unit}, Setting unit: ${setting?.default_unit}, Final unit: ${unit}`
+        );
+
+        return {
+          ...item,
+          spoilage_id: Number(item.spoilage_id),
+          item_id: Number(item.item_id),
+          quantity_spoiled: Number(item.quantity_spoiled),
+          batch_date: item.batch_date || item.batch || null,
+          expiration_date: item.expiration_date || null,
+          unit_price:
+            item.unit_price !== undefined ? Number(item.unit_price) : null,
+          unit,
+          status: "Out Of Stock" as const, // Spoiled items are always out of stock
+        };
+      });
       if (typeof window !== "undefined") {
         localStorage.setItem("spoilageInventoryCache", JSON.stringify(mapped));
       }
@@ -136,7 +171,7 @@ export default function SpoilageInventoryPage() {
     refetchOnWindowFocus: true,
     refetchOnMount: true,
     refetchOnReconnect: true,
-    refetchInterval: 5000, // Poll every 5 seconds for real-time updates
+    // refetchInterval: 5000, // Poll every 5 seconds for real-time updates
     refetchIntervalInBackground: false, // Only poll when tab is active
     retry: 1,
   });
@@ -208,7 +243,8 @@ export default function SpoilageInventoryPage() {
       const matchesCategory =
         !selectedCategory || item.category === selectedCategory;
       const matchesBatch =
-        !selectedBatchDate || formatDateOnly(item.batch_date) === selectedBatchDate;
+        !selectedBatchDate ||
+        formatDateOnly(item.batch_date) === selectedBatchDate;
       const matchesStatus = !selectedStatus || item.status === selectedStatus;
       const matchesSearch =
         !searchQuery ||
@@ -217,7 +253,13 @@ export default function SpoilageInventoryPage() {
         (item.reason || "").toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesBatch && matchesStatus && matchesSearch;
     });
-  }, [spoilageData, selectedCategory, selectedBatchDate, selectedStatus, searchQuery]);
+  }, [
+    spoilageData,
+    selectedCategory,
+    selectedBatchDate,
+    selectedStatus,
+    searchQuery,
+  ]);
 
   // Do not group spoilage records; show each record as a separate row
   const groupedData = useMemo(() => filtered, [filtered]);
@@ -268,7 +310,13 @@ export default function SpoilageInventoryPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategory, selectedBatchDate, selectedStatus, sortConfig]);
+  }, [
+    searchQuery,
+    selectedCategory,
+    selectedBatchDate,
+    selectedStatus,
+    sortConfig,
+  ]);
 
   const requestSort = useCallback((key: string) => {
     setSortConfig((prev) => {
@@ -435,7 +483,9 @@ export default function SpoilageInventoryPage() {
                   >
                     <FiFilter className="text-sm" />
                     Filters
-                    {(selectedCategory || selectedBatchDate || selectedStatus) && (
+                    {(selectedCategory ||
+                      selectedBatchDate ||
+                      selectedStatus) && (
                       <span
                         className={`w-2 h-2 rounded-full ${
                           showFilters ? "bg-black" : "bg-yellow-400"
@@ -479,7 +529,7 @@ export default function SpoilageInventoryPage() {
                       >
                         <option value="">All Categories</option>
                         {getUniqueCategories(spoilageData).map((category) => (
-                          <option key={category} value={category}>
+                          <option key={category} value={category || ""}>
                             {category}
                           </option>
                         ))}
@@ -504,26 +554,6 @@ export default function SpoilageInventoryPage() {
                             {date}
                           </option>
                         ))}
-                      </select>
-                    </div>
-                    <div className="flex-1">
-                      <label
-                        className="block text-gray-300 text-xs sm:text-sm font-medium mb-2"
-                        htmlFor="status-filter"
-                      >
-                        Stock Status
-                      </label>
-                      <select
-                        id="status-filter"
-                        value={selectedStatus}
-                        onChange={(e) => setSelectedStatus(e.target.value)}
-                        className="w-full bg-gray-700/50 text-white rounded-lg px-3 py-2 border border-gray-600/50 focus:border-yellow-400 cursor-pointer text-sm transition-all"
-                      >
-                        <option value="">All Status</option>
-                        <option value="Normal">Normal</option>
-                        <option value="Low">Low</option>
-                        <option value="Critical">Critical</option>
-                        <option value="Out Of Stock">Out Of Stock</option>
                       </select>
                     </div>
                   </section>
@@ -664,7 +694,12 @@ export default function SpoilageInventoryPage() {
                                     )
                                   }
                                 >
-                                  {Number(item.quantity_spoiled) % 1 === 0 ? Number(item.quantity_spoiled).toFixed(0) : Number(item.quantity_spoiled).toFixed(2)}
+                                  {Number(item.quantity_spoiled) % 1 === 0
+                                    ? Number(item.quantity_spoiled).toFixed(0)
+                                    : Number(item.quantity_spoiled).toFixed(
+                                        2
+                                      )}{" "}
+                                  {item.unit || ""}
                                 </td>
                                 <td
                                   className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 whitespace-nowrap text-blue-300 text-xs xs:text-sm"
@@ -694,7 +729,10 @@ export default function SpoilageInventoryPage() {
                                   {item.unit_cost !== undefined &&
                                   item.unit_cost !== null &&
                                   item.quantity_spoiled !== undefined
-                                    ? `₱${(Number(item.unit_cost) * Number(item.quantity_spoiled)).toFixed(2)}`
+                                    ? `₱${(
+                                        Number(item.unit_cost) *
+                                        Number(item.quantity_spoiled)
+                                      ).toFixed(2)}`
                                     : "-"}
                                 </td>
                                 <td

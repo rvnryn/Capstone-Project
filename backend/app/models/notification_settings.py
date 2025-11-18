@@ -9,6 +9,8 @@ class NotificationSettings(Base):
     user_id = Column(Integer, primary_key=True, index=True, nullable=False, unique=True)
     low_stock_enabled = Column(Boolean, default=True)
     low_stock_method = Column(Text, default='["inapp"]')  # Store as JSON string
+    critical_stock_enabled = Column(Boolean, default=True)  # Critical stock notifications
+    critical_stock_method = Column(Text, default='["inapp"]')  # Critical stock notification methods
     expiration_enabled = Column(Boolean, default=True)
     expiration_days = Column(Integer, default=3)
     expiration_method = Column(Text, default='["inapp"]')  # Store as JSON string

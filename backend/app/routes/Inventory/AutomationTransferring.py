@@ -8,7 +8,7 @@ import asyncio
 from postgrest.exceptions import APIError
 router = APIRouter()
 
-from app.supabase import SyncSessionLocal
+from app.supabase import SessionLocal
 
 # Track last execution dates to prevent multiple runs per day
 last_surplus_to_today_run = None
@@ -22,37 +22,15 @@ from app.routes.Inventory.master_inventory import (
     postgrest_client,
     UserActivityLog,
     logger,
+    log_user_activity,
 )
 
 from app.routes.General.notification import create_transfer_notification
 
-class TransferRequest(BaseModel):
-    quantity: float
-
-def log_user_activity(db, user, action_type, description):
-    if db is None:
-        logger.warning("No DB session provided for user activity log; skipping log.")
-        return
-    try:
-        user_row = getattr(user, "user_row", user)
-        new_activity = UserActivityLog(
-            user_id=user_row.get("user_id"),
-            action_type=action_type,
-            description=description,
-            activity_date=datetime.utcnow(),
-            report_date=datetime.utcnow(),
-            user_name=user_row.get("name"),
-            role=user_row.get("user_role"),
-        )
-        db.add(new_activity)
-        db.flush()
-        db.commit()
-    except Exception as e:
-        logger.warning(f"Failed to record user activity ({action_type}): {e}")
 
 async def wait_until_6am():
     now = datetime.now()
-    today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=20, minutes=29)
+    today_6am = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=15, minutes=55)
     if now >= today_6am:
         today_6am += timedelta(days=1)
     seconds_until_6am = (today_6am - now).total_seconds()
@@ -60,7 +38,7 @@ async def wait_until_6am():
 
 async def wait_until_10pm():
     now = datetime.now()
-    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=2, minutes=49)
+    today_10pm = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=15, minutes=49)
     if now >= today_10pm:
         today_10pm += timedelta(days=1)
     seconds_until_10pm = (today_10pm - now).total_seconds()
@@ -417,24 +395,21 @@ async def auto_transfer_master_to_today_top_selling() -> None:
                         "from_master": round(transfer_result['summary']['from_master'], 2)
                     })
 
-                    db = SyncSessionLocal()
-                    try:
+                    async with SessionLocal() as db:
                         description = (
                             f"Auto-transferred {transfer_result['transferred_quantity']:.2f} {recipe_unit} "
                             f"of '{ingredient_name}' to today inventory for top selling item '{item_name}' "
-                            f"(7-day avg: {daily_average:.1f} sold/day, requested: {qty_needed:.2f}). "
+                            f"(7-day avg: {daily_average:.2f} sold/day, requested: {qty_needed:.2f}). "
                             f"Sources: {transfer_result['summary']['from_surplus']:.2f} from surplus, "
                             f"{transfer_result['summary']['from_master']:.2f} from master."
                         )
-                        log_user_activity(
+                        await log_user_activity(
                             db=db,
                             user={"user_id": 0, "name": "System", "user_role": "System"},
                             action_type="auto transfer master to today for top selling",
                             description=description,
                         )
-                        logger.info(f"    Transferred: {transfer_result['transferred_quantity']:.2f} {recipe_unit}")
-                    finally:
-                        db.close()
+                    logger.info(f"    Transferred: {transfer_result['transferred_quantity']:.2f} {recipe_unit}")
 
                 # Warn if insufficient stock
                 if transfer_result["remaining_shortage"] > 0:
@@ -597,20 +572,18 @@ async def auto_transfer_surplus_to_today() -> None:
                 "batch_date": batch_date_str
             })
 
-            db = SyncSessionLocal()
             try:
-                description = f"Auto-transferred {transfer_quantity} {unit} of Id {item['item_id']} | item {item['item_name']} from surplus to today at 6am."
-                log_user_activity(
-                    db=db,
-                    user={"user_id": 0, "name": "System", "user_role": "System"},
-                    action_type="auto transfer surplus to today",
-                    description=description,
-                )
+                async with SessionLocal() as db:
+                    description = f"Auto-transferred {transfer_quantity:.2f} {unit} of Id {item['item_id']} | item {item['item_name']} from surplus to today at 6am."
+                    await log_user_activity(
+                        db=db,
+                        user={"user_id": 0, "name": "System", "user_role": "System"},
+                        action_type="auto transfer surplus to today",
+                        description=description,
+                    )
                 transfer_count += 1
             except Exception as e:
                 logger.warning(f"Failed to record auto transfer activity: {e}")
-            finally:
-                db.close()
 
         # Mark as completed for today
         last_surplus_to_today_run = today
@@ -765,20 +738,18 @@ async def auto_transfer_today_to_surplus() -> None:
                 "batch_date": batch_date_str
             })
 
-            db = SyncSessionLocal()
             try:
-                description = f"Auto-transferred {transfer_quantity} {unit} of Id {item['item_id']} | item {item['item_name']} from today to surplus at 10pm."
-                log_user_activity(
-                    db=db,
-                    user={"user_id": 0, "name": "System", "user_role": "System"},
-                    action_type="auto transfer today to surplus",
-                    description=description,
-                )
+                async with SessionLocal() as db:
+                    description = f"Auto-transferred {transfer_quantity:.2f} {unit} of Id {item['item_id']} | item {item['item_name']} from today to surplus at 10pm."
+                    await log_user_activity(
+                        db=db,
+                        user={"user_id": 0, "name": "System", "user_role": "System"},
+                        action_type="auto transfer today to surplus",
+                        description=description,
+                    )
                 transfer_count += 1
             except Exception as e:
                 logger.warning(f"Failed to record auto transfer activity: {e}")
-            finally:
-                db.close()
 
         # Mark as completed for today
         last_today_to_surplus_run = today
@@ -844,6 +815,7 @@ async def auto_transfer_expired_to_spoilage() -> None:
                     "created_at": now,
                     "updated_at": now,
                     "quantity_spoiled": 0,
+                    "unit_cost": item.get("unit_cost", 0.00),  # Include unit_cost from source item
                     "_source_items": [],
                 }
             qty = (
@@ -886,22 +858,22 @@ async def auto_transfer_expired_to_spoilage() -> None:
                 logger.info(
                     f"Auto-moved expired item {item_id} ({item.get('item_name') or item.get('name')}) from {table} to spoilage."
                 )
-            db = SyncSessionLocal()
             try:
-                description = (
-                    f"Auto-moved expired item {group['item_id']} ({group['item_name']}) "
-                    f"from {','.join(set(i['_source_table'] for i in group['_source_items']))} to spoilage. "
-                    f"Quantity spoiled: {group['quantity_spoiled']}."
-                )
-                log_user_activity(
-                    db=db,
-                    user={"user_id": 0, "name": "System", "user_role": "System"},
-                    action_type="auto transfer expired to spoilage",
-                    description=description,
-                )
+                async with SessionLocal() as db:
+                    description = (
+                        f"Auto-moved expired item {group['item_id']} ({group['item_name']}) "
+                        f"from {','.join(set(i['_source_table'] for i in group['_source_items']))} to spoilage. "
+                        f"Quantity spoiled: {group['quantity_spoiled']}."
+                    )
+                    await log_user_activity(
+                        db=db,
+                        user={"user_id": 0, "name": "System", "user_role": "System"},
+                        action_type="auto transfer expired to spoilage",
+                        description=description,
+                    )
                 total_spoiled_count += 1
-            finally:
-                db.close()
+            except Exception as e:
+                logger.warning(f"Failed to record auto transfer activity: {e}")
 
         # Create notification for auto transfer to spoilage
         if total_spoiled_count > 0:

@@ -24,6 +24,8 @@ class NotificationSettings(BaseModel):
     user_id: int
     low_stock_enabled: bool = True
     low_stock_method: Optional[List[str]] = ["inapp"]
+    critical_stock_enabled: bool = True  # New: Critical stock notifications
+    critical_stock_method: Optional[List[str]] = ["inapp"]  # New: Critical stock notification methods
     expiration_enabled: bool = True
     expiration_days: int = 3
     expiration_method: Optional[List[str]] = ["inapp"]
@@ -97,6 +99,8 @@ async def update_notification_settings(
             # Update existing record
             existing.low_stock_enabled = settings.low_stock_enabled
             existing.low_stock_method = encode_method(settings.low_stock_method)
+            existing.critical_stock_enabled = settings.critical_stock_enabled
+            existing.critical_stock_method = encode_method(settings.critical_stock_method)
             existing.expiration_enabled = settings.expiration_enabled
             existing.expiration_days = settings.expiration_days
             existing.expiration_method = encode_method(settings.expiration_method)
@@ -108,6 +112,8 @@ async def update_notification_settings(
                 user_id=settings.user_id,
                 low_stock_enabled=settings.low_stock_enabled,
                 low_stock_method=encode_method(settings.low_stock_method),
+                critical_stock_enabled=settings.critical_stock_enabled,
+                critical_stock_method=encode_method(settings.critical_stock_method),
                 expiration_enabled=settings.expiration_enabled,
                 expiration_days=settings.expiration_days,
                 expiration_method=encode_method(settings.expiration_method),
@@ -188,14 +194,14 @@ def create_notification(user_id, type, message, details=None):
         print(f"[DEBUG] Insert result data: {result.data}")
 
         if result.data and len(result.data) > 0 and "id" in result.data[0]:
-            print(f"✅ Notification created successfully with id: {result.data[0]['id']}")
+            print(f"[SUCCESS] Notification created successfully with id: {result.data[0]['id']}")
         else:
-            print(f"❌ Warning: Notification insert returned unexpected result: {result}")
+            print(f"[WARNING] Notification insert returned unexpected result: {result}")
 
     except Exception as e:
         import traceback
-        print(f"❌ Error creating notification: {e}")
-        print(f"❌ Traceback:")
+        print(f"[ERROR] Error creating notification: {e}")
+        print(f"[ERROR] Traceback:")
         traceback.print_exc()
         # Re-raise the exception so we can see it in the logs
         raise
@@ -244,9 +250,26 @@ def check_inventory_alerts():
         now = datetime.utcnow()
         soon = now + timedelta(days=3)
         low_items = []
+        critical_items = []  # New: track critical stock items
+        out_of_stock_items = []  # New: track out of stock items (0 quantity across all batches)
         expiring_items = []
         expired_items = []  # New: track already expired items
         missing_threshold_items = []  # New: track items without threshold settings
+
+        # First, group items by item_name to check total stock across all batches
+        item_totals = {}
+        for item in all_inventory_items:
+            item_name = item.get("item_name")
+            stock = item.get("stock_quantity", 0)
+            if item_name not in item_totals:
+                item_totals[item_name] = {
+                    "total_stock": 0,
+                    "item_id": item.get("item_id"),
+                    "category": item.get("category"),
+                    "batches": []
+                }
+            item_totals[item_name]["total_stock"] += stock
+            item_totals[item_name]["batches"].append(item)
 
         for item in all_inventory_items:
             item_id = item.get("item_id")
@@ -350,25 +373,105 @@ def check_inventory_alerts():
                         }
                     )
 
-            # Low stock check (only if threshold exists and item is not expired)
+            # Stock level checks (only if threshold exists and item is not expired)
             if (
                 threshold is not None
                 and stock is not None
-                and stock <= threshold
                 and not is_expired
             ):
-                low_items.append(
-                    {
-                        "item_id": item_id,
-                        "name": item_name,
-                        "batch_date": item_batch_date,
-                        "quantity": stock,
-                        "unit": unit,
-                        "expiration_date": exp_date,
-                        "category": category,
-                        "source_table": source_table,
-                    }
-                )
+                # Get total stock across all batches for this item
+                total_stock = item_totals.get(item_name, {}).get("total_stock", 0)
+                
+                # Out of Stock: total stock across all batches is 0
+                if total_stock <= 0:
+                    # Only add once per item (not per batch)
+                    if not any(i["name"] == item_name for i in out_of_stock_items):
+                        out_of_stock_items.append(
+                            {
+                                "item_id": item_id,
+                                "name": item_name,
+                                "quantity": 0,
+                                "unit": unit,
+                                "threshold": threshold,
+                                "category": category,
+                                "total_batches": len(item_totals[item_name]["batches"]),
+                                "stock_status": "OUT OF STOCK"
+                            }
+                        )
+                # Critical stock: 0 < stock <= 50% of threshold
+                elif total_stock <= (threshold * 0.5):
+                    # Only add once per item (not per batch)
+                    if not any(i["name"] == item_name for i in critical_items):
+                        # Get all batch details for this item
+                        batches = item_totals[item_name]["batches"]
+                        batch_details = []
+                        for batch in batches:
+                            batch_details.append({
+                                "batch_date": batch.get("batch_date"),
+                                "quantity": batch.get("stock_quantity", 0),
+                                "expiration_date": batch.get("expiration_date"),
+                                "source_table": batch.get("source_table")
+                            })
+                        
+                        critical_items.append(
+                            {
+                                "item_id": item_id,
+                                "name": item_name,
+                                "quantity": total_stock,
+                                "unit": unit,
+                                "threshold": threshold,
+                                "percentage": (total_stock / threshold * 100) if threshold > 0 else 0,
+                                "category": category,
+                                "total_batches": len(batches),
+                                "batches": batch_details,
+                                "stock_status": "CRITICAL"
+                            }
+                        )
+                # Low stock: > 50% but <= threshold
+                elif total_stock <= threshold:
+                    # Only add once per item (not per batch)
+                    if not any(i["name"] == item_name for i in low_items):
+                        # Get all batch details for this item
+                        batches = item_totals[item_name]["batches"]
+                        batch_details = []
+                        for batch in batches:
+                            batch_details.append({
+                                "batch_date": batch.get("batch_date"),
+                                "quantity": batch.get("stock_quantity", 0),
+                                "expiration_date": batch.get("expiration_date"),
+                                "source_table": batch.get("source_table")
+                            })
+                        
+                        low_items.append(
+                            {
+                                "item_id": item_id,
+                                "name": item_name,
+                                "quantity": total_stock,
+                                "unit": unit,
+                                "threshold": threshold,
+                                "percentage": (total_stock / threshold * 100) if threshold > 0 else 0,
+                                "category": category,
+                                "total_batches": len(batches),
+                                "batches": batch_details,
+                                "stock_status": "LOW STOCK"
+                            }
+                        )
+
+        # Create notifications for out of stock (most urgent)
+        if out_of_stock_items:
+            message = f"OUT OF STOCK: {len(out_of_stock_items)} items have no stock"
+            details = json.dumps(out_of_stock_items)
+            create_notification(
+                user_id=user_id, type="out_of_stock", message=message, details=details
+            )
+
+        # Create notifications for critical stock (second most urgent)
+        if critical_items:
+            message = f"CRITICAL: {len(critical_items)} items at critically low stock"
+            details = json.dumps(critical_items)
+            create_notification(
+                user_id=user_id, type="critical_stock", message=message, details=details
+            )
 
         # Create notifications for low stock
         if low_items:
@@ -533,24 +636,57 @@ def get_empty_notifications():
                 if item.get("item_name"):
                     current_items.add(item["item_name"])
         low_items = []
+        critical_items = []
+        out_of_stock_items = []
         expiring_items = []
         restocked_items = []
         now = datetime.utcnow()
         soon = now + timedelta(days=settings.get("expiration_days", 3))
+        
+        # Group items by name to check total stock across all batches
+        item_stock_totals = {}
+        if inventory_response.data:
+            for item in inventory_response.data:
+                item_name = item.get("item_name")
+                stock = item.get("stock_quantity", 0)
+                if item_name not in item_stock_totals:
+                    item_stock_totals[item_name] = {"total": 0, "threshold": item.get("threshold")}
+                item_stock_totals[item_name]["total"] += stock
+        
         if inventory_response.data:
             for item in inventory_response.data:
                 try:
                     threshold = item.get("threshold")
                     stock = item.get("stock_quantity")
+                    item_name = item.get("item_name")
                     exp_date = item.get("expiration_date")
-                    # Low stock
+                    
+                    # Get total stock across all batches
+                    total_stock = item_stock_totals.get(item_name, {}).get("total", 0)
+                    
+                    # Out of stock (total stock = 0)
                     if (
+                        threshold is not None
+                        and total_stock <= 0
+                        and item_name not in out_of_stock_items
+                    ):
+                        out_of_stock_items.append(item_name)
+                    # Critical stock (0 < total <= 50% of threshold)
+                    elif (
+                        settings.get("critical_stock_enabled", True)
+                        and threshold is not None
+                        and 0 < total_stock <= (threshold * 0.5)
+                        and item_name not in critical_items
+                    ):
+                        critical_items.append(item_name)
+                    # Low stock (50% < total <= threshold)
+                    elif (
                         settings.get("low_stock_enabled", True)
                         and threshold is not None
-                        and stock is not None
-                        and stock <= threshold
+                        and (threshold * 0.5) < total_stock <= threshold
+                        and item_name not in low_items
                     ):
-                        low_items.append(item["item_name"])
+                        low_items.append(item_name)
                     # Expiring soon
                     if settings.get("expiration_enabled", True) and exp_date:
                         try:
@@ -580,13 +716,33 @@ def get_empty_notifications():
                 except Exception:
                     continue
         # Only send notifications for enabled methods and for items that still exist
+        # --- OUT OF STOCK (most urgent, send first) ---
+        if out_of_stock_items:
+            filtered_out = [i for i in out_of_stock_items if i in current_items]
+            if filtered_out:
+                create_notification(
+                    user_id=user_id,
+                    type="out_of_stock",
+                    message=f"OUT OF STOCK: {', '.join(filtered_out)}",
+                )
+        
+        # --- CRITICAL STOCK (second most urgent) ---
+        if critical_items and "inapp" in settings.get("critical_stock_method", ["inapp"]):
+            filtered_critical = [i for i in critical_items if i in current_items]
+            if filtered_critical:
+                create_notification(
+                    user_id=user_id,
+                    type="critical_stock",
+                    message=f"CRITICAL: {', '.join(filtered_critical)} at critically low stock",
+                )
+
         # --- LOW STOCK ---
         if low_items and "inapp" in settings.get("low_stock_method", ["inapp"]):
             filtered_low = [i for i in low_items if i in current_items]
             if filtered_low:
                 create_notification(
                     user_id=user_id,
-                    type="inapp",
+                    type="low_stock",
                     message=f"Low stock: {', '.join(filtered_low)}",
                 )
 
@@ -621,6 +777,7 @@ def create_transfer_notification(transfer_type: str, item_count: int, details_li
     Create notifications for auto transfer operations
     transfer_type: "today", "master", or "surplus"
     """
+    import json
     print(f"create_transfer_notification called for type={transfer_type}, count={item_count}")
     try:
         users_response = postgrest_client.table("users").select("user_id").execute()
@@ -643,7 +800,6 @@ def create_transfer_notification(transfer_type: str, item_count: int, details_li
 
                 # Parse transfer_method if it's a JSON string
                 if isinstance(transfer_method, str):
-                    import json
                     try:
                         transfer_method = json.loads(transfer_method)
                     except:
@@ -654,17 +810,43 @@ def create_transfer_notification(transfer_type: str, item_count: int, details_li
 
             # Only create notification if enabled and inapp method is selected
             if transfer_enabled and "inapp" in transfer_method:
+                # Format item details if available
+                items_text = ""
+                if details_list and len(details_list) > 0:
+                    # Format items as "chicken (15kg), garlic (2.5kg), onion (3kg)"
+                    formatted_items = []
+                    for item in details_list:
+                        item_name = item.get('name', 'Unknown')
+                        quantity = item.get('quantity', 0)
+                        unit = item.get('unit', '')
+                        formatted_items.append(f"{item_name} ({quantity}{unit})")
+                    items_text = ", ".join(formatted_items[:5])  # Limit to first 5 items to avoid too long message
+                    if len(details_list) > 5:
+                        items_text += f" and {len(details_list) - 5} more"
+
                 if transfer_type == "today":
-                    message = f"Auto transfer to Today's Inventory completed: {item_count} items transferred"
+                    if items_text:
+                        message = f"Auto transfer to Today's Inventory: {items_text}"
+                    else:
+                        message = f"Auto transfer to Today's Inventory completed: {item_count} items transferred"
                     notif_type = "auto_transfer_today"
                 elif transfer_type == "master":
-                    message = f"Auto transfer from Master Inventory completed: {item_count} items transferred for top selling items"
+                    if items_text:
+                        message = f"Auto transfer from Master Inventory (top selling): {items_text}"
+                    else:
+                        message = f"Auto transfer from Master Inventory completed: {item_count} items transferred for top selling items"
                     notif_type = "auto_transfer_master"
                 elif transfer_type == "surplus":
-                    message = f"Auto transfer to Surplus Inventory completed: {item_count} items transferred"
+                    if items_text:
+                        message = f"Auto transfer to Surplus Inventory: {items_text}"
+                    else:
+                        message = f"Auto transfer to Surplus Inventory completed: {item_count} items transferred"
                     notif_type = "auto_transfer_surplus"
                 else:
-                    message = f"Auto transfer completed: {item_count} items"
+                    if items_text:
+                        message = f"Auto transfer completed: {items_text}"
+                    else:
+                        message = f"Auto transfer completed: {item_count} items"
                     notif_type = "auto_transfer"
 
                 # Create notification with details

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import NavigationBar from "@/app/components/navigation/navigation";
 import { useNavigation } from "@/app/components/navigation/hook/use-navigation";
 import { FaUsers, FaEdit, FaTrashAlt, FaPlus } from "react-icons/fa";
@@ -79,7 +79,7 @@ export default function UserManagement() {
   }, [isOffline]);
 
   // Display users: use online data if available, otherwise use cached
-  const displayUsers = isOffline ? offlineUsers : users;
+  const displayUsers = useMemo(() => isOffline ? offlineUsers : users, [isOffline, offlineUsers, users]);
 
   // Refresh handler - just reload the page (React Query will refetch automatically)
   const handleRefresh = () => {

@@ -193,7 +193,7 @@ const SupplierPage = () => {
   };
 
   const columns = [
-    { key: "supplier_id", label: "ID" },
+    { key: "supplier_id", label: "#" },
     { key: "supplier_name", label: "Name" },
     { key: "contact_person", label: "Contact Person" },
     { key: "supplies", label: "Supplies" },
@@ -383,7 +383,7 @@ const SupplierPage = () => {
                             }
                           >
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap text-gray-300 group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">
-                              {item.supplier_id}
+                              {index + 1}
                             </td>
                             <td className="px-2 xs:px-3 sm:px-4 md:px-5 lg:px-6 py-2 xs:py-3 sm:py-4 md:py-5 font-medium whitespace-nowrap">
                               <span className="text-white group-hover:text-yellow-400 transition-colors text-xs xs:text-sm sm:text-base">

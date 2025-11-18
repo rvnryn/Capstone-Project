@@ -64,7 +64,9 @@ const Modal: React.FC<ModalProps> = ({ message, onClose }) => {
               />
             </svg>
           </div>
-          <h3 className="text-2xl font-bold mb-2 drop-shadow" id="modal-title">{message}</h3>
+          <h3 className="text-2xl font-bold mb-2 drop-shadow" id="modal-title">
+            {message}
+          </h3>
         </div>
       </section>
       <style jsx>{`
@@ -114,8 +116,19 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 }) => {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-md z-60 px-4">
-  <section className="relative bg-gradient-to-br from-gray-900/95 to-black/95 text-white p-6 border-2 border-yellow-400 rounded-3xl shadow-2xl w-full max-w-sm text-center" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" tabIndex={-1}>
-  <h4 className="text-2xl font-bold mb-2 text-yellow-500" id="confirm-modal-title">{title}</h4>
+      <section
+        className="relative bg-gradient-to-br from-gray-900/95 to-black/95 text-white p-6 border-2 border-yellow-400 rounded-3xl shadow-2xl w-full max-w-sm text-center"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-modal-title"
+        tabIndex={-1}
+      >
+        <h4
+          className="text-2xl font-bold mb-2 text-yellow-500"
+          id="confirm-modal-title"
+        >
+          {title}
+        </h4>
         <p className="text-sm mb-4 col">
           {countdownSeconds && countdownSeconds > 0 ? (
             <>
@@ -171,6 +184,7 @@ const Login = () => {
   const [otpTimer, setOtpTimer] = useState(0);
   const { loading, setLoading, setMessage } = useGlobalLoading();
   const [rateLimitTimer, setRateLimitTimer] = useState(0);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [otpTimerRef, setOtpTimerRef] = useState<NodeJS.Timeout | null>(null);
   const [resendTimerRef, setResendTimerRef] = useState<NodeJS.Timeout | null>(
     null
@@ -178,8 +192,27 @@ const Login = () => {
   const [rateLimitTimerRef, setRateLimitTimerRef] =
     useState<NodeJS.Timeout | null>(null);
   const router = useRouter();
-  const { refreshSession } = useAuth();
+  const { refreshSession, user } = useAuth();
   const [showConfirmBack, setShowConfirmBack] = useState(false);
+
+  // Store password reset state in localStorage to prevent AuthContext redirect
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (isResettingPassword) {
+        localStorage.setItem("isResettingPassword", "true");
+      } else {
+        localStorage.removeItem("isResettingPassword");
+      }
+    }
+  }, [isResettingPassword]);
+
+  // Redirect authenticated users to dashboard ONLY if not resetting password
+  React.useEffect(() => {
+    if (user && !isResettingPassword) {
+      console.log("[Login] User authenticated, redirecting to dashboard");
+      router.push(routes.dashboard);
+    }
+  }, [user, isResettingPassword, router]);
 
   // Cleanup function for timers
   const cleanupTimers = () => {
@@ -227,12 +260,13 @@ const Login = () => {
   };
 
   const handleModalClose = () => {
-  console.log("[DEBUG] handleModalClose called");
-  setIsModalOpen(false);
-  router.push(routes.dashboard);
+    console.log("[DEBUG] handleModalClose called");
+    setIsModalOpen(false);
+    router.push(routes.dashboard);
   };
 
   const handleResetPassword = () => {
+    setIsResettingPassword(true);
     setShowResetModal(true);
     setResetStatus(null);
     setResetEmail("");
@@ -244,6 +278,7 @@ const Login = () => {
   };
 
   const handleCloseResetModal = () => {
+    setIsResettingPassword(false);
     setShowResetModal(false);
     setResetStatus(null);
     setResetEmail("");
@@ -419,7 +454,12 @@ const Login = () => {
     setResetLoading(true);
     setResetStatus(null);
     try {
-      const { error } = await supabase.auth.verifyOtp({
+      // Ensure flag is set before verification to prevent redirect
+      if (typeof window !== "undefined") {
+        localStorage.setItem("isResettingPassword", "true");
+      }
+
+      const { error, data } = await supabase.auth.verifyOtp({
         email: resetEmail,
         token: resetOtp,
         type: "recovery",
@@ -427,6 +467,8 @@ const Login = () => {
       if (error) {
         setResetStatus("Invalid or expired OTP. Please try again.");
       } else {
+        // OTP verified successfully - user is now logged in temporarily
+        // Keep them logged in so they can set the new password
         setResetStatus("OTP verified! Please set your new password.");
         setTimeout(() => {
           setResetStep("password");
@@ -463,10 +505,14 @@ const Login = () => {
       if (error) {
         setResetStatus(error.message);
       } else {
-        setResetStatus("Password updated successfully!");
+        setResetStatus(
+          "Password updated successfully! Please log in with your new password."
+        );
+        // Sign out the user so they can log in with their new password
+        await supabase.auth.signOut();
         setTimeout(() => {
           handleCloseResetModal();
-        }, 2000);
+        }, 2500);
       }
     } catch (err: any) {
       setResetStatus(err.message || "Failed to update password.");
@@ -629,16 +675,46 @@ const Login = () => {
             <div className="mb-6 relative z-10">
               <div className="mx-auto w-16 h-16 bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-full flex items-center justify-center mb-4 shadow-lg">
                 {resetStep === "email" ? (
-                  <svg className="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  <svg
+                    className="w-8 h-8 text-black"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                    />
                   </svg>
                 ) : resetStep === "otp" ? (
-                  <svg className="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  <svg
+                    className="w-8 h-8 text-black"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                    />
                   </svg>
                 ) : (
-                  <svg className="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  <svg
+                    className="w-8 h-8 text-black"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                    />
                   </svg>
                 )}
               </div>
@@ -662,8 +738,18 @@ const Login = () => {
               <div className="space-y-4 relative z-10">
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                    <svg
+                      className="h-5 w-5 text-yellow-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"
+                      />
                     </svg>
                   </div>
                   <input
@@ -688,8 +774,18 @@ const Login = () => {
                     </>
                   ) : (
                     <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                        />
                       </svg>
                       <span>Send Verification Code</span>
                     </>
@@ -698,29 +794,65 @@ const Login = () => {
               </div>
             )}
             {resetStep === "otp" && (
-              <form onSubmit={handleVerifyOtp} className="space-y-6 relative z-10">
+              <form
+                onSubmit={handleVerifyOtp}
+                className="space-y-6 relative z-10"
+              >
                 {/* Email info banner */}
                 <div className="bg-yellow-400/10 border border-yellow-400/30 rounded-xl p-4 backdrop-blur-sm">
                   <div className="flex items-center gap-2 text-yellow-300 text-sm font-medium mb-2">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <svg
+                      className="w-4 h-4"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
                       <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                       <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                     </svg>
-                    <span>Code sent to: <span className="text-white">{resetEmail}</span></span>
+                    <span>
+                      Code sent to:{" "}
+                      <span className="text-white">{resetEmail}</span>
+                    </span>
                   </div>
                   {otpTimer > 0 ? (
                     <div className="flex items-center gap-2 text-blue-300 text-sm">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
                       </svg>
-                      <span>Expires in: <span className="font-bold">{Math.floor(otpTimer / 60)}:{(otpTimer % 60).toString().padStart(2, "0")}</span></span>
+                      <span>
+                        Expires in:{" "}
+                        <span className="font-bold">
+                          {Math.floor(otpTimer / 60)}:
+                          {(otpTimer % 60).toString().padStart(2, "0")}
+                        </span>
+                      </span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 text-red-400 text-sm">
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
                       </svg>
-                      <span className="font-medium">Code expired. Request a new one.</span>
+                      <span className="font-medium">
+                        Code expired. Request a new one.
+                      </span>
                     </div>
                   )}
                 </div>
@@ -759,8 +891,18 @@ const Login = () => {
                       </>
                     ) : (
                       <>
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
                         </svg>
                         <span>Verify Code</span>
                       </>
@@ -780,15 +922,35 @@ const Login = () => {
                       </>
                     ) : resendCooldown > 0 ? (
                       <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
                         </svg>
                         <span>Resend in {resendCooldown}s</span>
                       </>
                     ) : (
                       <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                          />
                         </svg>
                         <span>Resend Code</span>
                       </>
@@ -800,8 +962,18 @@ const Login = () => {
                     onClick={handleBackFromOtp}
                     className="w-full bg-gray-700/50 hover:bg-gray-700 text-gray-300 hover:text-white font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                      />
                     </svg>
                     <span>Back to Email</span>
                   </button>
@@ -809,12 +981,25 @@ const Login = () => {
               </form>
             )}
             {resetStep === "password" && (
-              <form onSubmit={handleUpdatePassword} className="space-y-5 relative z-10">
+              <form
+                onSubmit={handleUpdatePassword}
+                className="space-y-5 relative z-10"
+              >
                 {/* New Password Input */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    <svg
+                      className="w-4 h-4 text-yellow-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                      />
                     </svg>
                     New Password
                   </label>
@@ -850,13 +1035,15 @@ const Login = () => {
                             }`}
                           />
                         </div>
-                        <span className={`text-sm font-semibold ${
-                          newPassword.length < 8
-                            ? "text-red-400"
-                            : newPassword.length < 12
-                            ? "text-yellow-400"
-                            : "text-green-400"
-                        }`}>
+                        <span
+                          className={`text-sm font-semibold ${
+                            newPassword.length < 8
+                              ? "text-red-400"
+                              : newPassword.length < 12
+                              ? "text-yellow-400"
+                              : "text-green-400"
+                          }`}
+                        >
                           {newPassword.length < 8
                             ? "Weak"
                             : newPassword.length < 12
@@ -865,7 +1052,12 @@ const Login = () => {
                         </span>
                       </div>
                       <p className="text-xs text-gray-400">
-                        Password strength: {newPassword.length < 8 ? "Use at least 8 characters" : newPassword.length < 12 ? "Add more characters for better security" : "Excellent!"}
+                        Password strength:{" "}
+                        {newPassword.length < 8
+                          ? "Use at least 8 characters"
+                          : newPassword.length < 12
+                          ? "Add more characters for better security"
+                          : "Excellent!"}
                       </p>
                     </div>
                   )}
@@ -874,8 +1066,18 @@ const Login = () => {
                 {/* Confirm Password Input */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <svg
+                      className="w-4 h-4 text-yellow-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
                     </svg>
                     Confirm Password
                   </label>
@@ -894,20 +1096,38 @@ const Login = () => {
                   />
                   {confirmNewPassword && confirmNewPassword !== newPassword && (
                     <p className="text-sm text-red-400 flex items-center gap-1">
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
                       </svg>
                       Passwords do not match
                     </p>
                   )}
-                  {confirmNewPassword && confirmNewPassword === newPassword && newPassword && (
-                    <p className="text-sm text-green-400 flex items-center gap-1">
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Passwords match
-                    </p>
-                  )}
+                  {confirmNewPassword &&
+                    confirmNewPassword === newPassword &&
+                    newPassword && (
+                      <p className="text-sm text-green-400 flex items-center gap-1">
+                        <svg
+                          className="w-4 h-4"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        Passwords match
+                      </p>
+                    )}
                 </div>
 
                 {/* Submit Button */}
@@ -927,8 +1147,18 @@ const Login = () => {
                     </>
                   ) : (
                     <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
                       </svg>
                       <span>Reset Password</span>
                     </>
@@ -939,33 +1169,51 @@ const Login = () => {
 
             {/* Status Message */}
             {resetStatus && (
-              <div className={`mt-6 relative z-10 rounded-xl p-4 flex items-start gap-3 ${
-                resetStatus.includes("sent") ||
-                resetStatus.includes("verified") ||
-                resetStatus.includes("successfully")
-                  ? "bg-green-500/20 border-2 border-green-500/50"
-                  : "bg-red-500/20 border-2 border-red-500/50"
-              }`}>
-                <svg className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+              <div
+                className={`mt-6 relative z-10 rounded-xl p-4 flex items-start gap-3 ${
                   resetStatus.includes("sent") ||
                   resetStatus.includes("verified") ||
                   resetStatus.includes("successfully")
-                    ? "text-green-400"
-                    : "text-red-400"
-                }`} fill="currentColor" viewBox="0 0 20 20">
-                  {resetStatus.includes("sent") || resetStatus.includes("verified") || resetStatus.includes("successfully") ? (
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    ? "bg-green-500/20 border-2 border-green-500/50"
+                    : "bg-red-500/20 border-2 border-red-500/50"
+                }`}
+              >
+                <svg
+                  className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                    resetStatus.includes("sent") ||
+                    resetStatus.includes("verified") ||
+                    resetStatus.includes("successfully")
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }`}
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  {resetStatus.includes("sent") ||
+                  resetStatus.includes("verified") ||
+                  resetStatus.includes("successfully") ? (
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clipRule="evenodd"
+                    />
                   ) : (
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
                   )}
                 </svg>
-                <p className={`text-sm font-medium ${
-                  resetStatus.includes("sent") ||
-                  resetStatus.includes("verified") ||
-                  resetStatus.includes("successfully")
-                    ? "text-green-200"
-                    : "text-red-200"
-                }`}>
+                <p
+                  className={`text-sm font-medium ${
+                    resetStatus.includes("sent") ||
+                    resetStatus.includes("verified") ||
+                    resetStatus.includes("successfully")
+                      ? "text-green-200"
+                      : "text-red-200"
+                  }`}
+                >
                   {resetStatus}
                 </p>
               </div>

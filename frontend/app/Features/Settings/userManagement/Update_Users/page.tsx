@@ -9,7 +9,7 @@ import { useUsersAPI } from "../hook/use-user";
 import { useAuth } from "@/app/context/AuthContext";
 import { FaUsers } from "react-icons/fa";
 import type { User } from "../hook/use-user";
-import { FiAlertTriangle, FiArrowRight, FiCheck, FiSave, FiUser, FiMail, FiShield } from "react-icons/fi";
+import { FiAlertTriangle, FiArrowRight, FiCheck, FiSave, FiUser, FiMail, FiShield, FiEye, FiEyeOff, FiLock } from "react-icons/fi";
 import ResponsiveMain from "@/app/components/ResponsiveMain";
 import { MdCancel, MdEdit } from "react-icons/md";
 
@@ -65,6 +65,37 @@ export default function EditUser() {
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [showPasswordSuccess, setShowPasswordSuccess] = useState(false);
+
+  // Password visibility toggles
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showReEnterPassword, setShowReEnterPassword] = useState(false);
+  const [showAdminPass, setShowAdminPass] = useState(false);
+
+  // Password strength calculation
+  const calculatePasswordStrength = (password: string) => {
+    let strength = 0;
+    if (password.length >= 6) strength += 1;
+    if (password.length >= 10) strength += 1;
+    if (/[A-Z]/.test(password)) strength += 1;
+    if (/[a-z]/.test(password)) strength += 1;
+    if (/[0-9]/.test(password)) strength += 1;
+    if (/[^A-Za-z0-9]/.test(password)) strength += 1;
+    return strength;
+  };
+
+  const getPasswordStrengthLabel = (strength: number) => {
+    if (strength === 0) return { label: '', color: '' };
+    if (strength <= 2) return { label: 'Weak', color: 'text-red-400' };
+    if (strength <= 4) return { label: 'Medium', color: 'text-yellow-400' };
+    return { label: 'Strong', color: 'text-green-400' };
+  };
+
+  const getPasswordStrengthBar = (strength: number) => {
+    if (strength === 0) return '';
+    if (strength <= 2) return 'bg-red-400';
+    if (strength <= 4) return 'bg-yellow-400';
+    return 'bg-green-400';
+  };
 
   // Online/offline detection
   useEffect(() => {
@@ -378,7 +409,7 @@ export default function EditUser() {
               (error) => {
                 console.error(
                   "EmailJS: Failed to send password change notification:",
-                  error.text
+                  error.text || error.message || error
                 );
               }
             );
@@ -921,136 +952,173 @@ export default function EditUser() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="password-dialog-title"
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/80 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-fadein"
           >
-            <form
-              method="dialog"
-              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-blue-400/50 text-center space-y-4 sm:space-y-6 max-w-sm sm:max-w-md w-full"
-              onSubmit={(e) => e.preventDefault()}
-            >
-              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-blue-400/20 to-blue-500/20 rounded-full flex items-center justify-center">
-                <span className="text-blue-400 text-3xl">🔒</span>
+            <div className="relative bg-gradient-to-br from-blue-950/40 via-slate-900/60 to-black/80
+            backdrop-blur-2xl rounded-3xl shadow-[0_8px_32px_0_rgba(59,130,246,0.2)]
+            border border-blue-500/30 p-8 max-w-2xl w-full overflow-hidden">
+              {/* Animated background gradient */}
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 via-transparent to-transparent opacity-50" />
+
+              {/* Step indicator */}
+              <div className="relative z-10 flex items-center justify-center mb-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                    1
+                  </div>
+                  <div className="w-12 h-0.5 bg-gray-600" />
+                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-gray-400 text-xs font-bold">
+                    2
+                  </div>
+                </div>
               </div>
-              <h3
-                id="password-dialog-title"
-                className="text-xl sm:text-2xl font-bold text-white mb-2"
-              >
-                Change User Password
-              </h3>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-800 text-white mb-2"
-                placeholder="Enter new password"
-              />
-              {/* Only show confirm password field when changing another user's password */}
-              {!(
-                currentUser &&
-                currentUser.auth_id &&
-                String(currentUser.auth_id) === String(formData?.auth_id)
-              ) && (
-                <input
-                  type="password"
-                  value={reEnterPassword}
-                  onChange={(e) => setReEnterPassword(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-800 text-white mb-2"
-                  placeholder="Re-enter new password"
-                />
-              )}
-              {passwordError && (
-                <p className="text-red-400 text-sm">{passwordError}</p>
-              )}
-              <div className="flex flex-col sm:flex-row justify-center gap-4">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    // Password validation rules
-                    if (!newPassword || newPassword.length < 6) {
-                      setPasswordError(
-                        "Password must be at least 6 characters."
-                      );
-                      return;
-                    }
-                    if (!/[A-Z]/.test(newPassword)) {
-                      setPasswordError(
-                        "Password must contain at least one uppercase letter."
-                      );
-                      return;
-                    }
-                    if (!/[a-z]/.test(newPassword)) {
-                      setPasswordError(
-                        "Password must contain at least one lowercase letter."
-                      );
-                      return;
-                    }
-                    if (!/[0-9]/.test(newPassword)) {
-                      setPasswordError(
-                        "Password must contain at least one digit."
-                      );
-                      return;
-                    }
-                    // Only check password match for other users (not own account)
-                    const isOwnAccount =
-                      currentUser &&
-                      currentUser.auth_id &&
-                      String(currentUser.auth_id) === String(formData?.auth_id);
-                    if (!isOwnAccount && newPassword !== reEnterPassword) {
-                      setPasswordError("Passwords do not match.");
-                      return;
-                    }
-                    // Prevent new password from being the same as the current password
-                    if (
-                      formData &&
-                      formData.password &&
-                      newPassword === formData.password
-                    ) {
-                      setPasswordError(
-                        "New password cannot be the same as the current password."
-                      );
-                      return;
-                    }
-                    setPasswordError("");
-                    // If editing own password, skip admin password modal
-                    if (
-                      currentUser &&
-                      currentUser.auth_id &&
-                      String(currentUser.auth_id) === String(formData.auth_id)
-                    ) {
-                      // Call changeUserPassword with own auth_id, newPassword, and empty admin_password
-                      try {
-                        await changeUserPassword(
-                          String(formData.auth_id),
-                          newPassword,
-                          ""
-                        );
-                        setShowPasswordModal(false);
-                        setShowAdminPasswordModal(false);
-                        setNewPassword("");
-                        setReEnterPassword("");
-                        setAdminPassword("");
-                        setAdminPasswordError("");
+
+              {/* Icon and Title */}
+              <div className="relative z-10 flex flex-col items-center mb-6">
+                <div className="relative mb-4">
+                  <div className="absolute inset-0 bg-blue-500/30 blur-2xl rounded-full" />
+                  <div className="relative w-16 h-16 bg-gradient-to-br from-blue-500/30 to-blue-600/20 rounded-2xl flex items-center justify-center border border-blue-400/30 shadow-lg">
+                    <FiLock className="text-blue-400 text-3xl drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                  </div>
+                </div>
+                <h3 id="password-dialog-title" className="text-2xl font-bold bg-gradient-to-r from-blue-300 via-blue-200 to-blue-300 bg-clip-text text-transparent mb-2">
+                  Change Password
+                </h3>
+                <p className="text-gray-400 text-sm text-center">
+                  {currentUser && String(currentUser.id) === String(formData?.auth_id)
+                    ? "Update your account password"
+                    : `Set new password for ${formData.name}`}
+                </p>
+              </div>
+
+              {/* New Password Input */}
+              <div className="relative z-10 mb-4">
+                <label className="block text-gray-300 text-sm font-medium mb-2">
+                  New Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      setPasswordError("");
+                    }}
+                    className="w-full px-4 py-3 pr-12 rounded-xl border-2 border-blue-500/20 bg-slate-900/50 text-white focus:border-blue-400/50 focus:outline-none transition-all backdrop-blur-sm"
+                    placeholder="Enter new password"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-400 transition-colors"
+                  >
+                    {showNewPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                  </button>
+                </div>
+
+                {/* Password Strength Meter */}
+                {newPassword && (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-400">Password Strength</span>
+                      <span className={`text-xs font-semibold ${getPasswordStrengthLabel(calculatePasswordStrength(newPassword)).color}`}>
+                        {getPasswordStrengthLabel(calculatePasswordStrength(newPassword)).label}
+                      </span>
+                    </div>
+                    <div className="flex gap-1">
+                      {[...Array(6)].map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                            i < calculatePasswordStrength(newPassword)
+                              ? getPasswordStrengthBar(calculatePasswordStrength(newPassword))
+                              : 'bg-gray-700'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Password Requirements */}
+                <div className="mt-4 p-3 bg-slate-900/30 rounded-xl border border-blue-500/10">
+                  <p className="text-xs font-semibold text-gray-300 mb-2">Password must contain:</p>
+                  <div className="space-y-1.5">
+                    <div className={`flex items-center gap-2 text-xs transition-colors ${newPassword.length >= 6 ? 'text-green-400' : 'text-gray-500'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center ${newPassword.length >= 6 ? 'bg-green-500/20' : 'bg-gray-700'}`}>
+                        {newPassword.length >= 6 && <FiCheck size={10} />}
+                      </div>
+                      At least 6 characters
+                    </div>
+                    <div className={`flex items-center gap-2 text-xs transition-colors ${/[A-Z]/.test(newPassword) ? 'text-green-400' : 'text-gray-500'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center ${/[A-Z]/.test(newPassword) ? 'bg-green-500/20' : 'bg-gray-700'}`}>
+                        {/[A-Z]/.test(newPassword) && <FiCheck size={10} />}
+                      </div>
+                      One uppercase letter
+                    </div>
+                    <div className={`flex items-center gap-2 text-xs transition-colors ${/[a-z]/.test(newPassword) ? 'text-green-400' : 'text-gray-500'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center ${/[a-z]/.test(newPassword) ? 'bg-green-500/20' : 'bg-gray-700'}`}>
+                        {/[a-z]/.test(newPassword) && <FiCheck size={10} />}
+                      </div>
+                      One lowercase letter
+                    </div>
+                    <div className={`flex items-center gap-2 text-xs transition-colors ${/[0-9]/.test(newPassword) ? 'text-green-400' : 'text-gray-500'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center ${/[0-9]/.test(newPassword) ? 'bg-green-500/20' : 'bg-gray-700'}`}>
+                        {/[0-9]/.test(newPassword) && <FiCheck size={10} />}
+                      </div>
+                      One number
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Confirm Password (only for other users) */}
+              {!(currentUser && String(currentUser.id) === String(formData?.auth_id)) && (
+                <div className="relative z-10 mb-6">
+                  <label className="block text-gray-300 text-sm font-medium mb-2">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showReEnterPassword ? "text" : "password"}
+                      value={reEnterPassword}
+                      onChange={(e) => {
+                        setReEnterPassword(e.target.value);
                         setPasswordError("");
-                        setShowPasswordSuccess(true);
-                        setTimeout(() => setShowPasswordSuccess(false), 3000);
-                      } catch (err: any) {
-                        setPasswordError(
-                          err?.message || "Failed to change password."
-                        );
-                      }
-                    } else {
-                      setShowPasswordModal(false);
-                      setShowAdminPasswordModal(true);
-                    }
-                  }}
-                  className="px-8 py-3 rounded-lg border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black font-semibold transition-all cursor-pointer"
-                >
-                  {currentUser &&
-                  currentUser.auth_id &&
-                  String(currentUser.auth_id) === String(formData.auth_id)
-                    ? "Change Password"
-                    : "Next"}
-                </button>
+                      }}
+                      className="w-full px-4 py-3 pr-12 rounded-xl border-2 border-blue-500/20 bg-slate-900/50 text-white focus:border-blue-400/50 focus:outline-none transition-all backdrop-blur-sm"
+                      placeholder="Re-enter new password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowReEnterPassword(!showReEnterPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-400 transition-colors"
+                    >
+                      {showReEnterPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                    </button>
+                  </div>
+                  {reEnterPassword && newPassword !== reEnterPassword && (
+                    <p className="mt-2 text-xs text-red-400 flex items-center gap-1">
+                      <FiAlertTriangle size={12} />
+                      Passwords do not match
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Error Message */}
+              {passwordError && (
+                <div className="relative z-10 mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                  <p className="text-red-400 text-sm flex items-center gap-2">
+                    <FiAlertTriangle size={16} />
+                    {passwordError}
+                  </p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="relative z-10 flex gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -1058,13 +1126,66 @@ export default function EditUser() {
                     setNewPassword("");
                     setReEnterPassword("");
                     setPasswordError("");
+                    setShowNewPassword(false);
+                    setShowReEnterPassword(false);
                   }}
-                  className="px-8 py-3 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:text-white font-semibold transition-all cursor-pointer"
+                  className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all"
                 >
                   Cancel
                 </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    // Password validation rules
+                    if (!newPassword || newPassword.length < 6) {
+                      setPasswordError("Password must be at least 6 characters.");
+                      return;
+                    }
+                    if (!/[A-Z]/.test(newPassword)) {
+                      setPasswordError("Password must contain at least one uppercase letter.");
+                      return;
+                    }
+                    if (!/[a-z]/.test(newPassword)) {
+                      setPasswordError("Password must contain at least one lowercase letter.");
+                      return;
+                    }
+                    if (!/[0-9]/.test(newPassword)) {
+                      setPasswordError("Password must contain at least one digit.");
+                      return;
+                    }
+                    const isOwnAccount = currentUser && String(currentUser.id) === String(formData?.auth_id);
+                    if (!isOwnAccount && newPassword !== reEnterPassword) {
+                      setPasswordError("Passwords do not match.");
+                      return;
+                    }
+                    setPasswordError("");
+
+                    if (isOwnAccount) {
+                      try {
+                        await changeUserPassword(String(formData.auth_id), newPassword, "");
+                        setShowPasswordModal(false);
+                        setNewPassword("");
+                        setReEnterPassword("");
+                        setShowPasswordSuccess(true);
+                        setTimeout(() => setShowPasswordSuccess(false), 3000);
+                      } catch (err: any) {
+                        setPasswordError(err?.message || "Failed to change password.");
+                      }
+                    } else {
+                      setShowPasswordModal(false);
+                      setShowAdminPasswordModal(true);
+                    }
+                  }}
+                  className="flex-1 group relative flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg hover:shadow-blue-500/50 overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-white/20 to-blue-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                  <span className="relative z-10">
+                    {currentUser && String(currentUser.id) === String(formData.auth_id) ? "Change Password" : "Next"}
+                  </span>
+                  <FiArrowRight className="relative z-10" size={18} />
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         )}
 
@@ -1073,49 +1194,118 @@ export default function EditUser() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="admin-password-dialog-title"
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/80 backdrop-blur-xl flex items-center justify-center z-50 p-4 animate-fadein"
           >
-            <form
-              method="dialog"
-              className="bg-gradient-to-br from-gray-900/95 to-black/95 backdrop-blur-sm p-6 sm:p-8 rounded-3xl shadow-2xl border border-blue-400/50 text-center space-y-4 sm:space-y-6 max-w-sm sm:max-w-md w-full"
-              onSubmit={(e) => e.preventDefault()}
-            >
-              <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-blue-400/20 to-blue-500/20 rounded-full flex items-center justify-center">
-                <span className="text-blue-400 text-3xl">🔑</span>
+            <div className="relative bg-gradient-to-br from-amber-950/40 via-slate-900/60 to-black/80
+            backdrop-blur-2xl rounded-3xl shadow-[0_8px_32px_0_rgba(251,191,36,0.2)]
+            border border-amber-500/30 p-8 max-w-2xl w-full overflow-hidden">
+              {/* Animated background gradient */}
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-600/10 via-transparent to-transparent opacity-50" />
+
+              {/* Step indicator - Step 2 active */}
+              <div className="relative z-10 flex items-center justify-center mb-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white text-xs">
+                    <FiCheck size={16} />
+                  </div>
+                  <div className="w-12 h-0.5 bg-amber-500" />
+                  <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white text-xs font-bold">
+                    2
+                  </div>
+                </div>
               </div>
-              <h3
-                id="admin-password-dialog-title"
-                className="text-xl sm:text-2xl font-bold text-white mb-2"
-              >
-                Confirm Owner Password
-              </h3>
-              <input
-                type="password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-gray-600 bg-gray-800 text-white mb-2"
-                placeholder="Enter your admin password to confirm"
-                autoComplete="current-password"
-              />
+
+              {/* Icon and Title */}
+              <div className="relative z-10 flex flex-col items-center mb-6">
+                <div className="relative mb-4">
+                  <div className="absolute inset-0 bg-amber-500/30 blur-2xl rounded-full" />
+                  <div className="relative w-16 h-16 bg-gradient-to-br from-amber-500/30 to-amber-600/20 rounded-2xl flex items-center justify-center border border-amber-400/30 shadow-lg">
+                    <FiShield className="text-amber-400 text-3xl drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]" />
+                  </div>
+                </div>
+                <h3 id="admin-password-dialog-title" className="text-2xl font-bold bg-gradient-to-r from-amber-300 via-amber-200 to-amber-300 bg-clip-text text-transparent mb-2">
+                  Admin Verification
+                </h3>
+                <p className="text-gray-400 text-sm text-center">
+                  Enter your admin password to authorize this change
+                </p>
+              </div>
+
+              {/* Admin Password Input */}
+              <div className="relative z-10 mb-6">
+                <label className="block text-gray-300 text-sm font-medium mb-2">
+                  Admin Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showAdminPass ? "text" : "password"}
+                    value={adminPassword}
+                    onChange={(e) => {
+                      setAdminPassword(e.target.value);
+                      setAdminPasswordError("");
+                    }}
+                    className="w-full px-4 py-3 pr-12 rounded-xl border-2 border-amber-500/20 bg-slate-900/50 text-white focus:border-amber-400/50 focus:outline-none transition-all backdrop-blur-sm"
+                    placeholder="Enter your admin password"
+                    autoComplete="current-password"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPass(!showAdminPass)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-amber-400 transition-colors"
+                  >
+                    {showAdminPass ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary of change */}
+              <div className="relative z-10 mb-6 p-4 bg-slate-900/30 rounded-xl border border-amber-500/10">
+                <p className="text-xs font-semibold text-gray-300 mb-2">Password Change Summary:</p>
+                <div className="flex items-center gap-2 text-sm">
+                  <FiUser className="text-amber-400" />
+                  <span className="text-gray-400">User:</span>
+                  <span className="text-white font-semibold">{formData.name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm mt-2">
+                  <FiLock className="text-green-400" />
+                  <span className="text-gray-400">New password set successfully</span>
+                </div>
+              </div>
+
+              {/* Error Message */}
               {adminPasswordError && (
-                <p className="text-red-400 text-sm">{adminPasswordError}</p>
+                <div className="relative z-10 mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                  <p className="text-red-400 text-sm flex items-center gap-2">
+                    <FiAlertTriangle size={16} />
+                    {adminPasswordError}
+                  </p>
+                </div>
               )}
-              <div className="flex flex-col sm:flex-row justify-center gap-4">
+
+              {/* Action Buttons */}
+              <div className="relative z-10 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminPasswordModal(false);
+                    setAdminPassword("");
+                    setAdminPasswordError("");
+                    setShowAdminPass(false);
+                  }}
+                  className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-500/50 text-gray-300 hover:border-gray-400 hover:text-white hover:bg-gray-700/30 font-semibold transition-all"
+                >
+                  Cancel
+                </button>
                 <button
                   type="button"
                   onClick={async () => {
                     if (!adminPassword) {
-                      setAdminPasswordError(
-                        "Please enter your admin password to confirm."
-                      );
+                      setAdminPasswordError("Please enter your admin password to confirm.");
                       return;
                     }
                     try {
-                      await changeUserPassword(
-                        String(formData.auth_id),
-                        newPassword,
-                        adminPassword
-                      );
+                      await changeUserPassword(String(formData.auth_id), newPassword, adminPassword);
                       setShowAdminPasswordModal(false);
                       setShowPasswordModal(false);
                       setNewPassword("");
@@ -1123,31 +1313,23 @@ export default function EditUser() {
                       setAdminPassword("");
                       setAdminPasswordError("");
                       setPasswordError("");
+                      setShowAdminPass(false);
+                      setShowNewPassword(false);
+                      setShowReEnterPassword(false);
                       setShowPasswordSuccess(true);
                       setTimeout(() => setShowPasswordSuccess(false), 3000);
                     } catch (err: any) {
-                      setAdminPasswordError(
-                        err?.message || "Failed to change password."
-                      );
+                      setAdminPasswordError(err?.message || "Failed to change password.");
                     }
                   }}
-                  className="px-8 py-3 rounded-lg border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-black font-semibold transition-all cursor-pointer"
+                  className="flex-1 group relative flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg hover:shadow-amber-500/50 overflow-hidden"
                 >
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAdminPasswordModal(false);
-                    setAdminPassword("");
-                    setAdminPasswordError("");
-                  }}
-                  className="px-8 py-3 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:text-white font-semibold transition-all cursor-pointer"
-                >
-                  Cancel
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/0 via-white/20 to-amber-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                  <FiCheck className="relative z-10" size={18} />
+                  <span className="relative z-10">Confirm Change</span>
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         )}
         {/* Success Message */}

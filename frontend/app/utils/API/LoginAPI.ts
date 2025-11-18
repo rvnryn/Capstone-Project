@@ -56,16 +56,20 @@ export async function logoutUser() {
       },
     });
 
-    // Remove token regardless of response status
+    // Remove ALL auth-related data from localStorage
     localStorage.removeItem("token");
+    localStorage.removeItem("cachedUser");
+    localStorage.removeItem("cachedRole");
 
     if (!response.ok) {
-      console.error("Logout request failed, but token removed locally");
+      console.error("Logout request failed, but credentials removed locally");
     }
   } catch (error: any) {
     // Optionally handle error
     console.error("Logout failed:", error.message || "Unknown error");
-    // Still remove token even if logout request fails
+    // Still remove all credentials even if logout request fails
     localStorage.removeItem("token");
+    localStorage.removeItem("cachedUser");
+    localStorage.removeItem("cachedRole");
   }
 }

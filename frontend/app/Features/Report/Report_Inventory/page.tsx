@@ -21,8 +21,19 @@ interface InventoryItem {
   updated?: string;
   unit_cost?: number; // Cost per unit
   total_value?: number; // Calculated: inStock * unit_cost
+  unit?: string; // Unit of measurement (kg, pcs, etc.)
   [key: string]: string | number | undefined;
 }
+
+// Helper function to format stock quantity with proper decimals and unit
+const formatStockQuantity = (quantity: number, unit?: string): string => {
+  // Always format to 2 decimal places
+  const formattedQty = quantity.toFixed(2);
+
+  // Add unit if available
+  return unit ? `${formattedQty} ${unit}` : formattedQty;
+};
+
 import { TbReportAnalytics } from "react-icons/tb";
 import { MdAssessment } from "react-icons/md";
 import { MdCheckCircle } from "react-icons/md";
@@ -267,6 +278,8 @@ export default function ReportInventory() {
           quantity_spoiled: spoilageInventory[0].quantity_spoiled,
           spoilage_date: spoilageInventory[0].spoilage_date,
           reason: spoilageInventory[0].reason,
+          unit: spoilageInventory[0].unit,
+          default_unit: spoilageInventory[0].default_unit,
           all_fields: Object.keys(spoilageInventory[0]),
         });
       }
@@ -482,20 +495,35 @@ export default function ReportInventory() {
         });
 
       // Store spoilage separately for toggle table view
-      const spoilageData = spoilageInventory.map((item: any) => ({
-        id: item.spoilage_id || item.id,
-        name: item.item_name || item.name,
-        inStock: 0,
-        wastage: item.quantity_spoiled || 0,
-        stock: "Spoiled",
-        report_date: item.spoilage_date || today,
-        spoilage_date: item.spoilage_date || today, // Dedicated spoilage date field
-        category: item.category || "Uncategorized",
-        expiration_date: item.expiration_date,
-        batch_id: item.batch_date || item.batch_id,
-        reason: item.reason || "Expired", // Add reason from API
-        created_at: item.spoilage_date,
-      }));
+      const spoilageData = spoilageInventory.map((item: any) => {
+        const itemName = item.item_name || item.name;
+
+        // Find matching unit from settings (case-insensitive match)
+        const setting = settings.find(
+          (s) =>
+            (s.name || s.item_name || "").toString().trim().toLowerCase() ===
+            itemName.toString().trim().toLowerCase()
+        );
+
+        const unit =
+          item.unit || item.default_unit || setting?.default_unit || "";
+
+        return {
+          id: item.spoilage_id || item.id,
+          name: itemName,
+          inStock: 0,
+          wastage: item.quantity_spoiled || 0,
+          stock: "Spoiled",
+          report_date: item.spoilage_date || today,
+          spoilage_date: item.spoilage_date || today, // Dedicated spoilage date field
+          category: item.category || "Uncategorized",
+          expiration_date: item.expiration_date,
+          batch_id: item.batch_date || item.batch_id,
+          reason: item.reason || "Expired", // Add reason from API
+          created_at: item.spoilage_date,
+          unit: unit, // Get unit from backend OR settings
+        };
+      });
 
       console.log(
         `Loaded ${spoilageInventory.length} spoilage records for analytics`
@@ -549,7 +577,7 @@ export default function ReportInventory() {
     } catch (error) {
       console.error("Error fetching inventory:", error);
     }
-  }, [saveLogs, user]);
+  }, [saveLogs, user, settings]);
 
   // Fetch spoilage summary and items when date range or period changes
   useEffect(() => {
@@ -1010,7 +1038,9 @@ export default function ReportInventory() {
         ? new Date(i.expiration_date).toLocaleDateString("en-US")
         : "N/A",
       i.stock || "Unknown",
-      i.report_date ? new Date(i.report_date).toLocaleDateString("en-US") : "N/A",
+      i.report_date
+        ? new Date(i.report_date).toLocaleDateString("en-US")
+        : "N/A",
     ]);
     return [summaryRow, headerRow, ...dataRows];
   }, [filtered, spoilageSummary, spoilageLoading]);
@@ -1063,7 +1093,8 @@ export default function ReportInventory() {
 
     inventorySheet.getCell(`A${currentRow}`).value = "Report Generated:";
     inventorySheet.getCell(`A${currentRow}`).font = { bold: true };
-    inventorySheet.getCell(`B${currentRow}`).value = now.toLocaleString("en-US");
+    inventorySheet.getCell(`B${currentRow}`).value =
+      now.toLocaleString("en-US");
     currentRow++;
 
     inventorySheet.getCell(`A${currentRow}`).value = "Total Items:";
@@ -1451,12 +1482,12 @@ export default function ReportInventory() {
         item.name || "Unknown Item",
         item.category || "No Category",
         item.batch_id_display || item.batch_id || "N/A",
-        item.inStock || 0,
+        Number(item.inStock || 0).toFixed(2),
         item.unit_cost ? `₱${Number(item.unit_cost).toFixed(2)}` : "-",
         item.unit_cost && item.inStock
           ? `₱${(Number(item.unit_cost) * Number(item.inStock)).toFixed(2)}`
           : "-",
-        item.wastage || 0,
+        Number(item.wastage || 0).toFixed(2),
         item.stock || "Unknown",
         formatDate(expirationDate),
         daysUntilExpiry !== null ? daysUntilExpiry : "N/A",
@@ -1568,7 +1599,9 @@ export default function ReportInventory() {
     currentRow++;
     inventorySheet.mergeCells(`A${currentRow}:L${currentRow}`);
     const footerCell = inventorySheet.getCell(`A${currentRow}`);
-    footerCell.value = `Report generated by Cardiac Delights | ${now.toLocaleString("en-US")}`;
+    footerCell.value = `Report generated by Cardiac Delights | ${now.toLocaleString(
+      "en-US"
+    )}`;
     footerCell.font = { italic: true, size: 10, color: { argb: "FF6B7280" } };
     footerCell.alignment = { horizontal: "center" };
 
@@ -1577,7 +1610,7 @@ export default function ReportInventory() {
     const blob = new Blob([buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
-    saveAs(blob, `Inventory_Report_Enhanced_${formatDate()}.xlsx`);
+    saveAs(blob, `Inventory_Report_Enhanced_${formatDate(new Date())}.xlsx`);
     setExportSuccess(true);
     setShowPopup(false);
 
@@ -1818,6 +1851,109 @@ export default function ReportInventory() {
     return sorted;
   }, [filtered, sortConfig]);
 
+  // 🔥 NEW: Compute analytics from filtered table data for real-time chart updates
+  const computedAnalytics = useMemo(() => {
+    if (!analytics) return null;
+
+    // Calculate stock status distribution from filtered data
+    const statusCounts: { [key: string]: number } = {
+      "Out of Stock": 0,
+      Critical: 0,
+      "Low Stock": 0,
+      Normal: 0,
+    };
+
+    // Separate items by stock status for dashboard cards
+    const outOfStockItems: any[] = [];
+    const criticalItems: any[] = [];
+    const lowStockItems: any[] = [];
+    const normalItems: any[] = [];
+    const expiringItems: any[] = [];
+
+    const today = new Date();
+
+    filtered.forEach((item) => {
+      const status = item.stock || "Normal";
+      if (statusCounts[status] !== undefined) {
+        statusCounts[status]++;
+      } else {
+        statusCounts["Normal"]++;
+      }
+
+      // Categorize items for dashboard
+      if (status === "Out of Stock") {
+        outOfStockItems.push(item);
+      } else if (status === "Critical") {
+        criticalItems.push(item);
+      } else if (status === "Low Stock") {
+        lowStockItems.push(item);
+      } else {
+        normalItems.push(item);
+      }
+
+      // Check for expiring items (within 7 days)
+      if (item.expiration_date) {
+        const expirationDate = new Date(item.expiration_date);
+        const daysUntilExpiry = Math.ceil(
+          (expirationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+        );
+        if (daysUntilExpiry >= 0 && daysUntilExpiry <= 7) {
+          expiringItems.push({
+            ...item,
+            days_until_expiry: daysUntilExpiry,
+          });
+        }
+      }
+    });
+
+    const stock_status_distribution = Object.entries(statusCounts)
+      .map(([status, count]) => ({ status, count }))
+      .filter((item) => item.count > 0);
+
+    // Calculate stock by category from filtered data
+    const categoryMap: {
+      [key: string]: { item_count: number; total_quantity: number };
+    } = {};
+
+    filtered.forEach((item) => {
+      const category = item.category || "Uncategorized";
+      if (!categoryMap[category]) {
+        categoryMap[category] = { item_count: 0, total_quantity: 0 };
+      }
+      categoryMap[category].item_count++;
+      categoryMap[category].total_quantity += item.inStock || 0;
+    });
+
+    const stock_by_category = Object.entries(categoryMap).map(
+      ([category, data]) => ({
+        category,
+        ...data,
+      })
+    );
+
+    // Return updated analytics with computed values from filtered data
+    return {
+      ...analytics,
+      stock_status_distribution,
+      stock_by_category,
+      stock_overview: {
+        ...analytics.stock_overview,
+        total_items: filtered.length,
+        total_quantity: filtered.reduce(
+          (sum, item) => sum + (item.inStock || 0),
+          0
+        ),
+        out_of_stock_items: statusCounts["Out of Stock"],
+      },
+      // Update item arrays based on filtered data
+      outOfStock_items: outOfStockItems,
+      critical_stock_items: criticalItems,
+      low_stock_items: lowStockItems,
+      normal_items: normalItems,
+      expiring_items: expiringItems,
+    };
+  }, [analytics, filtered]);
+
   // Pagination - calculate total pages and slice data for current page
   const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
@@ -1935,7 +2071,8 @@ export default function ReportInventory() {
                         <div className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-gray-300">
                           <FaCalendarAlt className="text-blue-400 text-xs 2xs:text-sm flex-shrink-0" />
                           <span className="text-2xs 2xs:text-xs xs:text-sm truncate">
-                            Report Generated: {new Date().toLocaleDateString("en-US")}
+                            Report Generated:{" "}
+                            {new Date().toLocaleDateString("en-US")}
                           </span>
                         </div>
                         <div className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-gray-300">
@@ -1971,10 +2108,13 @@ export default function ReportInventory() {
                         Retry
                       </button>
                     </div>
-                  ) : analytics ? (
+                  ) : computedAnalytics ? (
                     <>
-                      <AnalyticsDashboard analytics={analytics} />
-                      <InventoryCharts analytics={analytics} />
+                      <AnalyticsDashboard analytics={computedAnalytics} />
+                      {/* Only show charts for Active Inventory, not Spoilage */}
+                      {!showSpoilageTable && (
+                        <InventoryCharts analytics={computedAnalytics} />
+                      )}
                     </>
                   ) : null}
                 </div>
@@ -2434,7 +2574,10 @@ export default function ReportInventory() {
                               </span>
                             </div>
                             <div className="flex justify-between text-2xs text-gray-400">
-                              <span>Stock: {item.inStock}</span>
+                              <span>
+                                Stock:{" "}
+                                {formatStockQuantity(item.inStock, item.unit)}
+                              </span>
                               <span>{item.category}</span>
                             </div>
                           </div>
@@ -2492,13 +2635,13 @@ export default function ReportInventory() {
                               <div className="bg-blue-500/10 rounded p-1.5">
                                 <p className="text-blue-400 mb-0.5">Stock</p>
                                 <p className="text-white font-bold">
-                                  {item.inStock}
+                                  {formatStockQuantity(item.inStock, item.unit)}
                                 </p>
                               </div>
                               <div className="bg-red-500/10 rounded p-1.5">
                                 <p className="text-red-400 mb-0.5">Wastage</p>
                                 <p className="text-white font-bold">
-                                  {item.wastage}
+                                  {formatStockQuantity(item.wastage, item.unit)}
                                 </p>
                               </div>
                             </div>
@@ -2603,7 +2746,7 @@ export default function ReportInventory() {
                                   In Stock
                                 </p>
                                 <p className="text-white text-sm xs:text-base font-bold">
-                                  {item.inStock}
+                                  {formatStockQuantity(item.inStock, item.unit)}
                                 </p>
                               </div>
                               <div className="bg-red-500/10 rounded-md xs:rounded-lg p-1.5 xs:p-2 border border-red-500/20">
@@ -2611,7 +2754,7 @@ export default function ReportInventory() {
                                   Wastage
                                 </p>
                                 <p className="text-white text-sm xs:text-base font-bold">
-                                  {item.wastage}
+                                  {formatStockQuantity(item.wastage, item.unit)}
                                 </p>
                               </div>
                             </div>
@@ -2733,7 +2876,10 @@ export default function ReportInventory() {
                                 <>
                                   <td className="px-3 py-3 whitespace-nowrap text-center">
                                     <span className="text-red-400 font-semibold text-base">
-                                      {item.wastage}
+                                      {formatStockQuantity(
+                                        item.wastage,
+                                        item.unit
+                                      )}
                                     </span>
                                   </td>
                                   <td className="px-3 py-3 whitespace-nowrap">
@@ -2755,7 +2901,10 @@ export default function ReportInventory() {
                                 <>
                                   <td className="px-3 py-3 whitespace-nowrap text-center">
                                     <span className="text-white font-semibold text-base">
-                                      {item.inStock}
+                                      {formatStockQuantity(
+                                        item.inStock,
+                                        item.unit
+                                      )}
                                     </span>
                                   </td>
                                   <td className="px-3 py-3 whitespace-nowrap text-center">
@@ -2914,7 +3063,10 @@ export default function ReportInventory() {
                               id: item.id,
                               name: item.name,
                               batch_id: item.batch_id,
-                              raw_item: item,
+                              wastage: item.wastage,
+                              unit: item.unit,
+                              default_unit: item.default_unit,
+                              all_keys: Object.keys(item),
                             });
                             return (
                               <tr
@@ -2956,15 +3108,20 @@ export default function ReportInventory() {
                                 {showSpoilageTable ? (
                                   <td className="px-4 xl:px-6 py-4 xl:py-5 whitespace-nowrap">
                                     <span className="text-red-400 font-semibold text-lg">
-                                      {item.wastage}
+                                      {formatStockQuantity(
+                                        item.wastage,
+                                        item.unit
+                                      )}
                                     </span>
                                   </td>
                                 ) : (
                                   <>
                                     <td className="px-4 xl:px-6 py-4 xl:py-5 whitespace-nowrap">
                                       <span className="text-white font-semibold text-lg">
-                                        {item.inStock}
-                                        {item.unit}
+                                        {formatStockQuantity(
+                                          item.inStock,
+                                          item.unit
+                                        )}
                                       </span>
                                     </td>
                                     <td className="px-4 xl:px-6 py-4 xl:py-5 whitespace-nowrap">
@@ -3313,7 +3470,7 @@ export default function ReportInventory() {
                                   In Stock
                                 </p>
                                 <p className="text-white text-lg font-bold">
-                                  {item.inStock}
+                                  {formatStockQuantity(item.inStock, item.unit)}
                                 </p>
                               </div>
                               <div className="bg-red-500/10 rounded-lg p-3 border border-red-500/20">
@@ -3321,7 +3478,7 @@ export default function ReportInventory() {
                                   Wastage
                                 </p>
                                 <p className="text-white text-lg font-bold">
-                                  {item.wastage}
+                                  {formatStockQuantity(item.wastage, item.unit)}
                                 </p>
                               </div>
                             </div>
@@ -3330,9 +3487,9 @@ export default function ReportInventory() {
                             <div className="flex items-center justify-between text-sm text-gray-400">
                               <span>Report Date:</span>
                               <span className="text-blue-400 font-medium">
-                                {new Date(
-                                  item.report_date
-                                ).toLocaleDateString("en-US")}
+                                {new Date(item.report_date).toLocaleDateString(
+                                  "en-US"
+                                )}
                               </span>
                             </div>
                           </div>

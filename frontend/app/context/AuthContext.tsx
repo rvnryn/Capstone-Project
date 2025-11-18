@@ -54,21 +54,31 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [role, setRole] = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [tokenRefreshInterval, setTokenRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [tokenRefreshInterval, setTokenRefreshInterval] =
+    useState<NodeJS.Timeout | null>(null);
   // Persistent session: load from localStorage if available
   useEffect(() => {
     if (typeof window !== "undefined") {
       const cachedUserRaw = localStorage.getItem("cachedUser");
       const cachedRole = localStorage.getItem("cachedRole");
       const token = localStorage.getItem("token");
-      console.log("[AuthProvider] Initial localStorage:", { cachedUser: cachedUserRaw, cachedRole, token });
+      console.log("[AuthProvider] Initial localStorage:", {
+        cachedUser: cachedUserRaw,
+        cachedRole,
+        token,
+      });
       if (cachedUserRaw && cachedRole && token) {
         const cachedUser = JSON.parse(cachedUserRaw);
         // Ensure user object always has 'id'
         setUser({
           ...cachedUser,
           id: cachedUser.id || cachedUser.user_id || null,
-          user_id: typeof cachedUser.user_id === 'number' ? cachedUser.user_id : (typeof cachedUser.id === 'string' ? parseInt(cachedUser.id, 10) : cachedUser.id),
+          user_id:
+            typeof cachedUser.user_id === "number"
+              ? cachedUser.user_id
+              : typeof cachedUser.id === "string"
+              ? parseInt(cachedUser.id, 10)
+              : cachedUser.id,
         });
         setRole(cachedRole as UserRole);
       }
@@ -110,7 +120,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         } catch (err) {
           // Silently fall back to Supabase user data if backend is unavailable
           // This is normal during initial page load or backend restart
-          console.log("[AuthProvider] Backend unavailable, using Supabase session");
+          console.log(
+            "[AuthProvider] Backend unavailable, using Supabase session"
+          );
         }
         // Merge backend user, cached user, and Supabase user
         let mergedUser = session.data.session.user;
@@ -118,8 +130,17 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
           mergedUser = {
             ...session.data.session.user,
             ...backendUser,
-            id: backendUser.id || backendUser.user_id || session.data.session.user.id || null,
-            user_id: typeof backendUser.user_id === 'number' ? backendUser.user_id : (typeof backendUser.id === 'string' ? parseInt(backendUser.id, 10) : backendUser.id),
+            id:
+              backendUser.id ||
+              backendUser.user_id ||
+              session.data.session.user.id ||
+              null,
+            user_id:
+              typeof backendUser.user_id === "number"
+                ? backendUser.user_id
+                : typeof backendUser.id === "string"
+                ? parseInt(backendUser.id, 10)
+                : backendUser.id,
           };
         } else if (typeof window !== "undefined") {
           const cachedUserRaw = localStorage.getItem("cachedUser");
@@ -128,8 +149,17 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
             mergedUser = {
               ...session.data.session.user,
               ...cachedUser,
-              id: cachedUser.id || cachedUser.user_id || session.data.session.user.id || null,
-              user_id: typeof cachedUser.user_id === 'number' ? cachedUser.user_id : (typeof cachedUser.id === 'string' ? parseInt(cachedUser.id, 10) : cachedUser.id),
+              id:
+                cachedUser.id ||
+                cachedUser.user_id ||
+                session.data.session.user.id ||
+                null,
+              user_id:
+                typeof cachedUser.user_id === "number"
+                  ? cachedUser.user_id
+                  : typeof cachedUser.id === "string"
+                  ? parseInt(cachedUser.id, 10)
+                  : cachedUser.id,
             };
           }
         }
@@ -142,7 +172,11 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
             localStorage.setItem("cachedRole", backendRole);
           } else {
             // Fallback: if backendRole is missing, use cachedRole or role from mergedUser
-            const fallbackRole = (mergedUser as any)?.user_role || (mergedUser as any)?.role || localStorage.getItem("cachedRole") || null;
+            const fallbackRole =
+              (mergedUser as any)?.user_role ||
+              (mergedUser as any)?.role ||
+              localStorage.getItem("cachedRole") ||
+              null;
             if (fallbackRole) {
               setRole(fallbackRole as UserRole);
               localStorage.setItem("cachedRole", fallbackRole);
@@ -151,7 +185,10 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         }
         setLoading(false);
         if (typeof window !== "undefined") {
-          console.log("[AuthProvider] Loaded user from Supabase+backend+cache:", mergedUser);
+          console.log(
+            "[AuthProvider] Loaded user from Supabase+backend+cache:",
+            mergedUser
+          );
         }
         return;
       }
@@ -165,7 +202,12 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
           setUser({
             ...cachedUser,
             id: cachedUser.id || cachedUser.user_id || null,
-            user_id: typeof cachedUser.user_id === 'number' ? cachedUser.user_id : (typeof cachedUser.id === 'string' ? parseInt(cachedUser.id, 10) : cachedUser.id),
+            user_id:
+              typeof cachedUser.user_id === "number"
+                ? cachedUser.user_id
+                : typeof cachedUser.id === "string"
+                ? parseInt(cachedUser.id, 10)
+                : cachedUser.id,
           });
           setRole(cachedRole as UserRole);
           setLoading(false);
@@ -182,10 +224,20 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     }
   };
 
-
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
+        // Check if user is in password reset flow FIRST
+        if (typeof window !== "undefined") {
+          const isResetting = localStorage.getItem("isResettingPassword");
+          if (isResetting === "true") {
+            console.log(
+              "[AuthContext] Skipping auth state change during password reset"
+            );
+            return; // Completely skip all auth processing during password reset
+          }
+        }
+
         if (
           session &&
           session.user &&
@@ -198,26 +250,33 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
           }
           refreshSession();
         } else {
-          // Fallback to cache if available, but do NOT remove credentials
+          // No session - check if we should load from cache
           if (typeof window !== "undefined") {
+            const token = localStorage.getItem("token");
             const cachedUserRaw = localStorage.getItem("cachedUser");
             const cachedRole = localStorage.getItem("cachedRole");
-            const token = localStorage.getItem("token");
-            if (cachedUserRaw && cachedRole && token) {
+
+            // Only load from cache if ALL three exist (token must exist)
+            if (token && cachedUserRaw && cachedRole) {
               const cachedUser = JSON.parse(cachedUserRaw);
               setUser({
                 ...cachedUser,
                 id: cachedUser.id || cachedUser.user_id || null,
-                user_id: typeof cachedUser.user_id === 'number' ? cachedUser.user_id : (typeof cachedUser.id === 'string' ? parseInt(cachedUser.id, 10) : cachedUser.id),
+                user_id:
+                  typeof cachedUser.user_id === "number"
+                    ? cachedUser.user_id
+                    : typeof cachedUser.id === "string"
+                    ? parseInt(cachedUser.id, 10)
+                    : cachedUser.id,
               });
               setRole(cachedRole as UserRole);
               setLoading(false);
               return;
             } else {
+              // No token means user logged out - clear everything
               setUser(null);
               setRole(null);
               setLoading(false);
-              // Do NOT remove credentials here
             }
           } else {
             setUser(null);
@@ -234,7 +293,8 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         !session.data.session ||
         !session.data.session.user ||
         !session.data.session.access_token ||
-        (session.data.session.expires_at && session.data.session.expires_at * 1000 < Date.now())
+        (session.data.session.expires_at &&
+          session.data.session.expires_at * 1000 < Date.now())
       ) {
         if (typeof window !== "undefined") {
           const cachedUserRaw = localStorage.getItem("cachedUser");
@@ -245,7 +305,12 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
             const userObj = {
               ...cachedUser,
               id: cachedUser.id || cachedUser.user_id || null,
-              user_id: typeof cachedUser.user_id === 'number' ? cachedUser.user_id : (typeof cachedUser.id === 'string' ? parseInt(cachedUser.id, 10) : cachedUser.id),
+              user_id:
+                typeof cachedUser.user_id === "number"
+                  ? cachedUser.user_id
+                  : typeof cachedUser.id === "string"
+                  ? parseInt(cachedUser.id, 10)
+                  : cachedUser.id,
             };
             setUser(userObj);
             setRole(cachedRole as UserRole);
@@ -277,7 +342,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
     // Only set up auto-refresh if user is logged in
     if (user && !loading) {
-      console.log("[AuthProvider] Setting up automatic token refresh (every 45 minutes)");
+      console.log(
+        "[AuthProvider] Setting up automatic token refresh (every 45 minutes)"
+      );
 
       // Refresh token every 45 minutes (before the 1-hour expiry)
       const interval = setInterval(async () => {

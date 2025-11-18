@@ -45,9 +45,7 @@ try:
 
     from .routes.backup_restore import (
         backup,
-        restore,
-        restore_FIXED,
-        restore_BACKUP
+        restore
     )
     from app.routes.backup_restore.backup import load_and_schedule
     from .routes.Menu import menu
@@ -138,8 +136,6 @@ try:
         users.router,
         inventory_settings.router,
         restore.router,
-        restore_FIXED.router,
-        restore_BACKUP.router,
         backup.router,
         inventory_log.router,
         inventory_analytics.router,

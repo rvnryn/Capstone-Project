@@ -212,12 +212,20 @@ async def manual_backup(
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_data = {}
+        schema_info = {}
 
-        # Backup each table
+        # Backup each table with schema information
         for table in tables:
             try:
                 df = pd.read_sql_table(table, engine)
                 backup_data[table] = df.to_dict(orient="records")
+
+                # Capture schema information
+                schema_info[table] = {
+                    "columns": list(df.columns),
+                    "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
+                    "row_count": len(df)
+                }
                 print(f"[Backup] Backed up table {table}: {len(df)} records")
             except Exception as e:
                 print(f"[Backup] Warning: Failed to backup table {table}: {e}")
@@ -226,12 +234,21 @@ async def manual_backup(
         if not backup_data:
             raise HTTPException(status_code=500, detail="No data was backed up")
 
+        # Add metadata to backup
+        backup_payload = {
+            "version": "1.0",
+            "timestamp": timestamp,
+            "backup_date": datetime.now(timezone.utc).isoformat(),
+            "schema_info": schema_info,
+            "data": backup_data
+        }
+
         # Encrypt the backup
         key = derive_fernet_key(password)
         fernet = Fernet(key)
         buf = io.BytesIO()
         with gzip.GzipFile(fileobj=buf, mode="w") as gz_file:
-            gz_file.write(json.dumps(backup_data, default=str, indent=2).encode("utf-8"))
+            gz_file.write(json.dumps(backup_payload, default=str, indent=2).encode("utf-8"))
         buf.seek(0)
         encrypted = fernet.encrypt(buf.getvalue())
 
@@ -265,8 +282,10 @@ async def manual_backup(
         return {
             "message": "Backup triggered successfully.",
             "filename": backup_filename,
+            "version": "1.0",
             "tables_backed_up": len(backup_data),
-            "total_records": sum(len(records) for records in backup_data.values())
+            "total_records": sum(len(records) for records in backup_data.values()),
+            "schema_tracked": True
         }
     except HTTPException:
         raise
@@ -309,10 +328,6 @@ async def load_and_schedule(session):
             reschedule_backup(frequency, day_of_week, day_of_month, time_of_day_24h)
 
 
-# This version is for API endpoint (manual trigger)
-async def scheduled_backup(session=Depends(get_db), user=Depends(require_role("Owner"))):
-    await _run_scheduled_backup(session, user)
-
 # This version is for APScheduler (automatic trigger)
 def scheduled_backup_job():
     
@@ -338,15 +353,35 @@ async def _run_scheduled_backup(session, user):
     tables = insp.get_table_names()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_data = {}
+    schema_info = {}
+
+    # Backup each table with schema information
     for table in tables:
         df = pd.read_sql_table(table, engine)
         backup_data[table] = df.to_dict(orient="records")
+
+        # Capture schema information
+        schema_info[table] = {
+            "columns": list(df.columns),
+            "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
+            "row_count": len(df)
+        }
+
+    # Create backup payload with metadata
+    backup_payload = {
+        "version": "1.0",
+        "timestamp": timestamp,
+        "backup_date": datetime.now(timezone.utc).isoformat(),
+        "schema_info": schema_info,
+        "data": backup_data
+    }
+
     password = os.getenv("BACKUP_ENCRYPTION_PASSWORD", "default_password")
     key = derive_fernet_key(password)
     fernet = Fernet(key)
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="w") as gz_file:
-        gz_file.write(json.dumps(backup_data, default=str, indent=2).encode("utf-8"))
+        gz_file.write(json.dumps(backup_payload, default=str, indent=2).encode("utf-8"))
     buf.seek(0)
     encrypted = fernet.encrypt(buf.getvalue())
     backup_filename = f"backup_{timestamp}.json.enc"
@@ -412,17 +447,37 @@ def run_scheduled_backup_sync(session, user):
     tables = insp.get_table_names()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_data = {}
+    schema_info = {}
+
+    # Backup each table with schema information
     for table in tables:
         import pandas as pd
         df = pd.read_sql_table(table, engine)
         backup_data[table] = df.to_dict(orient="records")
+
+        # Capture schema information
+        schema_info[table] = {
+            "columns": list(df.columns),
+            "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
+            "row_count": len(df)
+        }
+
+    # Create backup payload with metadata
+    backup_payload = {
+        "version": "1.0",
+        "timestamp": timestamp,
+        "backup_date": datetime.now(timezone.utc).isoformat(),
+        "schema_info": schema_info,
+        "data": backup_data
+    }
+
     password = os.getenv("BACKUP_ENCRYPTION_PASSWORD", "default_password")
     key = derive_fernet_key(password)
     from cryptography.fernet import Fernet
     fernet = Fernet(key)
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="w") as gz_file:
-        gz_file.write(json.dumps(backup_data, default=str, indent=2).encode("utf-8"))
+        gz_file.write(json.dumps(backup_payload, default=str, indent=2).encode("utf-8"))
     buf.seek(0)
     encrypted = fernet.encrypt(buf.getvalue())
     backup_filename = f"backup_{timestamp}.json.enc"

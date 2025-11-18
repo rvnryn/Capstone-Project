@@ -420,14 +420,25 @@ async def list_inventory(request: Request):
     try:
         @run_blocking
         def _fetch():
-            return (
-                postgrest_client.table("inventory")
-                .select("*")
-                .order("batch_date", desc=False)
-                .execute()
-            )
-        items = await _fetch()
-        return items.data
+            # Get inventory items and settings separately
+            inv_response = postgrest_client.table("inventory").select("*").order("batch_date", desc=False).execute()
+            settings_response = postgrest_client.table("inventory_settings").select("name, default_unit").execute()
+            return (inv_response, settings_response)
+
+        items_response, settings_response = await _fetch()
+
+        # Create a lookup dict for settings by lowercase item name
+        settings_dict = {}
+        for setting in settings_response.data:
+            name_lower = setting.get("name", "").lower().strip()
+            settings_dict[name_lower] = setting.get("default_unit", "")
+
+        # Add default_unit to each inventory item
+        for item in items_response.data:
+            item_name_lower = item.get("item_name", "").lower().strip()
+            item["default_unit"] = settings_dict.get(item_name_lower, "")
+
+        return items_response.data
     except Exception as e:
         logger.exception("Error listing inventory")
         raise HTTPException(status_code=500, detail="Internal server error")

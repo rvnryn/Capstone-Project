@@ -1,8 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends, Request, logger
-from fastapi_utils.tasks import repeat_every
+from fastapi import APIRouter, HTTPException, Depends, Request
 from datetime import datetime
-from app.supabase import postgrest_client, get_db
-from app.utils.rbac import require_role
 from pydantic import BaseModel, Field, validator
 from typing import Optional
 from app.routes.Inventory.master_inventory import (
@@ -18,7 +15,6 @@ from app.routes.Inventory.master_inventory import (
     CategoryEnum,
     StockStatusEnum,
 )
-from datetime import datetime
 import functools
 import asyncio
 
@@ -84,59 +80,31 @@ class InventoryItemUpdate(BaseModel):
         return v
 
 
-class TransferRequest(BaseModel):
-    """Transfer quantity validation"""
-    quantity: float = Field(
-        ...,
-        gt=0,
-        description="Transfer quantity (must be > 0)"
-    )
-
-    @validator('quantity')
-    def validate_quantity(cls, v):
-        if v <= 0:
-            raise ValueError('Transfer quantity must be greater than 0')
-        if v > 1000000:
-            raise ValueError('Transfer quantity exceeds maximum allowed (1,000,000)')
-        return v
-
-
-def run_blocking(func):
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
-    return wrapper
-
-
-def log_user_activity(db, user, action_type, description):
-    try:
-        user_row = getattr(user, "user_row", user)
-        new_activity = UserActivityLog(
-            user_id=user_row.get("user_id"),
-            action_type=action_type,
-            description=description,
-            activity_date=datetime.utcnow(),
-            report_date=datetime.utcnow(),
-            user_name=user_row.get("name"),
-            role=user_row.get("user_role"),
-        )
-        db.add(new_activity)
-        db.flush()
-        db.commit()
-    except Exception as e:
-        logger.warning(f"Failed to record user activity ({action_type}): {e}")
-
 @router.get("/inventory-today")
 async def list_inventory_today(request: Request):
     try:
 
         @run_blocking
         def _fetch():
-            return postgrest_client.table("inventory_today").select("*").order("batch_date", desc=False).execute()
+            # Get inventory items and manually join with inventory_settings
+            inv_response = postgrest_client.table("inventory_today").select("*").order("batch_date", desc=False).execute()
+            settings_response = postgrest_client.table("inventory_settings").select("name, default_unit").execute()
+            return (inv_response, settings_response)
 
-        items = await _fetch()
-        return items.data
+        items_response, settings_response = await _fetch()
+
+        # Create a lookup dict for settings by lowercase item name
+        settings_dict = {}
+        for setting in settings_response.data:
+            name_lower = setting.get("name", "").lower().strip()
+            settings_dict[name_lower] = setting.get("default_unit", "")
+
+        # Add default_unit to each inventory item
+        for item in items_response.data:
+            item_name_lower = item.get("item_name", "").lower().strip()
+            item["default_unit"] = settings_dict.get(item_name_lower, "")
+
+        return items_response.data
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal server error")
 

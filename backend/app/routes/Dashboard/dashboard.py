@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, text, cast, Date, String
 from app.supabase import get_db
 from app.models.inventory import Inventory
+from app.models.inventory_today import InventoryToday
 from app.models.inventory_surplus import InventorySurplus
 from app.models.notification_settings import NotificationSettings
 from app.models.inventory_spoilage import InventorySpoilage
@@ -26,16 +27,55 @@ async def get_low_stock_inventory(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
+    """
+    Get low and critical stock items from BOTH inventory_today AND master inventory.
+    Returns items with status "Low" or "Critical" from both tables.
+    """
     try:
-        stmt = (
-            select(Inventory)
-            .where(Inventory.stock_status == "Low")
-            .offset(skip)
-            .limit(limit)
+        # Query inventory_today for Low and Critical items
+        stmt_today = (
+            select(InventoryToday)
+            .where(or_(
+                InventoryToday.stock_status == "Low",
+                InventoryToday.stock_status == "Critical"
+            ))
         )
-        result = await db.execute(stmt)
-        items = result.scalars().all()
-        return [item.as_dict() for item in items]
+        result_today = await db.execute(stmt_today)
+        items_today = result_today.scalars().all()
+
+        # Query master inventory for Low and Critical items
+        stmt_master = (
+            select(Inventory)
+            .where(or_(
+                Inventory.stock_status == "Low",
+                Inventory.stock_status == "Critical"
+            ))
+        )
+        result_master = await db.execute(stmt_master)
+        items_master = result_master.scalars().all()
+
+        # Combine results from both tables
+        all_items = []
+
+        # Add items from inventory_today with source indicator
+        for item in items_today:
+            item_dict = item.as_dict()
+            item_dict['source'] = 'today'
+            all_items.append(item_dict)
+
+        # Add items from master inventory with source indicator
+        for item in items_master:
+            item_dict = item.as_dict()
+            item_dict['source'] = 'master'
+            all_items.append(item_dict)
+
+        # Sort by stock_status (Critical first, then Low) and item_name
+        all_items.sort(key=lambda x: (0 if x.get('stock_status') == 'Critical' else 1, x.get('item_name', '')))
+
+        # Apply pagination to combined results
+        paginated_items = all_items[skip:skip + limit]
+
+        return paginated_items
     except Exception as e:
         print("Error fetching low stock inventory:", e)
         raise HTTPException(status_code=500, detail=str(e))

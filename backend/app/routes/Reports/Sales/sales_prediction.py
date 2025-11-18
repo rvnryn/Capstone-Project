@@ -24,13 +24,16 @@ async def get_sales_data(session: AsyncSession, days: int = 90, start_date: str 
         print(f"[DEBUG] Fetching sales data from {start_date_obj} to {end_date_obj}")
         query = text(
             """
-            SELECT item_name as item,
-                   DATE(sale_date) as date,
-                   SUM(quantity) as sales
-            FROM sales_report
-            WHERE DATE(sale_date) >= :start_date AND DATE(sale_date) <= :end_date
-            GROUP BY item_name, DATE(sale_date)
-            ORDER BY DATE(sale_date) DESC, SUM(quantity) DESC
+            SELECT sr.item_name as item,
+                   DATE(sr.sale_date) as date,
+                   SUM(sr.quantity) as sales,
+                   SUM(sr.total_price) as revenue,
+                   COALESCE(NULLIF(sr.category, ''), m.category, 'Uncategorized') as category
+            FROM sales_report sr
+            LEFT JOIN menu m ON LOWER(REPLACE(TRIM(sr.item_name), ' ', '')) = LOWER(REPLACE(TRIM(m.dish_name), ' ', ''))
+            WHERE DATE(sr.sale_date) >= :start_date AND DATE(sr.sale_date) <= :end_date
+            GROUP BY sr.item_name, DATE(sr.sale_date), COALESCE(NULLIF(sr.category, ''), m.category, 'Uncategorized')
+            ORDER BY DATE(sr.sale_date) DESC, SUM(sr.quantity) DESC
         """
         )
         result = await session.execute(query, {"start_date": start_date_obj, "end_date": end_date_obj})
@@ -39,13 +42,16 @@ async def get_sales_data(session: AsyncSession, days: int = 90, start_date: str 
         print(f"[DEBUG] Fetching sales data since: {since}")
         query = text(
             """
-            SELECT item_name as item,
-                   DATE(sale_date) as date,
-                   SUM(quantity) as sales
-            FROM sales_report
-            WHERE sale_date >= :since
-            GROUP BY item_name, DATE(sale_date)
-            ORDER BY DATE(sale_date) DESC, SUM(quantity) DESC
+            SELECT sr.item_name as item,
+                   DATE(sr.sale_date) as date,
+                   SUM(sr.quantity) as sales,
+                   SUM(sr.total_price) as revenue,
+                   COALESCE(NULLIF(sr.category, ''), m.category, 'Uncategorized') as category
+            FROM sales_report sr
+            LEFT JOIN menu m ON LOWER(REPLACE(TRIM(sr.item_name), ' ', '')) = LOWER(REPLACE(TRIM(m.dish_name), ' ', ''))
+            WHERE sr.sale_date >= :since
+            GROUP BY sr.item_name, DATE(sr.sale_date), COALESCE(NULLIF(sr.category, ''), m.category, 'Uncategorized')
+            ORDER BY DATE(sr.sale_date) DESC, SUM(sr.quantity) DESC
         """
         )
         result = await session.execute(query, {"since": str(since)})
@@ -60,7 +66,7 @@ async def get_sales_data(session: AsyncSession, days: int = 90, start_date: str 
 
     for row in rows[:10]:  # Print first 10 rows for debugging
         print(
-            f"[DEBUG] Row: {row.item}, {row.date}, {row.sales} sales"
+            f"[DEBUG] Row: {row.item}, {row.date}, {row.sales} sales, ₱{row.revenue} revenue, {row.category}"
         )
 
     return [
@@ -68,6 +74,8 @@ async def get_sales_data(session: AsyncSession, days: int = 90, start_date: str 
             "item": row.item,
             "date": row.date.strftime("%Y-%m-%d"),
             "sales": int(row.sales),
+            "revenue": float(row.revenue or 0),
+            "category": row.category,
         }
         for row in rows
     ]
@@ -210,7 +218,23 @@ def analyze_historical_data(data: List[dict]) -> Dict[str, Any]:
     }
 
     # Top Performers Analysis
-    item_totals = df.groupby("item")["sales"].agg(["sum", "mean", "count"]).fillna(0)
+    # Aggregate sales and revenue metrics
+    item_sales = df.groupby("item")["sales"].agg(["sum", "mean", "count"])
+    item_revenue = df.groupby("item")["revenue"].sum()
+    # Get the first category for each item (in case an item has multiple categories)
+    item_categories = df.groupby("item")["category"].first()
+
+    # Combine the dataframes
+    item_totals = item_sales.copy()
+    item_totals["revenue"] = item_revenue
+    item_totals["category"] = item_categories
+
+    # Fill NaN only in numeric columns
+    item_totals[["sum", "mean", "count", "revenue"]] = item_totals[["sum", "mean", "count", "revenue"]].fillna(0)
+    # Fill NaN in category with "Uncategorized"
+    item_totals["category"] = item_totals["category"].fillna("Uncategorized")
+
+    # Sort by total sales
     item_totals = item_totals.sort_values("sum", ascending=False)
 
     analysis["top_performers"] = {
@@ -218,8 +242,10 @@ def analyze_historical_data(data: List[dict]) -> Dict[str, Any]:
             {
                 "item": item,
                 "total_sales": int(row["sum"]),
+                "total_revenue": round(float(row["revenue"]), 2),
                 "avg_sales": round(float(row["mean"]), 2),
                 "frequency": int(row["count"]),
+                "category": str(row["category"]) if row["category"] and row["category"] != 0 else "Uncategorized",
             }
             for item, row in item_totals.head(10).iterrows()
         ]

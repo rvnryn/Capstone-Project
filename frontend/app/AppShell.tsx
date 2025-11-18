@@ -8,6 +8,7 @@ import PWAInstallPrompt from "@/app/components/PWAInstallPrompt";
 import { DataPreloader } from "@/app/components/DataPreloader";
 import { PagePreloader } from "@/app/components/PagePreloader";
 import { ToastContainer } from "react-toastify";
+import { Toaster } from "sonner";
 import React, { useEffect } from "react";
 import { GlobalLoadingProvider } from "@/app/context/GlobalLoadingContext";
 import { GlobalLoadingOverlay } from "@/app/components/GlobalLoadingOverlay";
@@ -95,6 +96,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <PWAInstallPrompt />
             <NetworkStatusIndicator />
             <ToastContainer />
+            <Toaster
+              position="top-right"
+              expand={true}
+              richColors
+              closeButton
+              toastOptions={{
+                duration: 5000,
+                style: {
+                  background: '#fff',
+                  color: '#000',
+                  border: '1px solid #e2e8f0',
+                },
+                className: 'sonner-toast',
+              }}
+            />
         </AuthProvider>
       </GlobalLoadingProvider>
     </QueryClientProvider>

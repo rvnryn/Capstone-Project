@@ -25,6 +25,7 @@ import { logoutUser } from "@/app/utils/API/LoginAPI";
 import { supabase } from "@/app/utils/Server/supabaseClient";
 import { useAuth } from "@/app/context/AuthContext";
 import { useNavigation, navigationUtils } from "./hook/use-navigation";
+import { toast } from "sonner";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -436,6 +437,10 @@ const NavigationBar = ({
     }
   }, [user]);
 
+  // Track previous notification count to detect new notifications
+  const prevNotificationCountRef = useRef<number>(0);
+  const isFirstMountRef = useRef<boolean>(true);
+
   useEffect(() => {
     fetchNotifications();
 
@@ -446,6 +451,99 @@ const NavigationBar = ({
 
     return () => clearInterval(pollInterval);
   }, [user, fetchNotifications]);
+
+  // Trigger toast notifications for new unread notifications
+  useEffect(() => {
+    const unreadNotifications = notifications.filter(
+      (n) => n.status === "unread"
+    );
+    const currentUnreadCount = unreadNotifications.length;
+
+    console.log("[Toast Debug] isFirstMount:", isFirstMountRef.current);
+    console.log("[Toast Debug] currentUnreadCount:", currentUnreadCount);
+    console.log("[Toast Debug] prevCount:", prevNotificationCountRef.current);
+
+    // On first mount, just set the initial count without showing toasts
+    if (isFirstMountRef.current) {
+      console.log(
+        "[Toast Debug] First mount - setting initial count to",
+        currentUnreadCount
+      );
+      prevNotificationCountRef.current = currentUnreadCount;
+      isFirstMountRef.current = false;
+      return;
+    }
+
+    // Only show toast if we have new notifications (count increased)
+    if (currentUnreadCount > prevNotificationCountRef.current) {
+      const newNotificationsCount =
+        currentUnreadCount - prevNotificationCountRef.current;
+      console.log(
+        "[Toast Debug] NEW NOTIFICATIONS DETECTED:",
+        newNotificationsCount
+      );
+
+      // Get the newest notifications (based on how many new ones we have)
+      const newNotifications = unreadNotifications.slice(
+        0,
+        newNotificationsCount
+      );
+      console.log(
+        "[Toast Debug] Showing toasts for:",
+        newNotifications.map((n) => n.message)
+      );
+
+      // Show toast for each new notification (limit to 3 to avoid spam)
+      const toastsToShow = newNotifications.slice(0, 3);
+      toastsToShow.forEach((notification, index) => {
+        setTimeout(() => {
+          console.log("[Toast Debug] Showing toast:", notification.message);
+          const toastId = toast.info(notification.message, {
+            description: new Date(notification.created_at).toLocaleString(),
+            action: {
+              label: "View",
+              onClick: () => {
+                console.log(
+                  "[Toast Debug] View button clicked, dismissing toast and opening bell"
+                );
+                toast.dismiss(toastId);
+                setBellOpen(true);
+              },
+            },
+            duration: 8000,
+          });
+        }, index * 500); // Stagger toasts by 500ms to avoid overlapping
+      });
+
+      // If more than 3 new notifications, show a summary toast
+      if (newNotificationsCount > 3) {
+        setTimeout(() => {
+          const summaryToastId = toast.info(
+            `${newNotificationsCount - 3} more notifications`,
+            {
+              description: "Click the bell icon to view all",
+              action: {
+                label: "View All",
+                onClick: () => {
+                  console.log(
+                    "[Toast Debug] View All button clicked, dismissing toast and opening bell"
+                  );
+                  toast.dismiss(summaryToastId);
+                  setBellOpen(true);
+                },
+              },
+              duration: 8000,
+            }
+          );
+        }, 1500);
+      }
+    } else {
+      console.log("[Toast Debug] No new notifications to show");
+    }
+
+    // Update the previous count
+    prevNotificationCountRef.current = currentUnreadCount;
+  }, [notifications]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -525,7 +623,10 @@ const NavigationBar = ({
     setShowModal(false); // Hide confirm modal
     setTimeout(async () => {
       try {
-        // Try to sign out, but catch missing session error
+        // Clear localStorage FIRST before signOut to prevent race condition
+        await logoutUser();
+
+        // Then sign out from Supabase
         try {
           await supabase.auth.signOut();
         } catch (error: any) {
@@ -534,7 +635,7 @@ const NavigationBar = ({
           }
           // Ignore missing session error, user is already logged out
         }
-        await logoutUser();
+
         setLoggingOut(false); // Hide logging out modal
         router.push(routes.home);
       } catch (error) {
@@ -617,9 +718,17 @@ const NavigationBar = ({
   function getNotificationMessageColor(type: string | undefined): string {
     const notifType = (type || "").toLowerCase();
 
-    // Critical stock alert or expired alert - Red
-    if (notifType === "expired" || notifType.includes("critical")) {
-      return "text-red-400";
+    // Out of stock - Darkest Red (most urgent)
+    if (notifType === "out_of_stock") {
+      return "text-red-600";
+    }
+    // Critical stock alert - Red (very urgent)
+    if (notifType === "critical_stock" || notifType.includes("critical")) {
+      return "text-red-500";
+    }
+    // Expired alert - Orange
+    if (notifType === "expired") {
+      return "text-orange-500";
     }
     // Low stock - Yellow
     if (notifType === "low_stock") {
@@ -855,7 +964,7 @@ const NavigationBar = ({
               ? "translateX(-100%)"
               : "translateX(0)",
           transition: `all ${getAnimationDuration()}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-          zIndex: isMenuOpen ? 65 : isCompactDevice() ? 50 : 45,
+          zIndex: isMenuOpen && isCompactDevice() ? 45 : 10,
           // Enhanced responsive shadows based on device type
           boxShadow: isMenuOpen
             ? "4px 0 32px rgba(0, 0, 0, 0.5), inset -1px 0 0 rgba(251, 191, 36, 0.1)"
@@ -1562,25 +1671,44 @@ const NavigationBar = ({
                             const msg = n.message?.toLowerCase() || "";
                             const type = (n.type || "").toLowerCase();
 
-                            // Expired/expiring soon
+                            // Out of stock - Darkest Red (most urgent)
                             if (
-                              type === "expired" ||
-                              type === "expiring" ||
-                              msg.includes("expired") ||
-                              msg.includes("expiring soon")
+                              type === "out_of_stock" ||
+                              msg.includes("out of stock")
+                            ) {
+                              messageColor = "text-red-600";
+                              bgColor =
+                                "bg-gradient-to-r from-red-900/25 via-red-800/20 to-transparent border-l-2 border-l-red-500";
+                            }
+                            // Critical stock - Red (very urgent)
+                            else if (
+                              type === "critical_stock" ||
+                              msg.includes("critical")
                             ) {
                               messageColor = "text-red-500";
                               bgColor =
-                                "bg-gradient-to-r from-red-800/18 via-red-700/15 to-transparent border-l-2 border-l-white";
+                                "bg-gradient-to-r from-red-800/18 via-red-700/15 to-transparent border-l-2 border-l-red-400";
                             }
-                            // Low stock
+                            // Expired/expiring soon - Orange (urgent)
+                            else if (
+                              type === "expired" ||
+                              type === "expiring" ||
+                              type === "expiring_soon" ||
+                              msg.includes("expired") ||
+                              msg.includes("expiring soon")
+                            ) {
+                              messageColor = "text-orange-500";
+                              bgColor =
+                                "bg-gradient-to-r from-orange-800/18 via-orange-700/15 to-transparent border-l-2 border-l-orange-400";
+                            }
+                            // Low stock - Yellow (warning)
                             else if (
                               type === "low_stock" ||
                               msg.includes("low stock")
                             ) {
-                              messageColor = "text-orange-400";
+                              messageColor = "text-yellow-400";
                               bgColor =
-                                "bg-gradient-to-r from-orange-800/18 via-orange-700/15 to-transparent border-l-2 border-l-orange-300";
+                                "bg-gradient-to-r from-yellow-800/18 via-yellow-700/15 to-transparent border-l-2 border-l-yellow-300";
                             }
                             // Missing threshold
                             else if (
@@ -2046,22 +2174,48 @@ const NavigationBar = ({
                 0 && (
                 <div className="mt-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <div className={`w-1 h-5 rounded-full ${
-                      ((notificationModalState as any).type || '').includes('auto_transfer') || ((notificationModalState as any).type || '').includes('transfer')
-                        ? 'bg-gradient-to-b from-blue-400 to-blue-600'
-                        : 'bg-gradient-to-b from-yellow-400 to-yellow-600'
-                    }`}></div>
+                    <div
+                      className={`w-1 h-5 rounded-full ${
+                        ((notificationModalState as any).type || "").includes(
+                          "auto_transfer"
+                        ) ||
+                        ((notificationModalState as any).type || "").includes(
+                          "transfer"
+                        )
+                          ? "bg-gradient-to-b from-blue-400 to-blue-600"
+                          : "bg-gradient-to-b from-yellow-400 to-yellow-600"
+                      }`}
+                    ></div>
                     <span className="font-bold text-gray-200 text-lg">
-                      {((notificationModalState as any).type || '').includes('auto_transfer') || ((notificationModalState as any).type || '').includes('transfer')
-                        ? 'Transferred Items'
-                        : 'Affected Items'}
+                      {((notificationModalState as any).type || "").includes(
+                        "auto_transfer"
+                      ) ||
+                      ((notificationModalState as any).type || "").includes(
+                        "transfer"
+                      )
+                        ? "Transferred Items"
+                        : "Affected Items"}
                     </span>
-                    <span className={`ml-auto px-3 py-1 text-sm font-semibold rounded-full border ${
-                      ((notificationModalState as any).type || '').includes('auto_transfer') || ((notificationModalState as any).type || '').includes('transfer')
-                        ? 'bg-blue-900/40 text-blue-300 border-blue-400/20'
-                        : 'bg-yellow-900/40 text-yellow-300 border-yellow-400/20'
-                    }`}>
-                      {parseDetails((notificationModalState as any).details).length} {parseDetails((notificationModalState as any).details).length === 1 ? 'Item' : 'Items'}
+                    <span
+                      className={`ml-auto px-3 py-1 text-sm font-semibold rounded-full border ${
+                        ((notificationModalState as any).type || "").includes(
+                          "auto_transfer"
+                        ) ||
+                        ((notificationModalState as any).type || "").includes(
+                          "transfer"
+                        )
+                          ? "bg-blue-900/40 text-blue-300 border-blue-400/20"
+                          : "bg-yellow-900/40 text-yellow-300 border-yellow-400/20"
+                      }`}
+                    >
+                      {
+                        parseDetails((notificationModalState as any).details)
+                          .length
+                      }{" "}
+                      {parseDetails((notificationModalState as any).details)
+                        .length === 1
+                        ? "Item"
+                        : "Items"}
                     </span>
                   </div>
                   <div className="max-h-96 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
@@ -2072,9 +2226,14 @@ const NavigationBar = ({
                             item.batch_date || ""
                           }`}
                           className={`bg-gradient-to-br from-gray-800/60 via-gray-800/40 to-gray-900/60 rounded-xl p-4 border border-gray-700/50 transition-all duration-300 shadow-lg ${
-                            ((notificationModalState as any).type || '').includes('auto_transfer') || ((notificationModalState as any).type || '').includes('transfer')
-                              ? 'hover:border-blue-400/40 hover:shadow-blue-400/10'
-                              : 'hover:border-yellow-400/40 hover:shadow-yellow-400/10'
+                            (
+                              (notificationModalState as any).type || ""
+                            ).includes("auto_transfer") ||
+                            (
+                              (notificationModalState as any).type || ""
+                            ).includes("transfer")
+                              ? "hover:border-blue-400/40 hover:shadow-blue-400/10"
+                              : "hover:border-yellow-400/40 hover:shadow-yellow-400/10"
                           }`}
                         >
                           {/* Item Header */}
@@ -2090,23 +2249,42 @@ const NavigationBar = ({
                               )}
                             </div>
                             {/* Status Badge */}
-                            {(item.days_expired !== undefined || item.days_until_expiry !== undefined || (notificationModalState as any).type === 'low_stock') && (
-                              <div className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
-                                item.days_expired !== undefined
-                                  ? 'bg-red-900/30 text-red-300 border-red-400/30'
-                                  : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
-                                  ? 'bg-orange-900/30 text-orange-300 border-orange-400/30'
-                                  : item.days_until_expiry !== undefined
-                                  ? 'bg-yellow-900/30 text-yellow-300 border-yellow-400/30'
-                                  : 'bg-red-900/30 text-red-300 border-red-400/30'
-                              }`}>
-                                {item.days_expired !== undefined
-                                  ? 'EXPIRED'
-                                  : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
-                                  ? 'URGENT'
-                                  : item.days_until_expiry !== undefined
-                                  ? 'EXPIRING'
-                                  : 'LOW STOCK'}
+                            {(item.days_expired !== undefined ||
+                              item.days_until_expiry !== undefined ||
+                              item.stock_status ||
+                              (notificationModalState as any).type ===
+                                "low_stock" ||
+                              (notificationModalState as any).type ===
+                                "critical_stock" ||
+                              (notificationModalState as any).type ===
+                                "out_of_stock") && (
+                              <div
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
+                                  item.stock_status === "OUT OF STOCK"
+                                    ? "bg-red-900/40 text-red-300 border-red-400/40"
+                                    : item.stock_status === "CRITICAL"
+                                    ? "bg-red-900/30 text-red-400 border-red-400/30"
+                                    : item.days_expired !== undefined
+                                    ? "bg-red-900/30 text-red-300 border-red-400/30"
+                                    : item.days_until_expiry !== undefined &&
+                                      item.days_until_expiry <= 1
+                                    ? "bg-orange-900/30 text-orange-300 border-orange-400/30"
+                                    : item.days_until_expiry !== undefined
+                                    ? "bg-yellow-900/30 text-yellow-300 border-yellow-400/30"
+                                    : item.stock_status === "LOW STOCK"
+                                    ? "bg-yellow-900/30 text-yellow-300 border-yellow-400/30"
+                                    : "bg-yellow-900/30 text-yellow-300 border-yellow-400/30"
+                                }`}
+                              >
+                                {item.stock_status ||
+                                  (item.days_expired !== undefined
+                                    ? "EXPIRED"
+                                    : item.days_until_expiry !== undefined &&
+                                      item.days_until_expiry <= 1
+                                    ? "URGENT"
+                                    : item.days_until_expiry !== undefined
+                                    ? "EXPIRING"
+                                    : "LOW STOCK")}
                               </div>
                             )}
                           </div>
@@ -2117,12 +2295,17 @@ const NavigationBar = ({
                             {typeof item.quantity !== "undefined" && (
                               <div className="flex items-center gap-2 bg-gray-900/40 rounded-lg px-3 py-2 border border-gray-700/30">
                                 <div className="w-8 h-8 rounded-full bg-yellow-900/30 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-yellow-400 font-bold text-sm">📦</span>
+                                  <span className="text-yellow-400 font-bold text-sm">
+                                    📦
+                                  </span>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-gray-400 text-xs font-medium">Quantity</p>
+                                  <p className="text-gray-400 text-xs font-medium">
+                                    Quantity
+                                  </p>
                                   <p className="text-yellow-100 text-sm font-bold truncate">
-                                    {formatQuantity(item.quantity)} {item.unit || ""}
+                                    {formatQuantity(item.quantity)}{" "}
+                                    {item.unit || ""}
                                   </p>
                                 </div>
                               </div>
@@ -2132,10 +2315,14 @@ const NavigationBar = ({
                             {item.batch_date && (
                               <div className="flex items-center gap-2 bg-gray-900/40 rounded-lg px-3 py-2 border border-gray-700/30">
                                 <div className="w-8 h-8 rounded-full bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-blue-400 font-bold text-sm">📅</span>
+                                  <span className="text-blue-400 font-bold text-sm">
+                                    📅
+                                  </span>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-gray-400 text-xs font-medium">Batch Date</p>
+                                  <p className="text-gray-400 text-xs font-medium">
+                                    Batch Date
+                                  </p>
                                   <p className="text-blue-100 text-sm font-bold truncate">
                                     {item.batch_date}
                                   </p>
@@ -2145,37 +2332,55 @@ const NavigationBar = ({
 
                             {/* Expiration Date */}
                             {item.expiration_date && (
-                              <div className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${
-                                item.days_expired !== undefined
-                                  ? 'bg-red-900/20 border-red-700/30'
-                                  : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
-                                  ? 'bg-orange-900/20 border-orange-700/30'
-                                  : 'bg-yellow-900/20 border-yellow-700/30'
-                              }`}>
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              <div
+                                className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${
                                   item.days_expired !== undefined
-                                    ? 'bg-red-900/40'
-                                    : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
-                                    ? 'bg-orange-900/40'
-                                    : 'bg-yellow-900/40'
-                                }`}>
-                                  <span className={`font-bold text-sm ${
+                                    ? "bg-red-900/20 border-red-700/30"
+                                    : item.days_until_expiry !== undefined &&
+                                      item.days_until_expiry <= 1
+                                    ? "bg-orange-900/20 border-orange-700/30"
+                                    : "bg-yellow-900/20 border-yellow-700/30"
+                                }`}
+                              >
+                                <div
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                                     item.days_expired !== undefined
-                                      ? 'text-red-400'
-                                      : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
-                                      ? 'text-orange-400'
-                                      : 'text-yellow-400'
-                                  }`}>⏰</span>
+                                      ? "bg-red-900/40"
+                                      : item.days_until_expiry !== undefined &&
+                                        item.days_until_expiry <= 1
+                                      ? "bg-orange-900/40"
+                                      : "bg-yellow-900/40"
+                                  }`}
+                                >
+                                  <span
+                                    className={`font-bold text-sm ${
+                                      item.days_expired !== undefined
+                                        ? "text-red-400"
+                                        : item.days_until_expiry !==
+                                            undefined &&
+                                          item.days_until_expiry <= 1
+                                        ? "text-orange-400"
+                                        : "text-yellow-400"
+                                    }`}
+                                  >
+                                    ⏰
+                                  </span>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-gray-400 text-xs font-medium">Expiration</p>
-                                  <p className={`text-sm font-bold truncate ${
-                                    item.days_expired !== undefined
-                                      ? 'text-red-300'
-                                      : item.days_until_expiry !== undefined && item.days_until_expiry <= 1
-                                      ? 'text-orange-300'
-                                      : 'text-yellow-300'
-                                  }`}>
+                                  <p className="text-gray-400 text-xs font-medium">
+                                    Expiration
+                                  </p>
+                                  <p
+                                    className={`text-sm font-bold truncate ${
+                                      item.days_expired !== undefined
+                                        ? "text-red-300"
+                                        : item.days_until_expiry !==
+                                            undefined &&
+                                          item.days_until_expiry <= 1
+                                        ? "text-orange-300"
+                                        : "text-yellow-300"
+                                    }`}
+                                  >
                                     {item.expiration_date}
                                   </p>
                                 </div>
@@ -2183,36 +2388,56 @@ const NavigationBar = ({
                             )}
 
                             {/* Days Info */}
-                            {(item.days_expired !== undefined || item.days_until_expiry !== undefined) && (
-                              <div className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${
-                                item.days_expired !== undefined
-                                  ? 'bg-red-900/20 border-red-700/30'
-                                  : 'bg-orange-900/20 border-orange-700/30'
-                              }`}>
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            {(item.days_expired !== undefined ||
+                              item.days_until_expiry !== undefined) && (
+                              <div
+                                className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${
                                   item.days_expired !== undefined
-                                    ? 'bg-red-900/40'
-                                    : 'bg-orange-900/40'
-                                }`}>
-                                  <span className={`font-bold text-sm ${
+                                    ? "bg-red-900/20 border-red-700/30"
+                                    : "bg-orange-900/20 border-orange-700/30"
+                                }`}
+                              >
+                                <div
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                                     item.days_expired !== undefined
-                                      ? 'text-red-400'
-                                      : 'text-orange-400'
-                                  }`}>⚠️</span>
+                                      ? "bg-red-900/40"
+                                      : "bg-orange-900/40"
+                                  }`}
+                                >
+                                  <span
+                                    className={`font-bold text-sm ${
+                                      item.days_expired !== undefined
+                                        ? "text-red-400"
+                                        : "text-orange-400"
+                                    }`}
+                                  >
+                                    ⚠️
+                                  </span>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-gray-400 text-xs font-medium">
-                                    {item.days_expired !== undefined ? 'Expired' : 'Expires In'}
-                                  </p>
-                                  <p className={`text-sm font-bold ${
-                                    item.days_expired !== undefined
-                                      ? 'text-red-300'
-                                      : 'text-orange-300'
-                                  }`}>
                                     {item.days_expired !== undefined
-                                      ? `${item.days_expired} ${item.days_expired === 1 ? 'day' : 'days'} ago`
-                                      : `${item.days_until_expiry} ${item.days_until_expiry === 1 ? 'day' : 'days'}`
-                                    }
+                                      ? "Expired"
+                                      : "Expires In"}
+                                  </p>
+                                  <p
+                                    className={`text-sm font-bold ${
+                                      item.days_expired !== undefined
+                                        ? "text-red-300"
+                                        : "text-orange-300"
+                                    }`}
+                                  >
+                                    {item.days_expired !== undefined
+                                      ? `${item.days_expired} ${
+                                          item.days_expired === 1
+                                            ? "day"
+                                            : "days"
+                                        } ago`
+                                      : `${item.days_until_expiry} ${
+                                          item.days_until_expiry === 1
+                                            ? "day"
+                                            : "days"
+                                        }`}
                                   </p>
                                 </div>
                               </div>
@@ -2222,17 +2447,22 @@ const NavigationBar = ({
                             {item.source_table && (
                               <div className="flex items-center gap-2 bg-gray-900/40 rounded-lg px-3 py-2 border border-gray-700/30 sm:col-span-2">
                                 <div className="w-8 h-8 rounded-full bg-purple-900/30 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-purple-400 font-bold text-sm">🗄️</span>
+                                  <span className="text-purple-400 font-bold text-sm">
+                                    🗄️
+                                  </span>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-gray-400 text-xs font-medium">Source</p>
+                                  <p className="text-gray-400 text-xs font-medium">
+                                    Source
+                                  </p>
                                   <p className="text-purple-100 text-sm font-bold">
-                                    {item.source_table === 'inventory'
-                                      ? 'Master Inventory'
-                                      : item.source_table === 'inventory_today'
+                                    {item.source_table === "inventory"
+                                      ? "Master Inventory"
+                                      : item.source_table === "inventory_today"
                                       ? "Today's Inventory"
-                                      : item.source_table === 'inventory_surplus'
-                                      ? 'Surplus Inventory'
+                                      : item.source_table ===
+                                        "inventory_surplus"
+                                      ? "Surplus Inventory"
                                       : item.source_table}
                                   </p>
                                 </div>
@@ -2243,10 +2473,14 @@ const NavigationBar = ({
                             {item.menu_item && (
                               <div className="flex items-center gap-2 bg-gray-900/40 rounded-lg px-3 py-2 border border-gray-700/30 sm:col-span-2">
                                 <div className="w-8 h-8 rounded-full bg-green-900/30 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-green-400 font-bold text-sm">🍽️</span>
+                                  <span className="text-green-400 font-bold text-sm">
+                                    🍽️
+                                  </span>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-gray-400 text-xs font-medium">For Menu Item</p>
+                                  <p className="text-gray-400 text-xs font-medium">
+                                    For Menu Item
+                                  </p>
                                   <p className="text-green-100 text-sm font-bold truncate">
                                     {item.menu_item}
                                   </p>
@@ -2255,23 +2489,32 @@ const NavigationBar = ({
                             )}
 
                             {/* Transfer breakdown for auto-transfer notifications */}
-                            {(item.from_surplus !== undefined || item.from_master !== undefined) && (
+                            {(item.from_surplus !== undefined ||
+                              item.from_master !== undefined) && (
                               <div className="sm:col-span-2 bg-gray-900/40 rounded-lg px-3 py-2.5 border border-gray-700/30">
-                                <p className="text-gray-400 text-xs font-medium mb-2">Transfer Breakdown</p>
+                                <p className="text-gray-400 text-xs font-medium mb-2">
+                                  Transfer Breakdown
+                                </p>
                                 <div className="flex gap-3">
                                   {item.from_surplus > 0 && (
                                     <div className="flex items-center gap-1.5">
-                                      <span className="text-cyan-400 font-bold text-xs">📦</span>
+                                      <span className="text-cyan-400 font-bold text-xs">
+                                        📦
+                                      </span>
                                       <span className="text-cyan-300 text-sm font-semibold">
-                                        {formatQuantity(item.from_surplus)} {item.unit || ""} from Surplus
+                                        {formatQuantity(item.from_surplus)}{" "}
+                                        {item.unit || ""} from Surplus
                                       </span>
                                     </div>
                                   )}
                                   {item.from_master > 0 && (
                                     <div className="flex items-center gap-1.5">
-                                      <span className="text-indigo-400 font-bold text-xs">🏪</span>
+                                      <span className="text-indigo-400 font-bold text-xs">
+                                        🏪
+                                      </span>
                                       <span className="text-indigo-300 text-sm font-semibold">
-                                        {formatQuantity(item.from_master)} {item.unit || ""} from Master
+                                        {formatQuantity(item.from_master)}{" "}
+                                        {item.unit || ""} from Master
                                       </span>
                                     </div>
                                   )}
@@ -2280,10 +2523,61 @@ const NavigationBar = ({
                             )}
                           </div>
 
+                          {/* Batch Details for Critical/Low Stock items */}
+                          {item.batches && item.batches.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-gray-700/30">
+                              <p className="text-gray-400 text-xs mb-2 font-medium flex items-center gap-2">
+                                <span>📦</span>
+                                Batch Details ({item.batches.length}{" "}
+                                {item.batches.length === 1
+                                  ? "batch"
+                                  : "batches"}
+                                )
+                              </p>
+                              <div className="space-y-2">
+                                {item.batches.map(
+                                  (batch: any, batchIdx: number) => (
+                                    <div
+                                      key={`batch-${batchIdx}`}
+                                      className="bg-gray-900/60 rounded-lg px-3 py-2 border border-gray-700/40"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-blue-400 text-xs">
+                                            📅
+                                          </span>
+                                          <span className="text-blue-200 text-sm font-semibold">
+                                            {batch.batch_date || "N/A"}
+                                          </span>
+                                        </div>
+                                        <span className="text-yellow-300 text-sm font-bold">
+                                          {formatQuantity(batch.quantity)}{" "}
+                                          {item.unit}
+                                        </span>
+                                      </div>
+                                      {batch.expiration_date && (
+                                        <div className="mt-1 flex items-center gap-2 text-xs">
+                                          <span className="text-orange-400">
+                                            ⏰
+                                          </span>
+                                          <span className="text-orange-300">
+                                            Expires: {batch.expiration_date}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Reason/Additional Info */}
                           {item.reason && (
                             <div className="mt-3 pt-3 border-t border-gray-700/30">
-                              <p className="text-gray-400 text-xs mb-1 font-medium">Reason</p>
+                              <p className="text-gray-400 text-xs mb-1 font-medium">
+                                Reason
+                              </p>
                               <p className="text-red-300 text-sm font-semibold">
                                 {item.reason}
                               </p>

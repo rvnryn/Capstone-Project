@@ -7,6 +7,7 @@ interface WeeklyForecast {
   predicted_sales: number;
   is_holiday_week: number;
   holiday_type?: "official" | "custom" | null;
+  holiday_names?: string | null;
 }
 interface HistoricalPrediction {
   week_start: string;
@@ -14,6 +15,7 @@ interface HistoricalPrediction {
   actual_sales: number;
   is_holiday_week: number;
   holiday_type?: "official" | "custom" | null;
+  holiday_names?: string | null;
 }
 interface SalesReportData {
   totalRevenue: number;

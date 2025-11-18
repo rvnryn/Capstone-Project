@@ -111,16 +111,21 @@ export default function ReportSales() {
   const [importSuccess, setImportSuccess] = useState(false);
   const autoDeduct = true; // Always auto-deduct from today's inventory
   // Initialize with "All Time" date range
-  const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
-    const now = new Date();
-    const todayStr = now.getFullYear() + '-' +
-      String(now.getMonth() + 1).padStart(2, '0') + '-' +
-      String(now.getDate()).padStart(2, '0');
-    return {
-      start: "2000-01-01", // Far back to capture all data
-      end: todayStr
-    };
-  });
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>(
+    () => {
+      const now = new Date();
+      const todayStr =
+        now.getFullYear() +
+        "-" +
+        String(now.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(now.getDate()).padStart(2, "0");
+      return {
+        start: "2000-01-01", // Far back to capture all data
+        end: todayStr,
+      };
+    }
+  );
   const [timePeriod, setTimePeriod] = useState<
     "all" | "today" | "week" | "month" | "year" | "custom"
   >("all");
@@ -201,27 +206,37 @@ export default function ReportSales() {
     const usDateMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (usDateMatch) {
       const [, month, day, year] = usDateMatch;
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
     }
 
     // Handle DD-MM-YYYY format
     const ddmmyyyyMatch = dateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
     if (ddmmyyyyMatch) {
       const [, day, month, year] = ddmmyyyyMatch;
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
     }
 
     // Handle DD/MM/YYYY format
     const ddmmyyyySlashMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (ddmmyyyySlashMatch) {
       const [, day, month, year] = ddmmyyyySlashMatch;
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
     }
 
     // Handle DD-MMM-YY or DD-MMM-YYYY format (e.g., "15-Jan-23" or "15-Jan-2023")
     const monthNames: { [key: string]: string } = {
-      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
-      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+      jan: "01",
+      feb: "02",
+      mar: "03",
+      apr: "04",
+      may: "05",
+      jun: "06",
+      jul: "07",
+      aug: "08",
+      sep: "09",
+      oct: "10",
+      nov: "11",
+      dec: "12",
     };
     const ddmmmyyMatch = dateStr.match(/^(\d{1,2})-([a-z]{3})-(\d{2,4})$/i);
     if (ddmmmyyMatch) {
@@ -229,7 +244,7 @@ export default function ReportSales() {
       const month = monthNames[monthStr.toLowerCase()];
       const fullYear = year.length === 2 ? `20${year}` : year;
       if (month) {
-        return `${fullYear}-${month}-${day.padStart(2, '0')}`;
+        return `${fullYear}-${month}-${day.padStart(2, "0")}`;
       }
     }
 
@@ -239,8 +254,8 @@ export default function ReportSales() {
       if (!isNaN(d.getTime())) {
         // Use UTC to avoid timezone shifts
         const year = d.getUTCFullYear();
-        const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(d.getUTCDate()).padStart(2, '0');
+        const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(d.getUTCDate()).padStart(2, "0");
         return `${year}-${month}-${day}`;
       }
     } catch (e) {
@@ -466,7 +481,15 @@ export default function ReportSales() {
     setSearchQuery("");
     setCategoryFilter("");
     setPriceRangeFilter("");
-    setDateRange({ start: "", end: "" });
+    // Reset to "All Time" with proper date range
+    const now = new Date();
+    const todayStr =
+      now.getFullYear() +
+      "-" +
+      String(now.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(now.getDate()).padStart(2, "0");
+    setDateRange({ start: "2000-01-01", end: todayStr });
     setTimePeriod("all");
     setSortConfig({ key: "", direction: "asc" });
   }, []);
@@ -474,7 +497,15 @@ export default function ReportSales() {
   const clearSearch = useCallback(() => setSearchQuery(""), []);
   const clearCategory = useCallback(() => setCategoryFilter(""), []);
   const clearDateRange = useCallback(() => {
-    setDateRange({ start: "", end: "" });
+    // Reset to "All Time" with proper date range
+    const now = new Date();
+    const todayStr =
+      now.getFullYear() +
+      "-" +
+      String(now.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(now.getDate()).padStart(2, "0");
+    setDateRange({ start: "2000-01-01", end: todayStr });
     setTimePeriod("all");
   }, []);
   const clearPriceRangeFilter = useCallback(() => setPriceRangeFilter(""), []);
@@ -1407,7 +1438,9 @@ export default function ReportSales() {
     // ========== 8. FOOTER ==========
     worksheet.mergeCells(`A${currentRow}:I${currentRow}`);
     const footerCell = worksheet.getCell(`A${currentRow}`);
-    footerCell.value = `Report generated by Cardiac Delights | ${new Date().toLocaleString("en-US")}`;
+    footerCell.value = `Report generated by Cardiac Delights | ${new Date().toLocaleString(
+      "en-US"
+    )}`;
     footerCell.font = { italic: true, size: 10, color: { argb: "FF6B7280" } };
     footerCell.alignment = { horizontal: "center", vertical: "middle" };
     currentRow++;
@@ -1717,7 +1750,8 @@ export default function ReportSales() {
                         <div className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-gray-300">
                           <FaCalendarAlt className="text-yellow-400 text-xs 2xs:text-sm flex-shrink-0" />
                           <span className="text-2xs 2xs:text-xs xs:text-sm truncate">
-                            Report Generated: {new Date().toLocaleDateString("en-US")}
+                            Report Generated:{" "}
+                            {new Date().toLocaleDateString("en-US")}
                           </span>
                         </div>
                         <div className="flex items-center gap-1 2xs:gap-1.5 xs:gap-2 text-gray-300">
@@ -2134,7 +2168,7 @@ export default function ReportSales() {
                         <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-6 border border-gray-700">
                           <h4 className="text-lg font-bold text-green-400 mb-4 flex items-center gap-2">
                             <FaTrophy className="text-green-400" />
-                            Top 5 Performing Items (By Revenue)
+                            Top 5 Performing Menu (By Revenue)
                           </h4>
                           {chartSalesData.length > 0 ? (
                             <div className="space-y-3">
@@ -2189,7 +2223,7 @@ export default function ReportSales() {
                         <div className="bg-gradient-to-br from-black/80 to-slate-900 rounded-xl shadow p-6 border border-gray-700">
                           <h4 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2">
                             <FaChartBar className="text-blue-400" />
-                            Top 5 Selling Items (By Quantity)
+                            Top 5 Selling Menu (By Quantity)
                           </h4>
                           {chartSalesData.length > 0 ? (
                             <div className="space-y-3">
@@ -2379,6 +2413,9 @@ export default function ReportSales() {
                               <th className="px-4 py-3 text-blue-400 font-semibold text-center">
                                 Holiday Week?
                               </th>
+                              <th className="px-4 py-3 text-purple-400 font-semibold">
+                                Holidays
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2415,6 +2452,17 @@ export default function ReportSales() {
                                       </span>
                                     ) : (
                                       <span className="text-gray-500">No</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {row.holiday_names ? (
+                                      <span className="text-purple-300 text-sm">
+                                        {row.holiday_names}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-500 italic text-sm">
+                                        None
+                                      </span>
                                     )}
                                   </td>
                                 </tr>
@@ -2743,9 +2791,7 @@ export default function ReportSales() {
                                     : timePeriod}
                                 </span>
                                 <button
-                                  onClick={() =>
-                                    handleTimePeriodChange("all")
-                                  }
+                                  onClick={() => handleTimePeriodChange("all")}
                                   className="text-green-300 hover:text-white transition-colors ml-1 flex-shrink-0"
                                   title="Clear time period"
                                 >
@@ -4170,7 +4216,8 @@ export default function ReportSales() {
                                 Auto-deduction enabled
                               </p>
                               <p className="text-gray-400 text-xs mt-1">
-                                Today's sales will automatically deduct from inventory. Historical sales will be skipped.
+                                Today's sales will automatically deduct from
+                                inventory. Historical sales will be skipped.
                               </p>
                             </div>
                           </div>
@@ -4179,113 +4226,113 @@ export default function ReportSales() {
 
                       {/* Buttons row */}
                       <div className="flex flex-wrap justify-between items-center gap-3">
-                      <div className="text-xs sm:text-sm text-gray-400">
-                        {importedRows.length > 0 ? (
-                          <span className="flex items-center gap-2">
-                            <svg
-                              className="w-4 h-4 text-green-500"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                              />
-                            </svg>
-                            Ready to import {importedRows.length}{" "}
-                            {importedRows.length === 1 ? "record" : "records"}
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            <svg
-                              className="w-4 h-4 text-gray-600"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                              />
-                            </svg>
-                            No data to import
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2 sm:gap-3">
-                        <button
-                          className="bg-gray-700 hover:bg-gray-600 text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg font-medium transition-all hover:shadow-lg flex items-center gap-2"
-                          onClick={() => {
-                            setImportModalOpen(false);
-                            setImportedRows([]);
-                            setImportFile(null);
-                          }}
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                          Cancel
-                        </button>
-                        <button
-                          disabled={
-                            importedRows.length === 0 ||
-                            importMutation.isPending
-                          }
-                          onClick={async () => {
-                            console.log("[DEBUG] Import mutation params:", {
-                              rows: importedRows.length,
-                              auto_deduct: autoDeduct,
-                            });
-                            importMutation.mutate(
-                              { rows: importedRows, auto_deduct: autoDeduct },
-                              {
-                                onSuccess: () => {
-                                  setImportModalOpen(false);
-                                  setImportedRows([]);
-                                  setImportFile(null);
-                                  setImportSuccess(true);
-                                },
-                                onError: (error) => {
-                                  console.error("Import failed:", error);
-                                },
-                              }
-                            );
-                          }}
-                          className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-bold shadow-lg transition-all flex items-center justify-center gap-2 min-w-[180px] ${
-                            importedRows.length === 0 ||
-                            importMutation.isPending
-                              ? "bg-gray-600 text-gray-400 cursor-not-allowed opacity-50"
-                              : "bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white hover:shadow-xl hover:scale-105"
-                          }`}
-                        >
-                          {importMutation.isPending ? (
-                            <>
-                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                              <span>Importing...</span>
-                            </>
+                        <div className="text-xs sm:text-sm text-gray-400">
+                          {importedRows.length > 0 ? (
+                            <span className="flex items-center gap-2">
+                              <svg
+                                className="w-4 h-4 text-green-500"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                              Ready to import {importedRows.length}{" "}
+                              {importedRows.length === 1 ? "record" : "records"}
+                            </span>
                           ) : (
-                            <>
-                              <BiImport className="text-lg" />
-                              <span>Import to System</span>
-                            </>
+                            <span className="flex items-center gap-2">
+                              <svg
+                                className="w-4 h-4 text-gray-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                />
+                              </svg>
+                              No data to import
+                            </span>
                           )}
-                        </button>
-                      </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 sm:gap-3">
+                          <button
+                            className="bg-gray-700 hover:bg-gray-600 text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg font-medium transition-all hover:shadow-lg flex items-center gap-2"
+                            onClick={() => {
+                              setImportModalOpen(false);
+                              setImportedRows([]);
+                              setImportFile(null);
+                            }}
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                            Cancel
+                          </button>
+                          <button
+                            disabled={
+                              importedRows.length === 0 ||
+                              importMutation.isPending
+                            }
+                            onClick={async () => {
+                              console.log("[DEBUG] Import mutation params:", {
+                                rows: importedRows.length,
+                                auto_deduct: autoDeduct,
+                              });
+                              importMutation.mutate(
+                                { rows: importedRows, auto_deduct: autoDeduct },
+                                {
+                                  onSuccess: () => {
+                                    setImportModalOpen(false);
+                                    setImportedRows([]);
+                                    setImportFile(null);
+                                    setImportSuccess(true);
+                                  },
+                                  onError: (error) => {
+                                    console.error("Import failed:", error);
+                                  },
+                                }
+                              );
+                            }}
+                            className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-bold shadow-lg transition-all flex items-center justify-center gap-2 min-w-[180px] ${
+                              importedRows.length === 0 ||
+                              importMutation.isPending
+                                ? "bg-gray-600 text-gray-400 cursor-not-allowed opacity-50"
+                                : "bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white hover:shadow-xl hover:scale-105"
+                            }`}
+                          >
+                            {importMutation.isPending ? (
+                              <>
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                <span>Importing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <BiImport className="text-lg" />
+                                <span>Import to System</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

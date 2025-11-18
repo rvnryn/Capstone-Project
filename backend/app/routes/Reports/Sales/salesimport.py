@@ -8,6 +8,8 @@ from app.utils.unit_converter import convert_units, get_unit_type, normalize_uni
 from app.models.user_activity_log import UserActivityLog
 from app.routes.Inventory.master_inventory import require_role
 from app.routes.Inventory.aggregate_status import update_aggregate_stock_status
+from app.routes.Inventory.AutomationTransferring import fifo_transfer_to_today_with_surplus_first
+from app.routes.General.notification import create_notification
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -369,15 +371,140 @@ async def auto_deduct_inventory_from_sales_optimized(sale_date: str, enable_vali
                             "shortage": format_quantity_with_unit(shortage_qty, inventory_unit)
                         })
 
+                # NEW: If shortages detected, try to bulk transfer from master/surplus FIRST
                 if shortages:
-                    validation_failures.append({
-                        "menu_item": menu_item_name,
-                        "quantity_sold": quantity_sold,
-                        "reason": "Insufficient ingredients",
-                        "shortages": shortages
-                    })
-                    logger.warning(f"Skipping {menu_item_name}: Insufficient ingredients")
-                    continue
+                    logger.info(f"[BULK TRANSFER] Detected {len(shortages)} ingredient shortages for '{menu_item_name}'")
+                    transfer_log = []
+                    items_to_reload = set()
+
+                    for shortage in shortages:
+                        ingredient_name = shortage["ingredient"]
+                        shortage_amount_str = shortage["shortage"]
+
+                        # Parse shortage amount (format: "X.XX unit")
+                        try:
+                            shortage_parts = shortage_amount_str.split()
+                            shortage_qty = float(shortage_parts[0])
+                            shortage_unit = " ".join(shortage_parts[1:]) if len(shortage_parts) > 1 else ""
+
+                            logger.info(f"[BULK TRANSFER] Attempting to transfer {shortage_qty} {shortage_unit} of '{ingredient_name}'")
+
+                            # Call FIFO transfer function (surplus -> master -> today)
+                            transferred_qty, remaining_shortage, transfers = await fifo_transfer_to_today_with_surplus_first(
+                                item_name=ingredient_name,
+                                quantity_needed=shortage_qty
+                            )
+
+                            if transferred_qty > 0:
+                                transfer_log.append({
+                                    "ingredient": ingredient_name,
+                                    "transferred": transferred_qty,
+                                    "remaining_shortage": remaining_shortage,
+                                    "transfers": transfers
+                                })
+                                items_to_reload.add(ingredient_name)
+                                logger.info(f"[BULK TRANSFER] Successfully transferred {transferred_qty} {shortage_unit} of '{ingredient_name}'")
+                            else:
+                                logger.warning(f"[BULK TRANSFER] Could not transfer any stock for '{ingredient_name}'")
+                        except Exception as transfer_error:
+                            logger.error(f"[BULK TRANSFER] Error transferring '{ingredient_name}': {transfer_error}")
+
+                    # Reload inventory_today for transferred items
+                    if items_to_reload:
+                        logger.info(f"[BULK TRANSFER] Reloading inventory for {len(items_to_reload)} items")
+                        for item_name in items_to_reload:
+                            try:
+                                # Re-fetch inventory_today for this item
+                                reload_res = postgrest_client.table("inventory_today").select("*").ilike("item_name", item_name).order("batch_date", desc=False).execute()
+                                reloaded_items = getattr(reload_res, "data", None) or []
+
+                                # Update the in-memory inventory lookup
+                                item_name_lower = item_name.lower()
+                                inventory_by_name[item_name_lower] = reloaded_items
+                                logger.info(f"[BULK TRANSFER] Reloaded {len(reloaded_items)} batches for '{item_name}'")
+                            except Exception as reload_error:
+                                logger.error(f"[BULK TRANSFER] Error reloading inventory for '{item_name}': {reload_error}")
+
+                        # RE-VALIDATE: Check if we now have enough stock after transfer
+                        logger.info(f"[BULK TRANSFER] Re-validating ingredient availability after transfer")
+                        remaining_shortages = []
+                        for ingredient in ingredients:
+                            ingredient_name = ingredient.get("ingredient_name")
+                            qty_per_serving = float(ingredient.get("quantity", 0))
+                            recipe_unit = normalize_unit(ingredient.get("measurements", ""))
+                            total_qty_needed = qty_per_serving * quantity_sold
+
+                            # Get inventory unit
+                            ingredient_name_lower = (ingredient_name or "").lower()
+                            setting = settings_by_name.get(ingredient_name_lower)
+                            inventory_unit = normalize_unit(setting.get("default_unit", recipe_unit)) if setting else recipe_unit
+
+                            # Convert to inventory unit
+                            if recipe_unit != inventory_unit:
+                                qty_needed_in_inv_unit = convert_units(total_qty_needed, recipe_unit, inventory_unit)
+                                if qty_needed_in_inv_unit is None:
+                                    qty_needed_in_inv_unit = total_qty_needed
+                            else:
+                                qty_needed_in_inv_unit = total_qty_needed
+
+                            # Check available stock (after transfer)
+                            inv_items = inventory_by_name.get(ingredient_name_lower, [])
+                            total_available = sum(float(item.get("stock_quantity", 0)) for item in inv_items)
+
+                            if total_available < qty_needed_in_inv_unit:
+                                shortage_qty = qty_needed_in_inv_unit - total_available
+                                remaining_shortages.append({
+                                    "ingredient": ingredient_name,
+                                    "needed": format_quantity_with_unit(total_qty_needed, recipe_unit),
+                                    "available": format_quantity_with_unit(total_available, inventory_unit),
+                                    "shortage": format_quantity_with_unit(shortage_qty, inventory_unit)
+                                })
+
+                        # If STILL insufficient after transfer, skip
+                        if remaining_shortages:
+                            validation_failures.append({
+                                "menu_item": menu_item_name,
+                                "quantity_sold": quantity_sold,
+                                "reason": "Insufficient ingredients (even after auto-transfer)",
+                                "shortages": remaining_shortages,
+                                "transfers_attempted": transfer_log
+                            })
+                            logger.warning(f"Skipping {menu_item_name}: Still insufficient ingredients after transfer")
+                            continue
+                        else:
+                            logger.info(f"[BULK TRANSFER] SUCCESS! All ingredients now available for '{menu_item_name}' after transfer")
+
+                            # Create notification for successful bulk transfer
+                            try:
+                                # Get all users to notify
+                                users_res = postgrest_client.table("users").select("user_id").execute()
+                                users = users_res.data if users_res.data else []
+
+                                transfer_summary = ", ".join([
+                                    f"{t['ingredient']}: {t['transferred']:.2f}"
+                                    for t in transfer_log
+                                ])
+
+                                for user in users:
+                                    create_notification(
+                                        user_id=user['user_id'],
+                                        type="sales_auto_transfer",
+                                        message=f"Auto-transfer completed for '{menu_item_name}' during sales import. Transferred: {transfer_summary}",
+                                        details=None
+                                    )
+                                logger.info(f"[BULK TRANSFER] Notification sent for successful transfer of '{menu_item_name}'")
+                            except Exception as notif_error:
+                                logger.error(f"[BULK TRANSFER] Failed to create notification: {notif_error}")
+                    else:
+                        # No transfers succeeded, skip this sale
+                        validation_failures.append({
+                            "menu_item": menu_item_name,
+                            "quantity_sold": quantity_sold,
+                            "reason": "Insufficient ingredients (no stock in master/surplus)",
+                            "shortages": shortages
+                        })
+                        logger.warning(f"Skipping {menu_item_name}: No stock available in master/surplus for transfer")
+                        continue
 
             # DEDUCTION: Process each ingredient
             for ingredient in ingredients:
@@ -480,6 +607,44 @@ async def auto_deduct_inventory_from_sales_optimized(sale_date: str, enable_vali
                 postgrest_client.table("inventory_transactions").insert(transaction_logs).execute()
             except Exception as e:
                 logger.error(f"Failed to batch insert transaction logs: {e}")
+
+        # STEP 8.5: Log deductions to user activity log
+        if db and deduction_summary:
+            try:
+                # Group deductions by menu item for clearer logging
+                menu_items_deducted = {}
+                for deduction in deduction_summary:
+                    menu_item = deduction['menu_item']
+                    ingredient = deduction['ingredient']
+                    qty = deduction['deducted']
+                    unit = deduction['unit']
+
+                    if menu_item not in menu_items_deducted:
+                        menu_items_deducted[menu_item] = []
+                    menu_items_deducted[menu_item].append(f"{ingredient}: {qty:.2f} {unit}")
+
+                # Create a consolidated description
+                total_deductions = len(deduction_summary)
+                total_menu_items = len(menu_items_deducted)
+
+                # Format: "Sales deduction: 5 items deducted for 2 menu items (Burger: chicken 200g, lettuce 50g; Fries: potato 300g)"
+                deduction_details = "; ".join([
+                    f"{menu_item}: {', '.join(ingredients[:3])}" + (f" and {len(ingredients)-3} more" if len(ingredients) > 3 else "")
+                    for menu_item, ingredients in list(menu_items_deducted.items())[:3]
+                ])
+                if total_menu_items > 3:
+                    deduction_details += f" and {total_menu_items - 3} more menu items"
+
+                from app.routes.Inventory.master_inventory import log_user_activity
+                await log_user_activity(
+                    db=db,
+                    user={"user_id": 0, "name": "System", "user_role": "System"},
+                    action_type="sales import deduction",
+                    description=f"Auto-deducted {total_deductions} ingredient(s) for {total_menu_items} menu item(s) from sales date {sale_date}. Details: {deduction_details}"
+                )
+                logger.info(f"[USER ACTIVITY] Logged deductions: {total_deductions} ingredients for {total_menu_items} menu items")
+            except Exception as e:
+                logger.warning(f"Failed to log deduction activity: {e}")
 
         # STEP 9: Update aggregate stock status
         status_updates = []

@@ -210,3 +210,72 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(251, 191, 36, 0.5);
 }
+
+/* Sonner Toast Responsive Styles */
+[data-sonner-toaster] {
+  --normal-bg: #fff;
+  --normal-border: rgb(226 232 240);
+  --normal-text: #000;
+  z-index: 9999 !important;
+}
+
+[data-sonner-toaster][data-theme="dark"] {
+  --normal-bg: #1f2937;
+  --normal-border: rgb(55 65 81);
+  --normal-text: #fff;
+}
+
+[data-sonner-toast] {
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Make toasts responsive on mobile */
+@media (max-width: 640px) {
+  [data-sonner-toaster] {
+    left: 8px !important;
+    right: 8px !important;
+    bottom: 8px !important;
+    top: auto !important;
+    width: calc(100% - 16px) !important;
+  }
+
+  [data-sonner-toast] {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 768px) {
+  [data-sonner-toaster] {
+    right: 16px !important;
+    top: 16px !important;
+    max-width: 400px !important;
+  }
+}
+
+@media (min-width: 769px) {
+  [data-sonner-toaster] {
+    right: 24px !important;
+    top: 24px !important;
+    max-width: 450px !important;
+  }
+}
+
+/* Toast type styling */
+[data-sonner-toast][data-type="info"] {
+  border-left: 4px solid #3b82f6;
+}
+
+[data-sonner-toast][data-type="success"] {
+  border-left: 4px solid #10b981;
+}
+
+[data-sonner-toast][data-type="warning"] {
+  border-left: 4px solid #f59e0b;
+}
+
+[data-sonner-toast][data-type="error"] {
+  border-left: 4px solid #ef4444;
+}

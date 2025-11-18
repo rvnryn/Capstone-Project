@@ -4,7 +4,9 @@ import gzip
 import json
 import base64
 import traceback
-from datetime import datetime
+import os
+import pathlib
+from datetime import datetime, timezone
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from sqlalchemy import text, create_engine
@@ -44,15 +46,124 @@ async def restore(encrypted_data, password, session, user, activity_type="restor
             backup_json = gz_file.read().decode("utf-8")
         backup_data = json.loads(backup_json)
 
+        # Check if backup has new format with metadata
+        backup_version = None
+        schema_info = None
+        actual_data = backup_data
+
+        if isinstance(backup_data, dict):
+            # New format with metadata
+            if "version" in backup_data and "data" in backup_data:
+                backup_version = backup_data.get("version")
+                schema_info = backup_data.get("schema_info", {})
+                actual_data = backup_data.get("data", {})
+                print(f"[Restore] Detected backup version {backup_version}")
+                print(f"[Restore] Backup created at: {backup_data.get('backup_date', 'unknown')}")
+            # Old format - raw table data
+            else:
+                actual_data = backup_data
+                print("[Restore] Using legacy backup format (no version metadata)")
+
         # Validate backup data before proceeding
-        if not isinstance(backup_data, dict) or len(backup_data) == 0:
+        if not isinstance(actual_data, dict) or len(actual_data) == 0:
             raise HTTPException(status_code=400, detail="Invalid backup file: No table data found")
+
+        # Schema validation if metadata exists
+        if schema_info:
+            engine_check = create_engine(POSTGRES_URL.replace("asyncpg", "psycopg2"))
+            warnings = []
+            for table_name, info in schema_info.items():
+                try:
+                    current_df = pd.read_sql_table(table_name, engine_check, limit=1)
+                    backup_columns = set(info.get("columns", []))
+                    current_columns = set(current_df.columns)
+
+                    # Check for missing columns
+                    missing_in_current = backup_columns - current_columns
+                    extra_in_current = current_columns - backup_columns
+
+                    if missing_in_current:
+                        warnings.append(f"⚠️ Table '{table_name}': Backup has columns not in current DB: {missing_in_current}")
+                    if extra_in_current:
+                        warnings.append(f"⚠️ Table '{table_name}': Current DB has new columns: {extra_in_current}")
+                except Exception as e:
+                    warnings.append(f"⚠️ Could not validate schema for table '{table_name}': {str(e)}")
+
+            if warnings:
+                print("[Restore] Schema validation warnings:")
+                for warning in warnings:
+                    print(f"  {warning}")
+                # Store warnings for response (don't fail, just warn)
+            engine_check.dispose()
+
+        # Use actual_data for restore
+        backup_data = actual_data
 
         # Filter to selected tables only if specified
         if selected_tables:
             backup_data = {k: v for k, v in backup_data.items() if k in selected_tables}
             if not backup_data:
                 raise HTTPException(status_code=400, detail="None of the selected tables found in backup file")
+
+        # SAFETY FEATURE: Create automatic pre-restore backup
+        print("[Restore] Creating automatic safety backup before restore...")
+        try:
+            from sqlalchemy import inspect
+
+            BACKUP_DIR = str(pathlib.Path.home() / "Documents" / "cardiacdelights_backups")
+            safety_engine = create_engine(POSTGRES_URL.replace("asyncpg", "psycopg2"))
+            insp = inspect(safety_engine)
+            tables = insp.get_table_names()
+
+            safety_backup_data = {}
+            safety_schema_info = {}
+
+            for table in tables:
+                try:
+                    df = pd.read_sql_table(table, safety_engine)
+                    safety_backup_data[table] = df.to_dict(orient="records")
+                    safety_schema_info[table] = {
+                        "columns": list(df.columns),
+                        "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
+                        "row_count": len(df)
+                    }
+                except Exception as e:
+                    print(f"[Safety Backup] Warning: Could not backup table {table}: {e}")
+
+            safety_payload = {
+                "version": "1.0",
+                "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+                "backup_date": datetime.now(timezone.utc).isoformat(),
+                "backup_type": "pre_restore_safety",
+                "schema_info": safety_schema_info,
+                "data": safety_backup_data
+            }
+
+            # Encrypt and save safety backup
+            safety_password = os.getenv("BACKUP_ENCRYPTION_PASSWORD", "default_password")
+            safety_key = derive_fernet_key(safety_password)
+            safety_fernet = Fernet(safety_key)
+            safety_buf = io.BytesIO()
+            with gzip.GzipFile(fileobj=safety_buf, mode="w") as gz_file:
+                gz_file.write(json.dumps(safety_payload, default=str, indent=2).encode("utf-8"))
+            safety_buf.seek(0)
+            safety_encrypted = safety_fernet.encrypt(safety_buf.getvalue())
+
+            # Save to local directory
+            safety_filename = f"pre_restore_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json.enc"
+            os.makedirs(BACKUP_DIR, exist_ok=True)
+            safety_path = os.path.join(BACKUP_DIR, safety_filename)
+            with open(safety_path, "wb") as f:
+                f.write(safety_encrypted)
+
+            print(f"[Restore] Safety backup created: {safety_filename}")
+            print(f"[Restore] Safety backup location: {safety_path}")
+            safety_engine.dispose()
+
+        except Exception as safety_error:
+            print(f"[Restore] Warning: Could not create safety backup: {safety_error}")
+            print("[Restore] Continuing with restore (safety backup failed)")
+            # Don't fail the restore if safety backup fails, just warn
 
         engine = create_engine(POSTGRES_URL.replace("asyncpg", "psycopg2"))
 
@@ -113,6 +224,15 @@ async def restore(encrypted_data, password, session, user, activity_type="restor
                 # CRITICAL FIX: INSERT DATA WITH PRIMARY KEYS INTACT
                 if not df.empty:
                     try:
+                        # Clean up NaT/NaN values in date/datetime columns
+                        # Replace pandas NaT and string 'NaT' with None (SQL NULL)
+                        for col in df.columns:
+                            if df[col].dtype == 'object':  # String columns might have 'NaT' as string
+                                df[col] = df[col].replace(['NaT', 'nan', 'NaN'], None)
+                            # Replace pandas NaT/NaN with None for datetime columns
+                            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                                df[col] = df[col].where(pd.notna(df[col]), None)
+
                         # Temporarily disable triggers to allow primary key insertion
                         if pk_col and pk_col in df.columns:
                             # Get the max PK value from backup data
@@ -125,8 +245,17 @@ async def restore(encrypted_data, password, session, user, activity_type="restor
                             # Update sequence to max+1 to prevent future conflicts
                             sequence_name = f"{table_name}_{pk_col}_seq"
                             try:
-                                conn.execute(text(f"SELECT setval('{sequence_name}', {max_pk}, true);"))
-                                print(f"[Restore] Updated sequence {sequence_name} to {max_pk}")
+                                # First check if sequence exists to avoid transaction errors
+                                result = conn.execute(text(
+                                    f"SELECT 1 FROM pg_sequences WHERE schemaname = 'public' AND sequencename = '{sequence_name}'"
+                                ))
+                                sequence_exists = result.fetchone() is not None
+
+                                if sequence_exists:
+                                    conn.execute(text(f"SELECT setval('{sequence_name}', {max_pk}, true);"))
+                                    print(f"[Restore] Updated sequence {sequence_name} to {max_pk}")
+                                else:
+                                    print(f"[Restore] Info: Sequence {sequence_name} does not exist (table may not use auto-increment)")
                             except Exception as seq_err:
                                 print(f"[Restore] Warning: Could not update sequence {sequence_name}: {seq_err}")
                         else:
@@ -191,19 +320,40 @@ async def preview_backup_contents(
             backup_json = gz_file.read().decode("utf-8")
         backup_data = json.loads(backup_json)
 
+        # Check backup format
+        backup_version = None
+        backup_date = None
+        actual_data = backup_data
+
+        if isinstance(backup_data, dict) and "version" in backup_data and "data" in backup_data:
+            backup_version = backup_data.get("version")
+            backup_date = backup_data.get("backup_date")
+            actual_data = backup_data.get("data", {})
+
         # Return table names and record counts
         table_info = {}
-        for table_name, records in backup_data.items():
+        for table_name, records in actual_data.items():
             table_info[table_name] = {
                 "record_count": len(records),
                 "has_data": len(records) > 0
             }
 
-        return {
+        response = {
             "tables": table_info,
-            "total_tables": len(backup_data),
+            "total_tables": len(actual_data),
             "filename": getattr(file, "filename", "uploaded file")
         }
+
+        # Add version info if available
+        if backup_version:
+            response["version"] = backup_version
+            response["backup_date"] = backup_date
+            response["has_schema_info"] = True
+        else:
+            response["version"] = "legacy"
+            response["has_schema_info"] = False
+
+        return response
     except Exception as e:
         print("Preview backup error:", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to preview backup: {str(e)}")
