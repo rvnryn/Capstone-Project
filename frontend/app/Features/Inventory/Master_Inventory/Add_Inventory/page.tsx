@@ -123,8 +123,9 @@ export default function AddInventoryItem() {
   useEffect(() => {
     const fetchItemNames = async () => {
       try {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const response = await fetch(
-          "http://localhost:8000/api/inventory/all-item-names"
+          `${API_BASE_URL}/api/inventory/all-item-names`
         );
         if (response.ok) {
           const data = await response.json();

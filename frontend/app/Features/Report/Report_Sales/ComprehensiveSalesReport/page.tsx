@@ -107,8 +107,9 @@ export default function ComprehensiveSalesReport() {
 
     try {
       const token = localStorage.getItem("token");
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await fetch(
-        `http://localhost:8000/api/comprehensive-sales-analytics?start_date=${startDate}&end_date=${endDate}`,
+        `${API_BASE_URL}/api/comprehensive-sales-analytics?start_date=${startDate}&end_date=${endDate}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
